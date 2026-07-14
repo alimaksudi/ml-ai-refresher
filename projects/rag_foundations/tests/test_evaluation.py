@@ -6,6 +6,11 @@ from pathlib import Path
 from rag_foundations.evaluation import build_chunks, evaluate, load_json
 from rag_foundations.grounded import ABSTENTION, evaluate_answers, evaluate_security
 from rag_foundations.hybrid import evaluate_hybrid, minmax_score_fusion
+from rag_foundations.rag_evaluation import (
+    apply_quality_gate,
+    context_precision_at_k,
+    evaluate_rag_systems,
+)
 from rag_foundations.vector_store import (
     QdrantVectorStore,
     VectorRecord,
@@ -121,6 +126,49 @@ def test_hybrid_benchmark_labels_reference_real_evidence():
     }
     for query in queries["queries"]:
         assert set(query["relevant_sections"]).issubset(section_ids)
+
+
+def test_rag_system_report_separates_retrieval_answer_and_policy_metrics(tmp_path):
+    first = evaluate_rag_systems(DATA, tmp_path / "rag-system-first.json")
+    second = evaluate_rag_systems(DATA, tmp_path / "rag-system-second.json")
+    assert first["corpus_sha256"] == second["corpus_sha256"]
+    assert first["queries_sha256"] == second["queries_sha256"]
+    assert first["answers_sha256"] == second["answers_sha256"]
+    assert set(first["systems"]) == {"lexical", "dense_lsa", "hybrid_rrf"}
+    assert "proxy" in first["metric_contract"]["answer_correctness_proxy"].lower()
+    for mode, system in first["systems"].items():
+        assert len(system["rows"]) == 18
+        for metric in (
+            "context_precision_at_k", "context_recall_at_k",
+            "answer_correctness_proxy", "evidence_support_proxy",
+            "citation_validity", "abstention_accuracy", "successful_case_rate",
+        ):
+            assert system["metrics"][metric] == second["systems"][mode]["metrics"][metric]
+            assert 0 <= system["metrics"][metric] <= 1
+        assert system["metrics"]["evidence_support_proxy"] == 1.0
+        assert system["metrics"]["citation_validity"] == 1.0
+        assert any(row["answerable"] for row in system["rows"])
+        assert any(not row["answerable"] for row in system["rows"])
+        assert all(
+            row["context_precision_at_k"] is None
+            for row in system["rows"] if not row["answerable"]
+        )
+    assert first["systems"]["dense_lsa"]["metrics"]["context_recall_at_k"] >= 0.90
+    assert not first["systems"]["lexical"]["quality_gate"]["passed"]
+    assert first["systems"]["dense_lsa"]["quality_gate"]["passed"]
+
+
+def test_rag_metric_helpers_make_edge_cases_explicit():
+    assert context_precision_at_k(["a", "b", "c"], {"a", "c"}) == 2 / 3
+    assert context_precision_at_k([], {"a"}) == 0.0
+    gate = apply_quality_gate(
+        {"recall": 0.7, "support": 1.0},
+        {"recall": 0.8, "support": 1.0},
+    )
+    assert not gate["passed"]
+    assert gate["violations"] == [
+        {"metric": "recall", "observed": 0.7, "required": 0.8}
+    ]
 
 
 def test_alpha_fusion_uses_candidate_union_and_stable_ids():

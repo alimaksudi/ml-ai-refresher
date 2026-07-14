@@ -100,6 +100,11 @@ across every retriever comparison.
 - **Evaluation:** recall, support/correctness, abstention, latency, security, and no
   component without measurable value.
 
+**EVAL-03 gate:** compare lexical, dense, and hybrid systems under identical corpus,
+query, answer, chunking, metric, and threshold versions. Required-term correctness and
+extractive support remain named proxies. Reranking is justified only when relevant
+evidence already appears in the candidate set but ranking or answer selection fails.
+
 ## I. Workflow versus agent challenge — after AGT-01 through AGT-05 and EVAL-04/EVAL-05
 
 - **Goal:** solve one task with deterministic code, one agent, and optionally multiple agents.

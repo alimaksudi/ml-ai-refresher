@@ -77,3 +77,23 @@ Before RAG evaluation, the learner must:
 Pass requires `make hybrid-rag-checkpoint`, all six explanations, and a scored query
 failure analysis. The automated report must retain the four diagnostic behaviors in
 item 3 and abstain on `h05`. EVAL-03 remains blocked until this gate passes.
+
+## EVAL-03 component-evaluation extension
+
+Before reranking, the learner must:
+
+1. Run `make rag-system-evaluate` and verify the corpus, query, and answer hashes.
+2. Explain why context precision, context recall, answer correctness, evidence support,
+   citation validity, and abstention measure different contracts.
+3. State why required-term correctness and extractive text containment are proxies,
+   not semantic correctness or entailment.
+4. Use component rows to diagnose one retrieval failure, one answer-selection failure,
+   and one abstention failure without changing gold labels.
+5. Explain why perfect support can coexist with poor correctness and why unanswerable
+   cases do not receive context precision.
+6. Treat the committed quality thresholds as a teaching policy. Propose domain-specific
+   thresholds only after human-labelled calibration and state the cost of false passes
+   and false failures.
+
+Pass requires `make rag-system-checkpoint`, all six explanations, and a fresh trace
+diagnosis scoring at least 8/10. RAG-07 remains blocked until this gate passes.

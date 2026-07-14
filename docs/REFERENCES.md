@@ -44,6 +44,11 @@ or named methods.
 - Thakur et al., “BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of
   Information Retrieval Models,” NeurIPS Datasets and Benchmarks 2021.
   https://arxiv.org/abs/2104.08663
+- Es et al., “RAGAs: Automated Evaluation of Retrieval Augmented Generation,”
+  EACL System Demonstrations 2024. https://doi.org/10.18653/v1/2024.eacl-demo.16
+- Saad-Falcon et al., “ARES: An Automated Evaluation Framework for
+  Retrieval-Augmented Generation Systems,” NAACL 2024.
+  https://doi.org/10.18653/v1/2024.naacl-long.20
 - Qdrant, “Local Quickstart.”
   https://qdrant.tech/documentation/quick-start/
 - Qdrant, “Payload.”

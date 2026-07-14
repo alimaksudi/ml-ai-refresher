@@ -27,10 +27,12 @@ make vector-store-evaluate
 make vector-store-checkpoint
 make hybrid-rag-evaluate
 make hybrid-rag-checkpoint
+make rag-system-evaluate
+make rag-system-checkpoint
 ```
 
-Use `HYBRID_MASTERY_EVIDENCE.md` as a mentor scoring reference after attempting the
-hybrid-search teach-back independently.
+Use `HYBRID_MASTERY_EVIDENCE.md` and `RAG_EVALUATION_MASTERY_EVIDENCE.md` as mentor
+scoring references after attempting each teach-back independently.
 
 The committed retrieval report is written to `artifacts/evaluation.json`; the
 grounded-answer report is written to `artifacts/grounded_evaluation.json`. Corpus,
@@ -60,3 +62,10 @@ settings on the same structure-aware chunks and labels. The report records candi
 lists, stable evidence IDs, abstention, and local latency in
 `artifacts/hybrid_evaluation.json`. These local timings teach measurement mechanics;
 they are not production capacity claims.
+
+The EVAL-03 extension compares lexical, dense LSA, and hybrid RRF systems under one
+versioned corpus, query, answer, metric, and threshold contract. It keeps labelled
+retrieval precision/recall separate from required-term correctness, extractive support,
+citation validity, and abstention. Required-term correctness and extractive support are
+explicitly named as proxies. Its committed report is
+`artifacts/rag_system_evaluation.json`.
