@@ -31,6 +31,19 @@ or named methods.
 
 - Lewis et al., “Retrieval-Augmented Generation for Knowledge-Intensive NLP
   Tasks,” NeurIPS 2020. https://arxiv.org/abs/2005.11401
+- Robertson and Zaragoza, “The Probabilistic Relevance Framework: BM25 and
+  Beyond,” *Foundations and Trends in Information Retrieval* 3(4), 2009.
+  https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf
+- Lv and Zhai, “Lower-Bounding Term Frequency Normalization,” CIKM 2011.
+  https://doi.org/10.1145/2063576.2063584
+- Karpukhin et al., “Dense Passage Retrieval for Open-Domain Question
+  Answering,” EMNLP 2020. https://arxiv.org/abs/2004.04906
+- Cormack, Clarke, and Büttcher, “Reciprocal Rank Fusion Outperforms Condorcet
+  and Individual Rank Learning Methods,” SIGIR 2009.
+  https://doi.org/10.1145/1571941.1572114
+- Thakur et al., “BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of
+  Information Retrieval Models,” NeurIPS Datasets and Benchmarks 2021.
+  https://arxiv.org/abs/2104.08663
 - Qdrant, “Local Quickstart.”
   https://qdrant.tech/documentation/quick-start/
 - Qdrant, “Payload.”

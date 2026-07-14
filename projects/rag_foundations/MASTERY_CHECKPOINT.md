@@ -53,3 +53,26 @@ Before hybrid search, the learner must:
 
 Pass requires `make vector-store-checkpoint`, all six explanations, and no failure on
 items 2–5. RAG-06 remains blocked until this gate passes.
+
+## Hybrid-search extension
+
+Before RAG evaluation, the learner must:
+
+1. Run `make hybrid-rag-evaluate` and compare BM25, dense LSA, RRF, and every tested
+   alpha on the same corpus hash, query hash, chunks, labels, `top_k`, and candidate
+   depth.
+2. Calculate one RRF result manually and explain why a document missing from one
+   candidate list receives no contribution from that list.
+3. Diagnose one query where a base retriever wins, one where fusion improves ranking,
+   and one where fusion provides no improvement. If the current labelled set lacks
+   one category, add a labelled case instead of inventing a conclusion.
+4. Explain why both branches must apply equivalent authorization, freshness, and
+   safety policies before fusion while keeping branch-specific tokenization.
+5. Demonstrate stable-ID deduplication, evidence provenance, candidate-depth control,
+   and abstention when neither branch provides meaningful evidence.
+6. State why the local latency values are teaching measurements and model concurrent
+   sparse/dense execution as `max(branch latency) + fusion and orchestration`, not as
+   an unconditional sum.
+
+Pass requires `make hybrid-rag-checkpoint`, all six explanations, and a scored query
+failure analysis. EVAL-03 remains blocked until this gate passes.

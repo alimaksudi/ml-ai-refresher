@@ -1,755 +1,605 @@
 """Builder for Lesson RAG-06 — Hybrid Search."""
-import os, sys
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from nbbuild import build, code, md
+from nbbuild import build, code, md  # noqa: E402
+
 
 cells = [
     md(r"""
     # RAG-06 · Hybrid Search
     ### Section 06 — Retrieval-Augmented Generation · *ML/AI Senior Mastery Curriculum*
 
-    > Dense vector search (Lesson RAG-01) excels at semantic similarity but fails on
-    > **exact-match** queries — product codes, proper nouns, rare terms, serial numbers.
-    > BM25 sparse retrieval excels at exact matches but fails on paraphrase and
-    > semantic intent. **Hybrid search** fuses both signals to get the best of both
-    > worlds. This notebook teaches BM25 from scratch, two fusion strategies (RRF and
-    > alpha-weighted), and why every production RAG pipeline should be hybrid.
+    > A dense retriever can understand paraphrases yet blur exact identifiers. A
+    > lexical retriever can preserve exact words yet miss vocabulary changes. Hybrid
+    > search asks a measurable question: **does combining their candidate lists improve
+    > retrieval on our labelled queries enough to justify the added complexity?**
+
+    This lesson extends the measured `rag_foundations` project from RAG-03 and RAG-05.
+    It does not assume hybrid is automatically better.
     """),
 
     md(r"""
     ## 1 · Learning Objectives
 
-    **What you will master**
-    - **Why hybrid search**: the failure modes of pure dense and pure sparse retrieval.
-    - **BM25 from scratch**: TF saturation, IDF, document length normalisation —
-      derive and implement every term.
-    - **Dense retrieval from scratch**: cosine similarity (reference Lesson RAG-01).
-    - **Reciprocal Rank Fusion (RRF)**: the rank-based fusion formula; why it is
-      robust to score-scale mismatch between systems.
-    - **Alpha-weighted score fusion**: normalise scores, blend with weight $\alpha$.
-    - **When RRF beats alpha-weighted and vice versa.**
-    - **Production hybrid search**: LangChain EnsembleRetriever + BM25Retriever
-      (guarded import).
-    - **Tune $\alpha$**: measuring Recall@k across a grid of $\alpha$ values.
+    By the end of this lesson, you will be able to:
 
-    **Why it matters**
-    - BEIR benchmarks (2021) showed that BM25 outperforms many dense models on
-      exact-match tasks. Production RAG at Notion, Elastic, Cohere consistently uses
-      hybrid. Not using hybrid when your corpus has product codes or named entities
-      is a leading cause of "why doesn't RAG find X" support tickets.
+    - predict when BM25 or dense retrieval is likely to help;
+    - calculate one BM25 term contribution and one RRF score by hand;
+    - implement candidate union, stable-ID deduplication, RRF, and alpha fusion;
+    - compare BM25, dense LSA, RRF, and alpha fusion on the same labelled queries;
+    - interpret Recall@k, MRR, nDCG, query slices, abstention, and candidate depth;
+    - keep authorization, freshness, safety, and provenance intact in both branches;
+    - decide when hybrid retrieval should **not** be deployed.
+
+    **Prerequisite check.** NLP-01 supplied BM25; NLP-02 and RAG-01 supplied vectors
+    and similarity; RAG-03 supplied labelled retrieval evaluation; RAG-05 supplied
+    persistent storage and filters. If those ideas are not familiar, revisit them
+    before continuing.
     """),
 
     md(r"""
     ## 2 · Historical Motivation
 
-    **BM25 (Robertson & Zaragoza, 1994–2009).** Okapi BM25 emerged from the Okapi
-    IR system at City University London. It improved on classic TF-IDF by adding:
-    (1) **TF saturation** (diminishing returns for repeated terms), and
-    (2) **document length normalisation** (long documents shouldn't score higher
-    just for having more term occurrences). BM25 dominated TREC competitions for a
-    decade and remains the default sparse baseline in 2024.
+    Traditional sparse retrieval ranks exact terms. BM25 added term-frequency
+    saturation and document-length normalization to this family. Dense Passage
+    Retrieval later showed how learned vector representations could retrieve passages
+    without requiring every query word to appear literally. Neither signal dominates
+    every domain, so rank fusion combines independently produced candidate lists.
 
-    **Dense retrieval (Karpukhin et al., DPR, 2020).** Dense Passage Retrieval
-    showed that fine-tuned bi-encoders outperform BM25 on open-domain QA (Natural
-    Questions, TriviaQA). This triggered widespread adoption of vector search.
+    Primary reading:
 
-    **The hybrid insight.** BEIR (Thakur et al., 2021) benchmarked dense retrievers
-    on 18 datasets and found BM25 still won on 6 of them (exact-match heavy tasks).
-    Hybrid search fuses both to cover all tasks. **SPLADE** (2021) took this further
-    by learning a sparse representation that mimics BM25 structure with learned
-    expansion — but pure BM25+dense hybrid is simpler and nearly as good.
+    - Robertson and Zaragoza, [The Probabilistic Relevance Framework: BM25 and Beyond](https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf)
+    - Karpukhin et al., [Dense Passage Retrieval for Open-Domain Question Answering](https://arxiv.org/abs/2004.04906)
+    - Cormack, Clarke, and Büttcher, [Reciprocal Rank Fusion](https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf)
+    - Thakur et al., [BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation](https://arxiv.org/abs/2104.08663)
 
-    **Reciprocal Rank Fusion (Cormack et al., 2009).** RRF was proposed as a simple,
-    parameter-free method to combine ranked lists from multiple retrieval systems.
-    It works without knowing the score distributions of each system — only ranks.
-    Widely adopted in production because it requires no tuning.
+    These sources support the algorithms and benchmark motivation. Results later in
+    this notebook come from the repository's small local teaching dataset; they are
+    not vendor benchmarks or production capacity claims.
     """),
 
     md(r"""
-    ## 3 · Intuition & Visual Understanding
+    ## 3 · Intuition and Visual Understanding
 
-    **The failure modes of each retrieval type.**
+    ### The problem
 
-    | Query type | Dense search | BM25 sparse |
-    |---|---|---|
-    | "shoe that's comfortable for running" | Excellent (semantic) | Misses "running shoe" if those words absent |
-    | "Nike Air Max 90 size 10" | Misses if no exact match | Excellent (exact tokens) |
-    | "product ID SKU-48291" | Fails (no semantic content) | Excellent if in index |
-    | "What is the capital of France?" | Excellent | Good (Paris is a frequent term) |
+    Imagine two librarians. One remembers exact catalogue labels such as `ZX-410`.
+    The other understands that “restore the converter” is similar to “reset the
+    inverter.” Asking both may recover evidence that either one misses. A fusion rule
+    merges their lists by stable document ID.
 
-    **BM25 intuition.** A search engine scores document $d$ for query $q$:
-    - Each query term $t$ contributes a score based on how often it appears in $d$
-      (TF, but capped — finding "python" 10× isn't 10× better than finding it 1×).
-    - Terms that appear in fewer documents get higher weight (IDF).
-    - Short documents are preferred over long ones containing the same term count.
+    The analogy stops here: real retrievers return noisy numerical rankings, enforce
+    access policies, and can fail together because they share the same bad corpus.
 
-    **RRF intuition.** System A ranks document X at position 3; System B ranks it
-    at position 7. RRF score = 1/(60+3) + 1/(60+7) = 0.0159 + 0.0149 = 0.0308.
-    A document ranked 1st by both systems would score 1/(60+1) + 1/(60+1) = 0.033.
-    The constant 60 prevents a rank-1 result from dominating when the other system
-    ranks it very low. RRF is **scale-agnostic** — it doesn't matter if BM25 scores
-    are in [0, 20] and dense scores are in [-1, 1].
+    | Query condition | BM25 tendency | Dense tendency | Sensible first choice |
+    |---|---|---|---|
+    | Product code or error code | Preserves exact token | May blur nearby identifiers | BM25 baseline, then measure hybrid |
+    | Paraphrase with different wording | May miss vocabulary change | Can capture related meaning | Dense baseline, then measure hybrid |
+    | Mixed identifier and intent | Captures identifier | Captures intent | Hybrid candidate generation |
+    | Tiny corpus with stable exact vocabulary | Often sufficient | Extra model and index may add little | BM25 only |
+    | Strict latency budget with no measured hybrid gain | Simpler | One branch may be sufficient | Best measured single retriever |
 
-    **Alpha-weighted fusion.** Normalise each system's scores to [0,1], then:
-    $\text{score}(d) = \alpha \cdot \text{dense\_score}(d) + (1-\alpha) \cdot \text{bm25\_score}(d)$.
-    Requires calibrating $\alpha$ per domain. More interpretable than RRF but
-    sensitive to score outliers.
+    **Core process:** retrieve more than the final `top_k` from both branches → apply
+    equivalent policy filters → take the candidate union → deduplicate by stable ID →
+    fuse → keep the final `top_k` → evaluate by query slice.
     """),
 
     code(r"""
-    import numpy as np
     import math
     import re
-    import matplotlib.pyplot as plt
-    from collections import Counter, defaultdict
+    import sys
+    from pathlib import Path
 
-    rng = np.random.default_rng(42)
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    REPOSITORY_ROOT = next(
+        path for path in (Path.cwd(), *Path.cwd().parents)
+        if (path / 'projects/rag_foundations/src').exists()
+    )
+    PROJECT_SOURCE = REPOSITORY_ROOT / 'projects/rag_foundations/src'
+    if str(PROJECT_SOURCE) not in sys.path:
+        sys.path.insert(0, str(PROJECT_SOURCE))
+
+    from rag_foundations.evaluation import BM25Index, RetrievalIndex, build_chunks, load_json
+    from rag_foundations.hybrid import evaluate_hybrid, minmax_score_fusion
+
     plt.rcParams['figure.figsize'] = (9, 5)
     plt.rcParams['axes.grid'] = True
     plt.rcParams['grid.alpha'] = 0.3
-    print('Dependencies loaded.')
+    print('Loaded deterministic local retrieval tools.')
     """),
 
     md(r"""
     ## 4 · Mathematical Foundations
 
-    ### 4.1 BM25 scoring
+    ### 4.1 BM25 recap
 
-    For query $q = \{t_1, \dots, t_n\}$ and document $d$:
+    For a query $q$ and document $d$:
 
-    $$\text{BM25}(d, q) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{f(t,d) \cdot (k_1 + 1)}{f(t,d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{\text{avgdl}}\right)}$$
+    $$
+    \operatorname{BM25}(d,q)=\sum_{t\in q}\operatorname{IDF}(t)
+    \frac{f(t,d)(k_1+1)}{f(t,d)+k_1\left(1-b+b\frac{|d|}{\operatorname{avgdl}}\right)}
+    $$
 
-    where:
-    - $f(t,d)$ = term frequency of $t$ in $d$
-    - $|d|$ = document length (tokens)
-    - $\text{avgdl}$ = average document length in the corpus
-    - $k_1 \in [1.2, 2.0]$ = TF saturation parameter (default 1.5)
-    - $b \in [0, 1]$ = length normalisation parameter (default 0.75)
+    **Read it aloud:** for each query term, multiply how rare the term is by its
+    saturated, length-adjusted frequency in the document, then add the contributions.
 
-    **IDF** (Robertson's variant, avoids division by zero):
-    $$\text{IDF}(t) = \log\!\left(\frac{N - n(t) + 0.5}{n(t) + 0.5} + 1\right)$$
+    - $t$: one query term; $q$: the set or sequence of query terms.
+    - $f(t,d)$: number of occurrences of term $t$ in document $d$; a count.
+    - $|d|$: document length in tokens; $\operatorname{avgdl}$: average corpus length.
+    - $k_1\geq0$: term-frequency saturation control; larger values saturate more slowly.
+    - $b\in[0,1]$: document-length normalization control.
+    - $N$: number of documents; $n(t)$: documents containing $t$.
 
-    where $N$ = total docs, $n(t)$ = docs containing $t$.
+    We use Robertson's non-negative IDF variant:
+
+    $$\operatorname{IDF}(t)=\log\left(\frac{N-n(t)+0.5}{n(t)+0.5}+1\right).$$
+
+    **Manual example.** Let $N=10$, $n(t)=2$, $f(t,d)=3$, $|d|=100$,
+    $\operatorname{avgdl}=80$, $k_1=1.5$, and $b=0.75$.
+
+    $$\operatorname{IDF}(t)=\log(4.4)\approx1.482$$
+
+    $$1-b+b|d|/\operatorname{avgdl}=0.25+0.75(100/80)=1.1875$$
+
+    $$\text{saturated TF}=\frac{3(2.5)}{3+1.5(1.1875)}\approx1.569$$
+
+    The term contributes about $1.482\times1.569=2.325$ points. This is a ranking
+    score, not a probability. BM25 cannot match a query term absent from its index.
 
     ### 4.2 Reciprocal Rank Fusion
 
-    Given $R$ ranked lists $\{L_1, \dots, L_R\}$ and a constant $k$ (default 60):
-    $$\text{RRF}(d) = \sum_{r=1}^{R} \frac{1}{k + \text{rank}_r(d)}$$
+    $$\operatorname{RRF}(d)=\sum_{r:d\in L_r}\frac{1}{k+\operatorname{rank}_r(d)}$$
 
-    Documents not appearing in a list get rank = $N+1$ (worst possible).
+    **Read it aloud:** for every ranked list containing document $d$, add the inverse
+    of the constant $k$ plus that document's one-based rank.
+
+    - $L_r$: ranked candidate list number $r$.
+    - $\operatorname{rank}_r(d)$: one-based position of $d$ in list $L_r$.
+    - $k$: rank constant; commonly 60, but still a parameter.
+    - A document missing from a list receives **no contribution from that list**.
+
+    If a document is rank 2 in BM25 and rank 5 in dense retrieval with $k=60$:
+
+    $$\operatorname{RRF}(d)=1/62+1/65\approx0.03152.$$
+
+    RRF avoids comparing incompatible raw scores. It does not calibrate relevance,
+    guarantee improvement, or remove the need to choose candidate depth.
 
     ### 4.3 Alpha-weighted fusion
 
-    Min-max normalise each system's scores independently, then:
-    $$s_{\text{hybrid}}(d) = \alpha \cdot \hat{s}_{\text{dense}}(d) + (1 - \alpha) \cdot \hat{s}_{\text{BM25}}(d)$$
+    $$s_{\text{hybrid}}(d)=\alpha\hat{s}_{\text{dense}}(d)+(1-\alpha)\hat{s}_{\text{BM25}}(d)$$
 
-    Optimise $\alpha$ by grid search on a labelled development set, maximising Recall@k.
+    Here $s$ is a scalar score, a hat means the score was normalized, and
+    $\alpha\in[0,1]$ controls dense weight. With normalized dense score 0.4, normalized
+    BM25 score 0.8, and $\alpha=0.25$, the fused score is
+    $0.25(0.4)+0.75(0.8)=0.7$.
 
-    ### 4.4 Why RRF with k=60?
+    Min-max normalization depends on the returned candidate set and is sensitive to
+    outliers. Tune alpha only on labelled development queries; never choose it from
+    the final test set.
+    """),
 
-    The constant $k=60$ was empirically shown by Cormack et al. to perform well across
-    diverse retrieval tasks. It dampens the advantage of rank-1 results and makes the
-    formula robust to systems with very different quality. Higher $k$ gives more uniform
-    weights (approaching average-rank); lower $k$ gives more weight to the top rank.
+    code(r"""
+    # Verify the manual BM25 calculation before implementing fusion.
+    document_count = 10
+    matching_documents = 2
+    term_frequency = 3
+    document_length = 100
+    average_document_length = 80
+    k1 = 1.5
+    b = 0.75
+
+    inverse_document_frequency = math.log(
+        (document_count - matching_documents + 0.5) / (matching_documents + 0.5) + 1
+    )
+    length_factor = 1 - b + b * document_length / average_document_length
+    saturated_frequency = term_frequency * (k1 + 1) / (term_frequency + k1 * length_factor)
+    term_contribution = inverse_document_frequency * saturated_frequency
+
+    print(f'IDF: {inverse_document_frequency:.3f}')
+    print(f'Length factor: {length_factor:.4f}')
+    print(f'Saturated term frequency: {saturated_frequency:.3f}')
+    print(f'BM25 term contribution: {term_contribution:.3f}')
+    assert np.isclose(term_contribution, 2.325, atol=0.001)
     """),
 
     md(r"""
     ## 5 · Manual Implementation from Scratch
 
-    ### 5a BM25 from scratch
+    The first example isolates fusion. The rankings are deliberately supplied by hand,
+    so no simulated vector is mistaken for a real encoder. Section 6 then runs real
+    BM25 and dense LSA retrieval on the project's labelled data.
     """),
 
     code(r"""
-    # 5a. BM25 implementation from scratch.
-    class BM25:
-        def __init__(self, k1=1.5, b=0.75):
-            self.k1 = k1
-            self.b = b
-            self.corpus = []
-            self.tokenised = []
-            self.df = Counter()    # doc frequency per term
-            self.N = 0
-            self.avgdl = 0.0
+    # Each tuple is (stable_document_id, branch_score).
+    bm25_candidates = [('doc-zx410', 8.2), ('doc-safety', 3.1), ('doc-overload', 1.2)]
+    dense_candidates = [('doc-overload', 0.91), ('doc-zx410', 0.73), ('doc-restart', 0.61)]
 
-        def _tokenise(self, text):
-            return re.findall(r'\w+', text.lower())
-
-        def fit(self, corpus):
-            self.corpus = corpus
-            self.tokenised = [self._tokenise(doc) for doc in corpus]
-            self.N = len(corpus)
-            self.avgdl = sum(len(t) for t in self.tokenised) / max(1, self.N)
-            self.df = Counter()
-            for tokens in self.tokenised:
-                for term in set(tokens):
-                    self.df[term] += 1
-            return self
-
-        def idf(self, term):
-            n = self.df.get(term, 0)
-            return math.log((self.N - n + 0.5) / (n + 0.5) + 1)
-
-        def score(self, query, doc_idx):
-            tokens = self.tokenised[doc_idx]
-            dl = len(tokens)
-            tf_counter = Counter(tokens)
-            score = 0.0
-            for term in self._tokenise(query):
-                tf = tf_counter.get(term, 0)
-                idf = self.idf(term)
-                norm_tf = (tf * (self.k1 + 1)) / (
-                    tf + self.k1 * (1 - self.b + self.b * dl / max(1, self.avgdl))
+    def reciprocal_rank_fusion_by_id(ranked_lists, rank_constant=60):
+        fused_scores = {}
+        for ranked_list in ranked_lists:
+            for one_based_rank, (document_id, _branch_score) in enumerate(ranked_list, start=1):
+                fused_scores[document_id] = fused_scores.get(document_id, 0.0) + (
+                    1.0 / (rank_constant + one_based_rank)
                 )
-                score += idf * norm_tf
-            return score
+        return sorted(fused_scores.items(), key=lambda item: (-item[1], item[0]))
 
-        def search(self, query, k=5):
-            scores = [(self.score(query, i), i) for i in range(self.N)]
-            scores.sort(reverse=True)
-            return [(idx, s) for s, idx in scores[:k]]
+    fused_candidates = reciprocal_rank_fusion_by_id([bm25_candidates, dense_candidates])
+    print('Candidate union:', [document_id for document_id, _ in fused_candidates])
+    for rank, (document_id, score) in enumerate(fused_candidates, start=1):
+        print(f'{rank}. {document_id:12s} RRF={score:.5f}')
 
-    # Corpus: product catalogue.
-    corpus = [
-        'Nike Air Max 90 white running shoe size 10',
-        'Adidas Ultraboost 22 black running sneaker',
-        'comfortable running shoes for long distance training',
-        'Nike Air Max 90 red limited edition',
-        'trail running shoes waterproof lightweight',
-        'casual white leather sneakers for everyday wear',
-        'best shoes for marathon training and recovery',
-        'Nike Air Max 270 React grey mesh upper',
+    expected_union = {'doc-zx410', 'doc-safety', 'doc-overload', 'doc-restart'}
+    assert {document_id for document_id, _ in fused_candidates} == expected_union
+    assert fused_candidates[0][0] == 'doc-zx410'
+    """),
+
+    md(r"""
+    **Expected result.** Four unique IDs should remain. `doc-zx410` ranks first because
+    both branches support it. `doc-safety` and `doc-restart` still remain candidates;
+    missing from one list means no contribution from that list, not an invented worst
+    rank. A duplicate ID in the final list or an ID outside the union means fusion is
+    broken.
+    """),
+
+    code(r"""
+    # A small executable BM25 check: an unseen query should return no arbitrary documents.
+    data_directory = REPOSITORY_ROOT / 'projects/rag_foundations/data'
+    corpus_data = load_json(data_directory / 'corpus.json')
+    structure_chunks = build_chunks(corpus_data, 'structure')
+    bm25_index = BM25Index(structure_chunks)
+
+    exact_results = bm25_index.search('log-softmax', k=3)
+    unknown_results = bm25_index.search('zxqv-9999', k=3)
+
+    print('Exact-token top result:', exact_results[0][0].section_id, round(exact_results[0][1], 3))
+    print('Unknown-token results:', unknown_results)
+    assert exact_results[0][0].section_id == 'neural.logits'
+    assert unknown_results == []
+    """),
+
+    md(r"""
+    ## 6 · Visualization and Measured Project Comparison
+
+    Now evaluate every method on the same corpus, structure-aware chunks, query
+    labels, `top_k=5`, and candidate depth 15. Dense LSA is a real statistical dense
+    representation, but it is not a neural sentence encoder.
+    """),
+
+    code(r"""
+    hybrid_report = evaluate_hybrid(data_directory)
+    metric_names = ('recall_at_k', 'mrr', 'ndcg_at_k', 'unanswerable_abstention_rate')
+
+    print('top_k =', hybrid_report['top_k'], '| candidate_k =', hybrid_report['candidate_k'])
+    print(f"{'method':24s}  recall   MRR   nDCG  abstain")
+    for method, result in hybrid_report['experiments'].items():
+        values = [result[name] for name in metric_names]
+        print(f'{method:24s}  ' + '  '.join(f'{value:.3f}' for value in values))
+
+    base_recall = max(
+        hybrid_report['experiments'][name]['recall_at_k']
+        for name in ('bm25', 'dense_lsa')
+    )
+    fused_recall = max(
+        result['recall_at_k']
+        for name, result in hybrid_report['experiments'].items()
+        if name.startswith('hybrid_')
+    )
+    assert fused_recall >= base_recall
+    assert all(
+        result['unanswerable_abstention_rate'] == 1.0
+        for result in hybrid_report['experiments'].values()
+    )
+    """),
+
+    md(r"""
+    **Expected result for the committed dataset.** BM25, dense LSA, RRF, and every
+    tested alpha reach Recall@5 of 0.875. BM25 has the best ranking metrics among the
+    simplest methods, and every method abstains on both unanswerable queries. If labels
+    or corpus hashes change, treat the printed report—not these historical expected
+    values—as authoritative and review the diff.
+
+    A valid but weaker result is not a code failure. It means the method did not earn
+    deployment on this evaluation set.
+    """),
+
+    code(r"""
+    alpha_methods = [
+        name for name in hybrid_report['experiments']
+        if name.startswith('hybrid_alpha_')
     ]
+    alpha_values = [float(name.rsplit('_', 1)[1]) for name in alpha_methods]
+    alpha_recall = [hybrid_report['experiments'][name]['recall_at_k'] for name in alpha_methods]
+    alpha_mrr = [hybrid_report['experiments'][name]['mrr'] for name in alpha_methods]
+    rrf_recall = hybrid_report['experiments']['hybrid_rrf']['recall_at_k']
 
-    bm25 = BM25(k1=1.5, b=0.75)
-    bm25.fit(corpus)
-
-    q_exact = 'Nike Air Max 90'
-    q_semantic = 'comfortable footwear for long runs'
-
-    print(f'BM25 results for "{q_exact}":')
-    for rank, (idx, s) in enumerate(bm25.search(q_exact, k=4)):
-        print(f'  [{rank+1}] score={s:.3f}  {corpus[idx][:60]}')
-
-    print(f'\nBM25 results for "{q_semantic}":')
-    for rank, (idx, s) in enumerate(bm25.search(q_semantic, k=4)):
-        print(f'  [{rank+1}] score={s:.3f}  {corpus[idx][:60]}')
-    """),
-
-    md(r"""
-    ### 5b Dense retrieval from scratch
-    """),
-
-    code(r"""
-    # 5b. Simulated dense embeddings (in practice, use sentence-transformers).
-    # We simulate by creating topic vectors: each doc gets an embedding
-    # that encodes its semantic meaning using predefined axes.
-    D = 32  # embedding dimension
-
-    def make_embedding(text, rng, base_seed=None):
-        words = text.lower().split()
-        vec = rng.normal(0, 0.1, D)
-        # Inject signal along semantic axes based on key words.
-        running_score = sum(1 for w in words if w in ['running', 'marathon', 'training', 'distance', 'comfortable'])
-        nike_score    = sum(1 for w in words if w in ['nike', 'air', 'max', '90', '270'])
-        casual_score  = sum(1 for w in words if w in ['casual', 'everyday', 'leather', 'white', 'wear'])
-        vec[0] += running_score * 0.8
-        vec[1] += nike_score   * 0.8
-        vec[2] += casual_score * 0.8
-        norm = np.linalg.norm(vec)
-        return vec / norm if norm > 1e-9 else vec
-
-    corpus_embs = np.stack([make_embedding(doc, rng) for doc in corpus])
-
-    def dense_search(query_emb, corpus_embs, k=5):
-        sims = corpus_embs @ query_emb
-        idx = np.argpartition(sims, -k)[-k:]
-        idx = idx[np.argsort(sims[idx])[::-1]]
-        return [(i, float(sims[i])) for i in idx]
-
-    # Query embeddings with matching semantic axes.
-    q_exact_emb  = np.array([0.1, 0.9, 0.0] + [0.0]*(D-3), dtype=np.float32)  # Nike-like
-    q_exact_emb /= np.linalg.norm(q_exact_emb)
-    q_sem_emb    = np.array([0.9, 0.1, 0.0] + [0.0]*(D-3), dtype=np.float32)  # running-like
-    q_sem_emb   /= np.linalg.norm(q_sem_emb)
-
-    print('Dense results for "Nike Air Max 90" (exact product):')
-    for rank, (idx, s) in enumerate(dense_search(q_exact_emb, corpus_embs, k=4)):
-        print(f'  [{rank+1}] score={s:.3f}  {corpus[idx][:60]}')
-
-    print('\nDense results for "comfortable footwear for long runs" (semantic):')
-    for rank, (idx, s) in enumerate(dense_search(q_sem_emb, corpus_embs, k=4)):
-        print(f'  [{rank+1}] score={s:.3f}  {corpus[idx][:60]}')
-    """),
-
-    md(r"""
-    ### 5c Reciprocal Rank Fusion (RRF) from scratch
-    """),
-
-    code(r"""
-    # 5c. RRF: fuse BM25 and dense ranked lists.
-    def rrf_fusion(ranked_lists, k=60):
-        scores = defaultdict(float)
-        for ranked in ranked_lists:
-            for rank, (doc_idx, _score) in enumerate(ranked):
-                scores[doc_idx] += 1.0 / (k + rank + 1)
-        return sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
-    # For each query, fuse BM25 and dense results.
-    for q_text, q_emb, label in [
-        ('Nike Air Max 90', q_exact_emb, 'exact product code'),
-        ('comfortable footwear for long runs', q_sem_emb, 'semantic intent'),
-    ]:
-        bm25_results  = bm25.search(q_text, k=8)
-        dense_results = dense_search(q_emb, corpus_embs, k=8)
-        rrf_results   = rrf_fusion([bm25_results, dense_results], k=60)
-        print(f'\nHybrid RRF — "{q_text}" ({label}):')
-        for rank, (idx, score) in enumerate(rrf_results[:4]):
-            print(f'  [{rank+1}] rrf={score:.5f}  {corpus[idx][:60]}')
-    """),
-
-    md(r"""
-    ### 5d Alpha-weighted score fusion from scratch
-    """),
-
-    code(r"""
-    # 5d. Alpha-weighted fusion: normalise scores to [0,1], blend with alpha.
-    def alpha_fusion(bm25_results, dense_results, alpha=0.5):
-        # Build score dicts.
-        bm25_dict  = {idx: s for idx, s in bm25_results}
-        dense_dict = {idx: s for idx, s in dense_results}
-        all_ids = set(bm25_dict) | set(dense_dict)
-
-        # Min-max normalise each system independently.
-        def minmax(d):
-            if not d: return d
-            lo, hi = min(d.values()), max(d.values())
-            rng = hi - lo
-            return {k: (v - lo) / rng if rng > 1e-9 else 0.5 for k, v in d.items()}
-
-        bm25_norm  = minmax(bm25_dict)
-        dense_norm = minmax(dense_dict)
-
-        fused = {
-            idx: alpha * dense_norm.get(idx, 0.0) + (1 - alpha) * bm25_norm.get(idx, 0.0)
-            for idx in all_ids
-        }
-        return sorted(fused.items(), key=lambda x: x[1], reverse=True)
-
-    for q_text, q_emb, label in [
-        ('Nike Air Max 90', q_exact_emb, 'exact product code'),
-        ('comfortable footwear for long runs', q_sem_emb, 'semantic intent'),
-    ]:
-        bm25_res  = bm25.search(q_text, k=8)
-        dense_res = dense_search(q_emb, corpus_embs, k=8)
-        alpha_res = alpha_fusion(bm25_res, dense_res, alpha=0.5)
-        print(f'\nAlpha-fusion (alpha=0.5) — "{q_text}" ({label}):')
-        for rank, (idx, score) in enumerate(alpha_res[:4]):
-            print(f'  [{rank+1}] score={score:.4f}  {corpus[idx][:60]}')
-    """),
-
-    md(r"""
-    ## 6 · Visualization
-    """),
-
-    code(r"""
-    # Figure 1 — BM25 TF saturation curve.
-    tf_values = np.linspace(0, 20, 200)
-    k1_values = [0.5, 1.2, 1.5, 2.0]
     fig, ax = plt.subplots()
-    for k1 in k1_values:
-        sat = tf_values * (k1 + 1) / (tf_values + k1)
-        ax.plot(tf_values, sat, label=f'k1={k1}')
-    ax.axline((0, 0), slope=1, color='gray', ls=':', label='Linear (no saturation)')
-    ax.set_xlabel('Raw term frequency f(t,d)')
-    ax.set_ylabel('Saturated TF contribution')
-    ax.set_title('Figure 1 — BM25 TF saturation curves for different k1')
+    ax.plot(alpha_values, alpha_recall, 'o-', label='Alpha fusion Recall@5')
+    ax.plot(alpha_values, alpha_mrr, 's-', label='Alpha fusion MRR')
+    ax.axhline(rrf_recall, color='tab:red', linestyle='--', label=f'RRF Recall@5={rrf_recall:.3f}')
+    ax.set_xlabel('alpha (0 = BM25 only, 1 = dense only)')
+    ax.set_ylabel('Metric value')
+    ax.set_ylim(0, 1.05)
+    ax.set_title('Measured fusion tradeoff on labelled project queries')
     ax.legend()
     plt.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** BM25's TF saturation curve. Without saturation (dotted line),
-    a term appearing 20× contributes 20× more than appearing 1×. BM25 caps this:
-    with $k_1=1.5$, a term appearing 5× contributes only $\sim 2.4\times$ more than
-    appearing once. This prevents long documents with repeated terms from dominating.
-    Higher $k_1$ = slower saturation (more reward for higher TF); $k_1 \to 0$ =
-    pure binary presence/absence. Default $k_1=1.5$ is robust across most corpora.
+    **Interpretation.** The flat Recall@5 curve means hybrid search has not earned its
+    extra complexity on this labelled set. Alpha values from 0 through 0.75 reproduce
+    BM25's ranking metrics; alpha 1 reproduces dense LSA. RRF reproduces the dense
+    ranking metrics. This is a valid negative result, not a broken experiment. The
+    dataset also lacks a dedicated identifier slice, so the next responsible step is
+    to add representative labels—not to invent a hybrid gain.
     """),
 
     code(r"""
-    # Figure 2 — Length normalisation: effect of b parameter.
-    avgdl = 10  # average doc length
-    dl_values = np.arange(1, 31)   # doc lengths 1 to 30 tokens
-    fig, ax = plt.subplots()
-    for b in [0.0, 0.25, 0.5, 0.75, 1.0]:
-        norms = 1 - b + b * dl_values / avgdl
-        ax.plot(dl_values, norms, label=f'b={b}')
-    ax.axhline(1.0, color='gray', ls=':', lw=0.8)
-    ax.set_xlabel('Document length |d|'); ax.set_ylabel('Length normalisation factor')
-    ax.set_title(f'Figure 2 — BM25 length normalisation (avgdl={avgdl})')
-    ax.legend(ncol=2)
-    plt.tight_layout()
-    plt.show()
+    # Compare query-level changes instead of hiding behind one average.
+    rows_by_method = {
+        method: {row['query_id']: row for row in result['rows']}
+        for method, result in hybrid_report['experiments'].items()
+    }
+    improvements = []
+    for query_id in rows_by_method['hybrid_rrf']:
+        bm25_value = rows_by_method['bm25'][query_id]['recall_at_k']
+        dense_value = rows_by_method['dense_lsa'][query_id]['recall_at_k']
+        rrf_value = rows_by_method['hybrid_rrf'][query_id]['recall_at_k']
+        if rrf_value > min(bm25_value, dense_value):
+            improvements.append((query_id, bm25_value, dense_value, rrf_value))
+    if improvements:
+        print('Queries where RRF improves Recall@5 over at least one base retriever:')
+        for query_id, bm25_value, dense_value, rrf_value in improvements:
+            print(f'  {query_id}: BM25={bm25_value:.1f}, dense={dense_value:.1f}, RRF={rrf_value:.1f}')
+    else:
+        print('No query-level RRF recall improvement. Add missing query slices before claiming a gain.')
     """),
 
     md(r"""
-    **Figure 2.** Length normalisation factor $1 - b + b \cdot |d|/\text{avgdl}$.
-    **$b=0$** (flat line at 1.0): no length normalisation — long documents get no
-    penalty. **$b=1$** (steepest slope): full normalisation — scores fully adjusted
-    for length, so a document twice the average length has its TF halved. **$b=0.75$**
-    (default) is a compromise: penalises long documents but doesn't over-penalise.
-    Key insight: if your corpus has highly variable document lengths (tweets vs.
-    research papers), tune $b$ upward; if all documents are roughly the same length,
-    $b$ matters less.
-    """),
+    ## 7 · Failure Modes and Debugging
 
-    code(r"""
-    # Figure 3 — RRF vs alpha-weighted: recall@k across alpha grid.
-    # Synthetic ground truth: doc 0 (Nike Air Max 90) and doc 3 (Nike Air Max 90 red)
-    # are the relevant results for the "Nike Air Max 90" exact query.
-    relevant_exact = {0, 3}    # exact query ground truth
-    relevant_sem   = {2, 4, 6} # semantic query ground truth (comfortable running)
-
-    alphas = np.linspace(0, 1, 21)
-    recalls_exact, recalls_sem = [], []
-
-    for alpha in alphas:
-        for query_text, query_emb, relevant, recall_list in [
-            ('Nike Air Max 90', q_exact_emb, relevant_exact, recalls_exact),
-            ('comfortable footwear for long runs', q_sem_emb, relevant_sem, recalls_sem),
-        ]:
-            bm25_res  = bm25.search(query_text, k=8)
-            dense_res = dense_search(query_emb, corpus_embs, k=8)
-            fused     = alpha_fusion(bm25_res, dense_res, alpha=alpha)
-            top3_ids  = set(idx for idx, _ in fused[:3])
-            recall_list.append(len(relevant & top3_ids) / len(relevant))
-
-    # RRF recall (fixed, not alpha-dependent).
-    rrf_recall_exact = len(relevant_exact & set(
-        idx for idx, _ in rrf_fusion([bm25.search('Nike Air Max 90', k=8),
-                                       dense_search(q_exact_emb, corpus_embs, k=8)])[:3]
-    )) / len(relevant_exact)
-    rrf_recall_sem = len(relevant_sem & set(
-        idx for idx, _ in rrf_fusion([bm25.search('comfortable footwear for long runs', k=8),
-                                       dense_search(q_sem_emb, corpus_embs, k=8)])[:3]
-    )) / len(relevant_sem)
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    for ax, recalls, rrf_r, title in [
-        (axes[0], recalls_exact, rrf_recall_exact, 'Exact query: "Nike Air Max 90"'),
-        (axes[1], recalls_sem,   rrf_recall_sem,   'Semantic query: "comfortable long runs"'),
-    ]:
-        ax.plot(alphas, recalls, 'o-', label='Alpha-weighted')
-        ax.axhline(rrf_r, color='red', ls='--', label=f'RRF (fixed, R@3={rrf_r:.2f})')
-        ax.set_xlabel('alpha (0=BM25 only, 1=dense only)')
-        ax.set_ylabel('Recall@3')
-        ax.set_title(f'Figure 3 — {title}')
-        ax.legend()
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** Two contrasting queries illustrate the alpha-tuning challenge.
-    **Left (exact query):** Peak recall at low $\alpha$ (BM25-heavy) — exact token
-    matching is essential for "Nike Air Max 90". At $\alpha=1$ (pure dense), recall
-    collapses because the dense encoder can't distinguish "Air Max 90" from "Air Max 270"
-    without fine-tuning. **Right (semantic query):** Peak recall at higher $\alpha$
-    (dense-heavy) — semantic understanding is needed for "comfortable long runs".
-    **RRF** (dashed line) achieves a robust compromise on both queries without
-    requiring alpha tuning — this is why RRF is the production default. Use
-    alpha-weighted only when you have labelled data to tune $\alpha$ per domain.
-    """),
-
-    code(r"""
-    # Figure 4 — IDF across the corpus: which terms discriminate?
-    all_terms = sorted(bm25.df.keys())
-    idfs = [bm25.idf(t) for t in all_terms]
-    sorted_pairs = sorted(zip(idfs, all_terms), reverse=True)[:15]
-    top_idfs, top_terms = zip(*sorted_pairs)
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.barh(list(top_terms)[::-1], list(top_idfs)[::-1], color='steelblue')
-    ax.set_xlabel('IDF score')
-    ax.set_title('Figure 4 — IDF scores: highest-discriminating terms in corpus')
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 4.** IDF scores for the product corpus. High-IDF terms (top) appear
-    in very few documents — they are the most discriminating. "90", "ultraboost",
-    "waterproof", "marathon" each appear in only 1–2 documents, so they strongly
-    signal relevance when a query contains them. Low-IDF terms like "running" and
-    "shoe" appear in many documents and provide less discrimination. This is why
-    BM25 is effective for exact-match queries: rare product codes and model numbers
-    get very high IDF and dominate the score for matching documents.
-    """),
-
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
+    | Symptom | Likely cause | Evidence to inspect | Scoped fix |
     |---|---|---|---|
-    | **Vocabulary mismatch** | BM25 misses synonyms | Query uses "sneaker", doc says "shoe" | Add query expansion; use hybrid so dense covers it |
-    | **Dense exact-match failure** | "SKU-48291" not retrieved | Embedding model encodes as generic token | Ensure BM25 weight in hybrid; consider BM25-only for IDs |
-    | **Alpha not tuned** | Hybrid worse than BM25 alone | Alpha=0.5 default wrong for domain | Grid-search alpha on labelled dev set |
-    | **BM25 corpus drift** | Recall drops after adding new docs | BM25 IDF not recomputed | Refit BM25 periodically; or use online BM25 |
-    | **Score scale mismatch in alpha-fusion** | One system dominates | Raw scores not normalised | Always min-max normalise before alpha fusion; or use RRF |
-    | **OOV terms** | BM25 scores 0 for unseen terms | Term not in index | Add stemming/lemmatisation; use BM25+ variant |
-    | **Duplicate docs** | Same doc retrieved twice (BM25 and dense) | Both systems return it | De-duplicate by doc ID before returning results |
-    """),
+    | Unknown query returns arbitrary documents | Zero-score results were sliced into `top_k` | Branch scores and abstention row | Remove non-positive BM25 hits; define evidence threshold |
+    | Same chunk appears twice | Fusion used list position instead of stable ID | Candidate IDs before and after union | Deduplicate by stable chunk ID before final ranking |
+    | Restricted chunk appears after fusion | Policy applied after one branch or after fusion | Sparse and dense candidate traces | Apply equivalent policy filters before both branch rankings |
+    | One branch always dominates alpha fusion | Raw score ranges differ or outlier controls normalization | Per-branch score histograms | Normalize on a declared candidate set or use RRF |
+    | Relevant chunk never enters fused list | Candidate depth is too small | Branch candidate IDs at several depths | Tune candidate depth on development labels |
+    | Good average, poor identifier queries | Aggregate hides a failure slice | Exact/entity/paraphrase slice metrics | Add labelled slice coverage; adjust retriever only with evidence |
+    | No gain over one branch | Signals overlap or one branch is weak | Per-query deltas and latency | Keep the simpler measured winner |
 
-    md(r"""
-    ## 8 · Production Library Implementation
-    """),
-
-    code(r"""
-    # 8.1 LangChain EnsembleRetriever (guarded).
-    try:
-        from langchain.retrievers import BM25Retriever, EnsembleRetriever  # noqa: F401
-        lines = [
-            'from langchain.retrievers import BM25Retriever, EnsembleRetriever',
-            'from langchain_core.documents import Document',
-            '',
-            '# Wrap corpus as LangChain Documents.',
-            'docs = [Document(page_content=t) for t in corpus]',
-            '',
-            '# BM25 retriever (sparse).',
-            'bm25_retriever = BM25Retriever.from_documents(docs)',
-            'bm25_retriever.k = 10',
-            '',
-            '# Dense retriever (bi-encoder via FAISS, not shown here).',
-            '# dense_retriever = ...',
-            '',
-            '# Ensemble: 40% BM25, 60% dense.',
-            'ensemble = EnsembleRetriever(',
-            '    retrievers=[bm25_retriever, dense_retriever],',
-            '    weights=[0.4, 0.6]',
-            ')',
-            'results = ensemble.invoke("Nike Air Max 90")',
-        ]
-        print('\n'.join(lines))
-    except ImportError:
-        lines = [
-            '[langchain not installed — production pattern]:',
-            '  from langchain.retrievers import BM25Retriever, EnsembleRetriever',
-            '  from langchain_core.documents import Document',
-            '  docs = [Document(page_content=t) for t in corpus]',
-            '  bm25_ret = BM25Retriever.from_documents(docs); bm25_ret.k = 10',
-            '  ensemble = EnsembleRetriever(',
-            '      retrievers=[bm25_ret, dense_ret], weights=[0.4, 0.6])',
-            '  results = ensemble.invoke("Nike Air Max 90")',
-        ]
-        print('\n'.join(lines))
+    **Important correction:** BM25+ does not solve unseen vocabulary. It lower-bounds
+    the term-frequency contribution for matching terms so very long matching documents
+    are not over-penalized. For unseen terms, use query expansion, synonym handling,
+    a suitable tokenizer, or a complementary dense representation. See Lv and Zhai,
+    [Lower-Bounding Term Frequency Normalization](https://timan.cs.illinois.edu/czhai/pub/cikm11-bm25.pdf).
     """),
 
     code(r"""
-    # 8.2 rank_bm25 library (guarded).
+    # Executable debugging check: the union must be unique and deterministic.
+    first_run = reciprocal_rank_fusion_by_id([bm25_candidates, dense_candidates])
+    second_run = reciprocal_rank_fusion_by_id([bm25_candidates, dense_candidates])
+    first_ids = [document_id for document_id, _ in first_run]
+    assert first_run == second_run
+    assert len(first_ids) == len(set(first_ids))
+    print('Deterministic stable-ID fusion check passed:', first_ids)
+    """),
+
+    md(r"""
+    ## 8 · Library and Project Implementation
+
+    The project implementation you just ran uses scikit-learn's TF-IDF, truncated SVD,
+    and normalization for the dense LSA branch, plus the repository's tested BM25 and
+    fusion functions. The next cell runs `rank_bm25` when the NLP/RAG requirements are
+    installed; it never prints unexecuted code as if it were a result.
+    """),
+
+    code(r"""
     try:
-        from rank_bm25 import BM25Okapi  # noqa: F401
-        lines = [
-            'from rank_bm25 import BM25Okapi',
-            'tokenised = [doc.lower().split() for doc in corpus]',
-            'bm25 = BM25Okapi(tokenised, k1=1.5, b=0.75)',
-            'scores = bm25.get_scores(["nike", "air", "max", "90"])',
-            'top_n = bm25.get_top_n(["nike", "air", "max", "90"], corpus, n=5)',
+        from rank_bm25 import BM25Okapi
+
+        library_documents = [
+            'ZX-410 inverter reset procedure',
+            'restore the power converter after an overload',
+            'employee travel reimbursement policy',
         ]
-        print('\n'.join(lines))
+        library_tokens = [re.findall(r'[a-z0-9]+(?:[-.][a-z0-9]+)*', text.lower())
+                          for text in library_documents]
+        library_bm25 = BM25Okapi(library_tokens, k1=1.5, b=0.75)
+        query_tokens = ['zx-410', 'reset']
+        library_scores = library_bm25.get_scores(query_tokens)
+        ordered_indices = np.argsort(-library_scores, kind='stable')
+        print('rank_bm25 results:')
+        for index in ordered_indices:
+            print(f'  score={library_scores[index]:.3f}  {library_documents[index]}')
+        assert ordered_indices[0] == 0
     except ImportError:
-        lines = [
-            '[rank_bm25 not installed — pattern]:',
-            '  pip install rank-bm25',
-            '  from rank_bm25 import BM25Okapi',
-            '  tokenised = [doc.lower().split() for doc in corpus]',
-            '  bm25 = BM25Okapi(tokenised, k1=1.5, b=0.75)',
-            '  scores = bm25.get_scores(query_tokens)',
-        ]
-        print('\n'.join(lines))
+        print('rank_bm25 is optional and not installed in this kernel.')
+        print('Install requirements-nlp-rag.txt, restart the kernel, and rerun this cell.')
     """),
 
     md(r"""
-    ## 9 · Realistic Business Case Study — E-commerce Product Search
+    ## 9 · Realistic Case Study — Curriculum Assistant
 
-    **Scenario.** An e-commerce retailer has 2M product listings. Customers search
-    with a mix of semantic intent ("lightweight running shoe for marathons") and
-    exact model queries ("Nike Air Max 90 Infrared").
+    **Teaching scenario, not a production benchmark.** The local curriculum assistant
+    receives direct, paraphrased, multi-concept, and unanswerable questions. Its
+    structure-aware chunks retain document and section provenance.
 
-    **Problem.** Pure dense retrieval: misses exact model name queries (the embedding
-    distance between "Air Max 90" and "Air Max 270" is small). Pure BM25: fails on
-    semantic queries like "comfy sneakers for commuting" when the documents say
-    "cushioned walking footwear for urban environments".
+    **Measured workflow:**
 
-    **Solution.** Hybrid search with BM25 + dense + RRF:
-    - BM25 index: 2M products, k1=1.5, b=0.75. Rebuilt nightly.
-    - Dense index: 2M products, HNSW (Lesson RAG-01), text-embedding-3-small.
-    - RRF fusion (k=60) at query time.
-    - Top-100 candidates from each system → RRF → top-20 → reranker (Lesson RAG-07).
+    1. BM25 and dense LSA each retrieve 15 candidates for a final `top_k` of 5.
+    2. RRF or alpha fusion combines the candidate union by stable chunk ID.
+    3. If neither branch has meaningful evidence, the system abstains.
+    4. Recall, MRR, nDCG, abstention, latency, slices, and component rows are saved.
 
-    **Results (A/B test):**
-    - BM25 only: Recall@10 = 0.71, conversion rate 3.1%
-    - Dense only: Recall@10 = 0.76, conversion rate 3.4%
-    - Hybrid RRF: Recall@10 = 0.89, conversion rate 4.1% (+32% lift)
+    **Observed local result:** all methods reach Recall@5 of 0.875 and abstain on both
+    unanswerable queries. BM25 has the strongest ranking metrics among the simplest
+    options. On current evidence, keep BM25 and expand the labelled set with exact-ID
+    and mixed-intent slices before paying for a second index. This result does not
+    establish neural-embedding quality, distributed throughput, business lift, or
+    safety for another corpus.
     """),
 
     md(r"""
-    ## 10 · Production Considerations
+    ## 10 · Production and Safety Considerations
 
-    - **BM25 refit cadence.** IDF values change as the corpus grows. Refit BM25 every
-      24 hours on the full corpus or incrementally update document frequencies for new
-      docs. Stale IDF means newly added rare terms get incorrect (too high) IDF.
-    - **Tokenisation alignment.** BM25 and the dense retriever must tokenise queries
-      identically. Mismatched lowercasing, stemming, or stop-word removal breaks
-      recall on exact-match queries.
-    - **RRF k parameter.** Default k=60 is robust. For high-precision retrieval
-      (legal, medical), try k=10 to weight rank-1 documents more heavily. For
-      low-precision discovery tasks, k=100 gives more uniform weighting.
-    - **Corpus-level vs. collection-level BM25.** In a multi-tenant system, BM25
-      should be fit per tenant (IDF reflects their document distribution). Shared
-      IDF across tenants leaks cross-tenant corpus statistics.
-    - **Language-specific tokenisation.** For CJK (Chinese, Japanese, Korean), BM25
-      requires character-level or jieba/MeCab tokenisation; whitespace splitting fails.
-    - **Hybrid index serving.** Elasticsearch (8.x+) supports native hybrid search
-      (BM25 + kNN vector) in a single query. Qdrant and Weaviate have sparse+dense
-      hybrid natively. Pinecone requires client-side fusion.
-    - **Latency.** BM25 search on 10M docs: ~5ms. Dense ANN (HNSW): ~2ms. RRF fusion
-      (client-side, 200 candidates): <1ms. Total latency budget: ~10ms.
+    - **Branch-specific preprocessing.** BM25 tokenization must match its sparse index;
+      the dense branch must use the tokenizer expected by its encoder. The branches do
+      not need identical tokenization.
+    - **Policy before ranking.** Authorization, tenant, freshness, and unsafe-content
+      constraints must restrict both branches before fusion. Post-filtering can expose
+      forbidden candidates and reduce the final result count.
+    - **Stable identity and provenance.** Fuse by immutable chunk ID, retain document,
+      source, version, and branch scores, and define deterministic tie-breaking.
+    - **Candidate depth.** Retrieve more than final `top_k`; measure recall and latency
+      as candidate depth changes.
+    - **Abstention.** RRF always ranks supplied candidates. Decide whether either branch
+      supplied meaningful evidence before returning them.
+    - **Concurrent latency.** Sparse and dense branches usually run concurrently. A
+      useful first model is `max(branch latency) + fusion + orchestration`, followed by
+      measured end-to-end percentiles. Component p99 values cannot be blindly added.
+    - **Index lifecycle.** Update document frequencies with corpus changes, version both
+      indexes together, and evaluate before and after migrations.
+    - **Monitoring.** Track query slices, zero-result rate, candidate overlap, policy
+      filtering, latency, and retrieval quality when delayed labels arrive.
     """),
 
     md(r"""
     ## 11 · Tradeoff Analysis
 
-    **Retrieval type comparison:**
-
-    | Method | Exact match | Semantic match | Latency | Memory | Tuning needed |
-    |---|---|---|---|---|---|
-    | BM25 only | Excellent | Poor | Very fast | Low | k1, b |
-    | Dense only | Poor | Excellent | Fast (ANN) | High | None (pretrained) |
-    | Hybrid RRF | Good | Good | Slightly slower | High | k (default ok) |
-    | Hybrid alpha | Excellent (at right α) | Excellent (at right α) | Slightly slower | High | α per domain |
-    | SPLADE (learned sparse) | Excellent | Good | Medium | Medium | Fine-tuning |
-
-    **Fusion strategy comparison:**
-
-    | Strategy | Score-scale sensitive | Requires tuning | Handles missing results | Recommended for |
+    | Method | Main purpose | Strengths | Weaknesses | Use when |
     |---|---|---|---|---|
-    | RRF | No (rank-based) | No (k=60 default) | Yes (rank=N+1) | Default — no labelled data |
-    | Alpha-weighted | Yes (need normalisation) | Yes (α per domain) | Needs fill value | When labelled dev set available |
-    | Linear combination | Yes | Yes (weights) | Needs fill value | Rarely: use alpha-weighted instead |
-    | Max score | No | No | Yes | Aggressive recall: take the best of either |
+    | BM25 | Exact lexical ranking | Transparent, inexpensive, identifier-friendly | Vocabulary mismatch | Exact language dominates and it wins measured slices |
+    | Dense | Semantic ranking | Paraphrase and conceptual similarity | Model/index cost; can blur identifiers | Semantic slices justify it |
+    | RRF | Rank-based candidate fusion | No raw-score calibration; simple candidate union | Has `k`; discards score magnitude | Labels are limited or score scales differ |
+    | Alpha fusion | Weighted normalized scores | Can favor a known branch; uses score magnitude | Needs normalization and labelled tuning | Development data supports a stable alpha |
+    | Reranker | Reorder retrieved candidates | Rich query-document interaction | Slower; cannot recover missing evidence | After EVAL-03 confirms candidate recall |
+
+    **Use hybrid when:** query slices need complementary signals, both branches add
+    relevant candidates, and measured gains justify cost.
+
+    **Avoid hybrid when:** one branch already meets the target, both branches fail on
+    the same corpus gap, policy parity cannot be guaranteed, or the latency/cost budget
+    is more valuable than the measured gain.
     """),
 
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## 12 · Readiness and Interview Preparation
 
-    **Common questions**
-    - *"Why not just use dense retrieval for everything?"* → Dense models fail on
-      exact-match queries: rare product codes, serial numbers, proper nouns not seen
-      during training. BEIR benchmark shows BM25 still wins on 6/18 datasets in 2021.
-      Hybrid covers both failure modes.
-    - *"What is RRF and why is it better than just averaging scores?"* → RRF is
-      rank-based fusion: score = $\sum_r 1/(k + \text{rank}_r)$. It's scale-agnostic —
-      BM25 scores [0,20] and cosine scores [-1,1] cannot be directly averaged without
-      normalisation. RRF avoids this by only using rank order, and the constant k=60
-      prevents a single rank-1 outlier from dominating.
+    A strong answer to “Should we replace BM25 with vectors?” is:
 
-    **Deep-dive questions**
-    - *"Explain BM25's k1 and b parameters and their effect."* → k1 controls TF
-      saturation: at k1=0, it's binary (present/absent); at k1=2, more TF = more
-      score (up to a cap). b controls length normalisation: b=0 = no normalisation;
-      b=1 = fully normalise by document length relative to corpus average. Tuning:
-      longer documents → lower b; diverse length corpus → higher b.
-    - *"How would you tune the hybrid fusion for a new domain?"* → Collect 50–200
-      representative queries with relevance labels. Grid-search alpha in [0,1] and
-      k in [20, 40, 60, 100] to maximise Recall@10 or MRR@10. Alternatively, use
-      RRF with default k=60 as a strong no-tune baseline.
+    1. preserve BM25 as a baseline;
+    2. label representative exact, paraphrase, mixed, and unanswerable queries;
+    3. compare base retrievers and fusion under identical evaluation conditions;
+    4. inspect per-query and slice failures, not only one average;
+    5. deploy the simplest method that meets retrieval, policy, latency, and cost goals.
 
-    **Whiteboard question**
-    - "Design a product search system for 10M SKUs that handles both 'Nike Air Max 90'
-      and 'lightweight running shoe' queries. Specify: retrieval system, fusion method,
-      parameters, and how you'd measure success."
-
-    **Common mistakes:** choosing alpha=0.5 without tuning (wrong for most domains);
-    not normalising scores before alpha fusion; forgetting to de-duplicate results;
-    not checking tokenisation alignment between BM25 and dense retriever.
+    You are ready to continue when you can explain why raw BM25 and cosine scores
+    should not be added, calculate RRF manually, trace one fused result back to both
+    candidate lists, and justify a non-hybrid choice when evidence supports it.
     """),
 
     md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    ## 13 · Teach-Back — Five Checks
 
-    1. **BM25 vs TF-IDF.** Name the two key innovations BM25 adds over TF-IDF.
-       Explain TF saturation with a concrete example.
-    2. **IDF formula.** Write BM25 IDF from memory. What does it measure? Why +0.5?
-    3. **RRF formula.** Write the RRF score formula. What does the constant k do?
-       What happens if k is very small?
-    4. **Scale-agnostic.** Explain why RRF is preferred over alpha-weighted when you
-       have no labelled data.
-    5. **Exact-match failure.** Give a concrete example of a query where dense
-       retrieval fails but BM25 succeeds. Explain why.
-    6. **b parameter.** A corpus of legal documents has very variable lengths (50 to
-       50,000 words). Should you set b higher or lower than 0.75? Why?
-    7. **Alpha tuning.** How would you find the optimal alpha for a new domain?
-       What metric would you optimise?
-    8. **Production latency.** Your hybrid system has BM25 (5ms), dense ANN (3ms),
-       RRF fusion (1ms). What is the total p99 latency? How can you reduce it?
+    1. Why can BM25 retrieve an identifier that a dense encoder blurs?
+    2. What contribution does a document receive from an RRF list in which it is absent?
+    3. Why must candidate depth be larger than the final `top_k`?
+    4. Why do policy filters apply before both branch rankings?
+    5. Which project evidence would make you keep only one retriever?
+
+    **Answer key:** exact token/IDF signal; zero contribution; fusion cannot recover a
+    candidate neither branch supplied; forbidden evidence must never enter ranking;
+    one branch meets targets while fusion adds no reliable quality gain worth its cost.
     """),
 
     md(r"""
-    ## 14 · Exercises
+    ## 14 · Exercises, Solutions, and Mini Project
 
-    **Beginner (conceptual)**
-    1. Show that BM25 degenerates to binary term matching when $k_1 \to 0$. What
-       happens to the TF saturation formula as $k_1 \to 0$?
-    2. Two documents contain the query term 5 times each. Document A has 20 tokens;
-       document B has 100 tokens. With $k_1=1.5$, $b=0.75$, $\text{avgdl}=50$,
-       compute the BM25 TF component for each. Which scores higher and why?
+    ### Beginner exercise 1 — manual RRF · 10 minutes
 
-    **Beginner → Intermediate (coding)**
-    3. Implement **BM25+** (a variant of BM25 that avoids giving zero scores to
-       documents that don't contain all query terms). The formula adds a small floor
-       $\delta$ to the IDF. Evaluate its impact on recall@5 for queries where not all
-       terms appear in any single document.
-    4. Implement **query expansion** for BM25: before scoring, add synonyms for each
-       query term from a small pre-defined dictionary (e.g. shoe→sneaker→footwear).
-       Measure Recall@3 improvement on the toy corpus for the "comfortable long runs" query.
+    Document A is rank 1 in BM25 and absent from dense. Document B is rank 3 in BM25
+    and rank 2 in dense. Use $k=60$. Which ranks first?
 
-    **Intermediate (analysis)**
-    5. **RRF k ablation**: compute Recall@3 for both queries across k values
-       [10, 20, 40, 60, 100, 200]. Plot the results. Is RRF sensitive to k on this
-       toy corpus?
-    6. **Corpus contamination**: add 50 duplicate documents (copies of doc 0) to the
-       BM25 corpus. How does this affect IDF for "nike", "air", "max"? What happens
-       to Recall@3 for the exact query? What does this tell you about corpus quality?
+    **Expected result:** A = $1/61\approx0.01639$; B = $1/63+1/62\approx0.03200$;
+    B ranks first. Common mistake: inventing a dense rank for A.
 
-    **Senior (design)**
-    7. *System design:* a news search system has 50M articles across 20 languages.
-       Users search in any language. Design a multilingual hybrid search system:
-       how do you handle BM25 for each language (separate index per language?), how
-       do you handle cross-lingual dense retrieval (multilingual encoder?), and how
-       do you fuse results from different language indexes?
-    8. *Interview:* "Our product search uses pure BM25 and our data science team
-       wants to add dense retrieval. They're proposing to replace BM25 entirely.
-       What is your recommendation and why?" (Expected: recommend hybrid, not
-       replacement; explain exact-match failure of dense; propose RRF; describe A/B
-       test design.)
+    ### Beginner exercise 2 — candidate union · 10 minutes
+
+    Sparse IDs are `[a, b, c]`; dense IDs are `[b, d, a]`. Write the candidate set
+    and explain why fusion must use IDs rather than text equality.
+
+    **Expected result:** `{a,b,c,d}`. IDs preserve provenance and avoid merging two
+    distinct chunks with identical text.
+
+    ### Intermediate exercise 1 — guided alpha calculation · 20 minutes
+
+    Add a function for alpha fusion to the manual string-ID example. **Hint:** normalize
+    each branch independently, then score every ID in the union with missing branch
+    score zero. Test alpha 0, 0.5, and 1.
+
+    **Self-check:** alpha 0 follows normalized BM25; alpha 1 follows normalized dense;
+    every output ID is unique. Common mistakes: normalizing after combining scores and
+    silently dropping candidates missing from one branch.
+
+    ### Intermediate exercise 2 — independent failure analysis · 30 minutes
+
+    Run `make hybrid-rag-evaluate`. Select one query whose result differs across
+    methods. Record branch candidates, relevant IDs, rank changes, and the smallest
+    justified change.
+
+    **Rubric:** 2 points each for evidence trace, correct metric interpretation,
+    controlled recommendation, and explicit limitation. Pass: 6/8.
+
+    ### Challenge — policy-safe hybrid retrieval · 45–60 minutes
+
+    Extend a tiny corpus with public, restricted, stale, and unsafe chunks. Apply one
+    shared policy predicate before building or querying both branch candidate sets.
+    Assert that public search never returns forbidden IDs and authorized search may
+    return the restricted current safe ID.
+
+    **Rubric:** 2 points each for pre-fusion filtering, stable-ID deduplication,
+    assertions, provenance, and explanation of why post-filtering is insufficient.
+    Pass: 8/10.
+
+    ### Mini project — measured hybrid upgrade
+
+    - **Goal:** decide whether hybrid retrieval should replace the best single branch.
+    - **Dataset columns:** query ID, query text, slice, relevant section IDs,
+      answerable flag; candidate rows include stable section IDs and branch rankings.
+    - **Workflow:** add at least four labelled queries covering exact identifier,
+      paraphrase, mixed intent, and unanswerable → predict outcomes → evaluate BM25,
+      dense, RRF, and alpha → inspect slices → recommend one deployment choice.
+    - **Expected output:** a versioned JSON report and a short decision note citing
+      Recall@k, MRR, nDCG, abstention, candidate depth, latency limitations, and at
+      least two query-level examples.
+    - **Evaluation criteria:** reproducible hashes; no invented labels or claims;
+      policy-safe candidates; correct metrics; recommendation matches evidence.
     """),
 
     md(r"""
     ---
     ### Summary
-    Hybrid search combines **BM25** (exact token matching, IDF-weighted) with
-    **dense vector search** (semantic similarity) to cover both failure modes.
-    **Reciprocal Rank Fusion (RRF)** is the production default for fusion — it
-    requires no tuning, is scale-agnostic, and is robust across domains.
-    **Alpha-weighted fusion** is more precise when labelled data is available.
-    Every production RAG system should be hybrid: dense alone fails on product
-    codes and proper nouns; BM25 alone fails on semantic intent.
 
-    **Related lesson:** `RAG-07 · Reranking` — the two-stage architecture where fast hybrid
-    retrieval (Recall@100) is followed by a slow but accurate cross-encoder reranker
-    (Precision@10). Why cross-encoders are more accurate and how to build the pipeline.
+    Hybrid search combines complementary candidate lists; it does not guarantee a
+    better system. BM25 preserves exact lexical evidence, dense retrieval can recover
+    semantic matches, RRF combines ranks without score calibration, and alpha fusion
+    uses normalized scores with a tuned weight. Measure all methods on identical labels,
+    preserve policy and provenance in both branches, and keep the simplest winner.
+
+    **Memory aid:** *Retrieve with complementary signals, fuse by stable ID, and keep
+    hybrid only when labelled evidence earns the complexity.*
+
+    **Next after mastery:** EVAL-03 evaluates the full RAG system. RAG-07 reranking
+    follows only after candidate retrieval has been evaluated.
     """),
 ]
+
 
 build("06_rag/06_hybrid_search.ipynb", cells)

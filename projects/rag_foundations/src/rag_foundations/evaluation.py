@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.preprocessing import Normalizer
 
 
@@ -92,8 +92,79 @@ class RetrievalIndex:
 
     def search(self, query: str, k: int = 5) -> list[tuple[Chunk, float]]:
         scores = self.scores(query)
-        order = np.argsort(-scores, kind="stable")[:k]
+        order = np.argsort(-scores, kind="stable")[: min(k, len(scores))]
         return [(self.chunks[index], float(scores[index])) for index in order]
+
+
+class BM25Index:
+    """Small deterministic BM25 index used by the hybrid-search lesson."""
+
+    TOKEN_PATTERN = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*")
+
+    def __init__(self, chunks: list[Chunk], k1: float = 1.5, b: float = 0.75):
+        if not chunks:
+            raise ValueError("BM25Index requires at least one chunk")
+        if k1 < 0:
+            raise ValueError("k1 must be non-negative")
+        if not 0 <= b <= 1:
+            raise ValueError("b must be between 0 and 1")
+        self.chunks = chunks
+        self.k1 = k1
+        self.b = b
+        self.tokens = [self.tokenize(f"{chunk.heading} {chunk.text}") for chunk in chunks]
+        self.term_frequencies = [self._term_frequency(tokens) for tokens in self.tokens]
+        self.document_frequency: dict[str, int] = {}
+        for tokens in self.tokens:
+            for term in set(tokens):
+                self.document_frequency[term] = self.document_frequency.get(term, 0) + 1
+        self.average_length = float(np.mean([len(tokens) for tokens in self.tokens]))
+
+    @classmethod
+    def tokenize(cls, text: str) -> list[str]:
+        return [
+            token for token in cls.TOKEN_PATTERN.findall(text.lower())
+            if token not in ENGLISH_STOP_WORDS
+        ]
+
+    @staticmethod
+    def _term_frequency(tokens: list[str]) -> dict[str, int]:
+        frequencies: dict[str, int] = {}
+        for token in tokens:
+            frequencies[token] = frequencies.get(token, 0) + 1
+        return frequencies
+
+    def inverse_document_frequency(self, term: str) -> float:
+        document_count = len(self.chunks)
+        matching_documents = self.document_frequency.get(term, 0)
+        return math.log(
+            (document_count - matching_documents + 0.5) / (matching_documents + 0.5) + 1
+        )
+
+    def scores(self, query: str) -> np.ndarray:
+        query_terms = self.tokenize(query)
+        scores = np.zeros(len(self.chunks), dtype=float)
+        for index, frequencies in enumerate(self.term_frequencies):
+            document_length = len(self.tokens[index])
+            length_factor = 1 - self.b + self.b * document_length / self.average_length
+            for term in query_terms:
+                term_frequency = frequencies.get(term, 0)
+                if term_frequency == 0:
+                    continue
+                saturated_frequency = (
+                    term_frequency * (self.k1 + 1)
+                    / (term_frequency + self.k1 * length_factor)
+                )
+                scores[index] += self.inverse_document_frequency(term) * saturated_frequency
+        return scores
+
+    def search(self, query: str, k: int = 5) -> list[tuple[Chunk, float]]:
+        scores = self.scores(query)
+        order = np.argsort(-scores, kind="stable")
+        return [
+            (self.chunks[index], float(scores[index]))
+            for index in order
+            if scores[index] > 0
+        ][: min(k, len(scores))]
 
 
 def reciprocal_rank_fusion(rankings: list[list[tuple[Chunk, float]]], k: int = 60) -> list[tuple[Chunk, float]]:

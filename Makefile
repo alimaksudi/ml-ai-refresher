@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -47,6 +47,9 @@ grounded-rag-evaluate:
 vector-store-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.vector_store_cli --data-dir projects/rag_foundations/data --index-dir projects/rag_foundations/.local/vector_index --output projects/rag_foundations/artifacts/vector_store_evaluation.json
 
+hybrid-rag-evaluate:
+	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.hybrid_cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/hybrid_evaluation.json
+
 rag-foundations-test:
 	PYTHONPATH=projects/rag_foundations/src python3 -m pytest projects/rag_foundations/tests -q
 
@@ -58,6 +61,9 @@ grounded-rag-checkpoint: validate rag-foundations-test grounded-rag-evaluate
 
 vector-store-checkpoint: validate rag-foundations-test vector-store-evaluate
 	@echo "Automated vector-store gate passed. Complete the vector-store extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
+
+hybrid-rag-checkpoint: validate rag-foundations-test hybrid-rag-evaluate
+	@echo "Automated hybrid-search gate passed. Complete the hybrid-search extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
 
 capstone-serve:
 	PYTHONPATH=projects/wine_classifier/src uvicorn wine_classifier.app:app --host 127.0.0.1 --port 8000

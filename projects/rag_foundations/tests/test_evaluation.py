@@ -5,6 +5,7 @@ from pathlib import Path
 
 from rag_foundations.evaluation import build_chunks, evaluate, load_json
 from rag_foundations.grounded import ABSTENTION, evaluate_answers, evaluate_security
+from rag_foundations.hybrid import evaluate_hybrid, minmax_score_fusion
 from rag_foundations.vector_store import (
     QdrantVectorStore,
     VectorRecord,
@@ -56,6 +57,43 @@ def test_report_contains_failure_slices_and_component_rows():
         assert {"direct", "paraphrase", "multi_concept"}.issubset(experiment["slices"])
         assert len(experiment["rows"]) == 18
         assert experiment["mean_latency_ms"] >= 0
+
+
+def test_hybrid_report_compares_branches_on_the_same_labels(tmp_path):
+    first = evaluate_hybrid(DATA, tmp_path / "hybrid-first.json")
+    second = evaluate_hybrid(DATA, tmp_path / "hybrid-second.json")
+    assert first["candidate_k"] == first["top_k"] * 3
+    assert first["corpus_sha256"] == second["corpus_sha256"]
+    assert first["queries_sha256"] == second["queries_sha256"]
+    expected_modes = {
+        "bm25", "dense_lsa", "hybrid_rrf",
+        "hybrid_alpha_0.00", "hybrid_alpha_0.25", "hybrid_alpha_0.50",
+        "hybrid_alpha_0.75", "hybrid_alpha_1.00",
+    }
+    assert set(first["experiments"]) == expected_modes
+    for mode in expected_modes:
+        experiment = first["experiments"][mode]
+        assert len(experiment["rows"]) == 18
+        assert {"direct", "paraphrase", "multi_concept"}.issubset(experiment["slices"])
+        for metric in ("recall_at_k", "mrr", "ndcg_at_k"):
+            assert experiment[metric] == second["experiments"][mode][metric]
+            assert 0 <= experiment[metric] <= 1
+        for row in experiment["rows"]:
+            assert len(row["retrieved_sections"]) == len(set(row["retrieved_sections"]))
+            assert isinstance(row["sparse_candidate_sections"], list)
+            assert isinstance(row["dense_candidate_sections"], list)
+            if not row["sparse_candidate_sections"] and not row["dense_candidate_sections"]:
+                assert row["abstained"]
+
+
+def test_alpha_fusion_uses_candidate_union_and_stable_ids():
+    chunks = build_chunks(load_json(DATA / "corpus.json"), "structure")
+    sparse_results = [(chunks[0], 8.0), (chunks[1], 2.0)]
+    dense_results = [(chunks[1], 0.9), (chunks[2], 0.8)]
+    fused = minmax_score_fusion(sparse_results, dense_results, alpha=0.5)
+    assert {chunk.id for chunk, _ in fused} == {chunks[0].id, chunks[1].id, chunks[2].id}
+    assert fused[0][0].id == chunks[0].id
+    assert len({chunk.id for chunk, _ in fused}) == len(fused)
 
 
 def test_gold_answers_cover_queries_and_grounded_report_is_component_level(tmp_path):
