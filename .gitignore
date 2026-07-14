@@ -1,15 +1,76 @@
+# Operating-system and editor files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
+.codex/
+.agents/
+*.swp
+*.swo
+*~
+
+# Python caches and test output
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+
+# Local Python environments and secrets
 .venv/
 venv/
 env/
+.env
+.env.*
+!.env.example
+
+# Jupyter runtime files and locally executed copies
 .ipynb_checkpoints/
+*.executed.ipynb
+.ipython/
+.jupyter/
+
+# Local-only documentation and scratch utilities
+docs/_drafts/
+docs/_private/
+docs/_build/
+docs/drafts/
+docs/private/
+docs/*.draft.md
+docs/*.local.md
+tools/_scratch/
+tools/_tmp/
+tools/scratch/
+tools/tmp/
+tools/*.local.py
+
+# Experiment tracking, checkpoints, and temporary project output
+.local/
+.cache/
+mlruns/
+wandb/
+runs/
+lightning_logs/
+checkpoints/
+projects/*/artifacts/local/
+projects/*/artifacts/tmp/
+
+# Logs, profiles, and temporary files
+*.log
+*.prof
+*.tmp
+*.temp
+*.bak
+
+# Python packaging output
 dist/
 build/
 *.egg-info/
