@@ -1,5 +1,10 @@
 # Curriculum Sequence Review: Zero to Deep ML Mastery
 
+> **Historical audit:** this document records the analysis that produced the current
+> route. Some tables retain the lesson numbers that existed when the audit was written.
+> Use [`LEGACY_ID_MAP.md`](LEGACY_ID_MAP.md) to translate them. All active dependencies,
+> paths, route cards, and new content use the semantic IDs in `CURRICULUM_PATH.json`.
+
 ## Executive verdict
 
 The curriculum has strong breadth and a mostly recognizable progression, but it is not yet a clean zero-to-hero path for **deep ML mastery**. The main spine—foundations → classical ML → deep learning → NLP/LLMs → RAG → production—is sound. The largest weakness is that evaluation, experimental method, data workflow, and project practice are treated as later topics instead of habits introduced before the first model and reinforced throughout.
@@ -248,10 +253,10 @@ Monitoring and safe deployment
 
 ## Critical sequence problems
 
-1. **Gradient descent precedes a concrete supervised loss.** Notebook 03 can teach optimization intuition, but full parameter-gradient mechanics should follow linear regression and squared loss.
+1. **Gradient descent precedes a concrete supervised loss.** Lesson FND-04 can teach optimization intuition, but full parameter-gradient mechanics should follow linear regression and squared loss.
 2. **Data workflow is too late within foundations.** EDA, target definition, data quality, and splitting should frame every model experiment.
 3. **Metrics and validation arrive after five models.** Students can fit models before they can make a valid claim about them. Introduce holdout evaluation with the first model, classification metrics after logistic regression, and CV before tuning ensembles.
-4. **Experiment tracking is Notebook 44.** It should become a habit immediately after validation, not a late production tool.
+4. **Experiment tracking is Lesson PROD-04.** It should become a habit immediately after validation, not a late production tool.
 5. **NLP foundations follow transformers.** TF-IDF, tokenization, sparse baselines, and word embeddings should precede neural sequence models.
 6. **Chunking follows vector DB, hybrid search, and reranking.** The indexed unit must be designed before ingestion and ranking.
 7. **Evaluation is isolated in Phase 7.** LLM, RAG, and agent evaluation must sit beside their systems, with Phase 7 reserved for advanced evaluation design.

@@ -1,6 +1,6 @@
 # Deep Learning Mastery Checkpoint
 
-This checkpoint tests the Phase 3 learning contract on the bundled 8×8 handwritten
+This checkpoint tests the Section 04 learning contract on the bundled 8×8 handwritten
 digits dataset. It compares a naive majority classifier, scaled logistic regression,
 a PyTorch MLP, and a small CNN. Both neural checkpoints are selected using validation
 log loss, and the test set is touched only for the final comparison.

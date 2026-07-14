@@ -5,7 +5,7 @@ This curriculum has two audiences:
 1. A learner starting with no mathematical background.
 2. An experienced engineer using later phases as a refresher.
 
-The onboarding phase must make the first audience ready for Phase 0. Later
+The prerequisite section must make the first audience ready for Section 01. Later
 phases may assume earlier notebooks, but must link to the prerequisite concept
 when they introduce notation that depends on it.
 
@@ -116,5 +116,5 @@ The repository must be able to verify that:
 - code cells compile;
 - committed notebooks contain no saved execution output;
 - foundational formulas include symbol explanations;
-- the prerequisite and Phase 0 notebooks execute top-to-bottom;
+- the prerequisite and Section 01 notebooks execute top-to-bottom;
 - the complete notebook suite can be executed on demand.

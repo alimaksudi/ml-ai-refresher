@@ -1,6 +1,6 @@
 # Deployable Wine Classifier Capstone
 
-This project is the concrete vertical slice behind Notebook 51. It uses a real
+This project is the concrete vertical slice behind CAP-01. It uses a real
 dataset bundled with scikit-learn and keeps preprocessing, training, evaluation,
 artifact metadata, serving, monitoring, and tests in one reviewable path.
 

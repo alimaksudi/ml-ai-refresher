@@ -3,17 +3,17 @@ numpy>=1.24
 matplotlib>=3.7
 nbformat>=5.7
 
-# Classical ML (Phase 1-2) — production-library sections
+# Classical ML and ML engineering (Sections 02-03)
 scikit-learn>=1.3
 scipy>=1.10
 pandas>=2.0
 xgboost>=2.0
 shap>=0.44
 
-# Deep learning (Phase 3) — production-library sections
+# Deep learning (Section 04)
 torch>=2.1
 
-# NLP / LLM / RAG (Phase 4-6) — used only in the relevant notebooks
+# NLP / LLM / RAG (Sections 05-06) — used only in the relevant notebooks
 # Install the relevant optional profile instead of expanding the core environment:
 # - requirements-nlp-rag.txt
 # - requirements-agents.txt

@@ -2,7 +2,8 @@
 
 WHY THIS EXISTS
 ---------------
-The *source of truth* for this curriculum lives in ``tools/builders/*.py`` as
+The *source of truth* for this curriculum lives in section directories under
+``tools/builders/`` as
 ordinary Python files. Each builder describes a notebook as a list of cells,
 using clean triple-quoted strings — no hand-written ``.ipynb`` JSON, no manual
 escaping of quotes/newlines, and trivially diff-able in code review.
@@ -14,7 +15,7 @@ USAGE (inside a builder)
 ------------------------
     from nbbuild import md, code, build
 
-    build("phase0_foundations/01_linear_algebra_essentials.ipynb", [
+    build("01_ml_foundations/01_linear_algebra_essentials.ipynb", [
         md('''# Title ...'''),
         code('''import numpy as np ...'''),
     ])
@@ -85,7 +86,8 @@ def _learner_navigation_cell(rel_path: str):
     > tradeoffs, and interview material may be revisited after the core pass.
     > Do not continue merely because every cell ran. Continue when you can complete
     > the independent exercise and teach-back without notes. The canonical route in
-    > `docs/CURRICULUM_PATH.json` overrides historical notebook numbers.
+    > `docs/CURRICULUM_PATH.json` is authoritative when section-local file order and
+    > prerequisite order differ.
     """)
 
 
@@ -267,7 +269,7 @@ def _notation_support_cell():
     - $\log$ reverses an exponential and turns products into sums.
 
     Read a formula one operator at a time, write object shapes beside vectors and
-    matrices, and substitute a tiny numeric example. Review Notebooks 00A–00D for
+    matrices, and substitute a tiny numeric example. Review PRE-01 through PRE-04 for
     worked explanations of these symbols.
     </details>
     """)
@@ -283,7 +285,7 @@ def build(rel_path: str, cells, kernel: str = "python3") -> str:
         1,
     )
     cells.insert(objective_index + 1, _student_lesson_companion_cell(title))
-    if rel_path.startswith(tuple(f"phase{i}" for i in range(1, 10))):
+    if not rel_path.startswith(("00_prerequisites/", "01_ml_foundations/")):
         insert_at = 1
         for index, cell in enumerate(cells):
             if cell.cell_type == "markdown" and "## 1" in cell.source:

@@ -1,7 +1,7 @@
 """Regenerate every notebook from its builder.
 
     python3 tools/build_all.py            # build all
-    python3 tools/build_all.py 05 18      # build only builders matching these tokens
+    python3 tools/build_all.py RAG-05     # build one lesson by semantic ID
 
 Each file in ``tools/builders/`` is a self-contained script that, when run,
 writes one ``.ipynb`` into ``notebooks/``. We run them in isolated subprocesses
@@ -9,39 +9,53 @@ so a failure in one builder never half-writes another.
 """
 from __future__ import annotations
 
-import glob
+import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-def _builder_order(path):
-    name = os.path.basename(path)
-    return (0 if name.startswith("phase_minus1_") else 1, name)
+ROOT = Path(HERE).parent
+CURRICULUM_PATH = ROOT / "docs" / "CURRICULUM_PATH.json"
 
 
-BUILDERS = sorted(glob.glob(os.path.join(HERE, "builders", "*.py")), key=_builder_order)
+def curriculum_builders() -> list[tuple[str, Path, str]]:
+    modules = json.loads(CURRICULUM_PATH.read_text(encoding="utf-8"))["modules"]
+    return [
+        (
+            module["id"],
+            Path(HERE) / "builders" / Path(module["path"]).with_suffix(".py"),
+            module["path"],
+        )
+        for module in modules
+    ]
+
+
+BUILDERS = curriculum_builders()
 
 
 def main(argv):
     filters = [a for a in argv if not a.startswith("-")]
-    selected = [
-        b
-        for b in BUILDERS
-        if os.path.basename(b) != "__init__.py"
-        and (not filters or any(tok in os.path.basename(b) for tok in filters))
-    ]
+    selected = []
+    for module_id, builder, notebook_path in BUILDERS:
+        searchable = f"{module_id} {builder.name} {notebook_path}".lower()
+        if not filters or any(token.lower() in searchable for token in filters):
+            selected.append((module_id, builder))
     if not selected:
         print("no builders matched", filters)
         return 1
 
     failures = []
-    for b in selected:
-        rel = os.path.relpath(b, os.path.dirname(HERE))
-        print(f"\n>>> building {rel}")
-        res = subprocess.run([sys.executable, b], cwd=HERE)
+    for module_id, builder in selected:
+        rel = builder.relative_to(ROOT)
+        if not builder.exists():
+            failures.append(f"{module_id}: missing {rel}")
+            continue
+        print(f"\n>>> building {module_id} · {rel}")
+        res = subprocess.run([sys.executable, str(builder)], cwd=HERE)
         if res.returncode != 0:
-            failures.append(rel)
+            failures.append(f"{module_id}: {rel}")
 
     print(f"\n{'=' * 60}")
     print(f"built {len(selected) - len(failures)}/{len(selected)} notebooks")

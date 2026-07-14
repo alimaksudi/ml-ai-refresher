@@ -3,7 +3,7 @@
 Fast validation (no kernel execution):
     python3 tools/validate_curriculum.py
 
-Execute prerequisite and Phase 0 notebooks as well:
+Execute prerequisite and Section 01 notebooks as well:
     python3 tools/validate_curriculum.py --execute foundations
 
 Execute the applied capstone notebook:
@@ -27,15 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CURRICULUM_PATH = ROOT / "docs" / "CURRICULUM_PATH.json"
-def curriculum_order(path: Path) -> tuple[int, str]:
-    text = path.as_posix()
-    return (0 if "phase_minus1" in text else 1, text)
+BUILDERS = sorted((ROOT / "tools" / "builders").rglob("*.py"))
+NOTEBOOKS = sorted((ROOT / "notebooks").rglob("*.ipynb"))
 
-
-BUILDERS = sorted((ROOT / "tools" / "builders").glob("*.py"), key=curriculum_order)
-NOTEBOOKS = sorted((ROOT / "notebooks").rglob("*.ipynb"), key=curriculum_order)
-
-FOUNDATION_PREFIXES = ("phase_minus1_onboarding/", "phase0_foundations/")
+FOUNDATION_PREFIXES = ("00_prerequisites/", "01_ml_foundations/")
 FORMULA_CUE = re.compile(
     r"(?i)\b(symbols?|where|means?|represents?|denotes?|read(?:s)? as|in words)\b"
 )
@@ -121,8 +116,8 @@ def validate_notebook(path: Path) -> list[Finding]:
             if cell.get("cell_type") != "markdown":
                 continue
             text = source(cell)
-            check_formula = notebook_rel.startswith("phase_minus1_onboarding/") or (
-                notebook_rel.startswith("phase0_foundations/") and "## 4" in text
+            check_formula = notebook_rel.startswith("00_prerequisites/") or (
+                notebook_rel.startswith("01_ml_foundations/") and "## 4" in text
             )
             if (
                 check_formula
@@ -172,11 +167,19 @@ def validate_curriculum_dependencies() -> list[Finding]:
     seen: set[str] = set()
     notebook_paths = {path.relative_to(ROOT / "notebooks").as_posix() for path in NOTEBOOKS}
     mapped_paths = {module["path"] for module in CURRICULUM_MODULES}
+    builder_paths = {
+        path.relative_to(ROOT / "tools" / "builders").with_suffix(".ipynb").as_posix()
+        for path in BUILDERS
+    }
 
     for missing in sorted(notebook_paths - mapped_paths):
         findings.append(Finding("ERROR", "docs/CURRICULUM_PATH.json", f"unmapped notebook: {missing}"))
     for missing in sorted(mapped_paths - notebook_paths):
         findings.append(Finding("ERROR", "docs/CURRICULUM_PATH.json", f"missing notebook: {missing}"))
+    for missing in sorted(mapped_paths - builder_paths):
+        findings.append(Finding("ERROR", "docs/CURRICULUM_PATH.json", f"missing builder: {missing}"))
+    for extra in sorted(builder_paths - mapped_paths):
+        findings.append(Finding("ERROR", "tools/builders", f"unmapped builder: {extra}"))
 
     for module in CURRICULUM_MODULES:
         module_id = module["id"]
@@ -262,7 +265,7 @@ def execute_notebooks(scope: str) -> list[Finding]:
         selected = [
             path
             for path in NOTEBOOKS
-            if path.relative_to(ROOT / "notebooks").as_posix().startswith("phase10_applied_capstone/")
+            if path.relative_to(ROOT / "notebooks").as_posix().startswith("11_capstone/")
         ]
 
     os.environ.setdefault("MPLBACKEND", "Agg")

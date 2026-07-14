@@ -2,22 +2,22 @@
 
 A 62-notebook curriculum that starts with mathematical and Python prerequisites,
 then teaches Machine Learning and AI from first principles through production
-system design. Later phases remain useful as a refresher for experienced engineers.
+system design. Later sections remain useful as a refresher for experienced engineers.
 
 ## Start here
 
 If mathematical notation, algebra, calculus, probability, Python, or NumPy are
-new, complete the prerequisite phase in order:
+new, complete the prerequisite section in order:
 
-1. `00A · Mathematical Language and Arithmetic`
-2. `00B · Algebra, Functions, and Graphs`
-3. `00D · Python, NumPy, and Jupyter Foundations`
-4. `00C · Calculus and Probability Intuition`
-5. `00E · Practical Python, Pandas, Debugging, and Tests`
+1. `PRE-01 · Mathematical Language and Arithmetic`
+2. `PRE-02 · Algebra, Functions, and Graphs`
+3. `PRE-03 · Python, NumPy, and Jupyter Foundations`
+4. `PRE-04 · Calculus and Probability Intuition`
+5. `PRE-05 · Practical Python, Pandas, Debugging, and Tests`
 
 Each prerequisite notebook includes worked examples, guided practice,
 independent exercises, solutions, and a readiness threshold. Experienced learners
-may use the readiness checks to decide whether to continue directly to Phase 0.
+may use the readiness checks to decide whether to continue to ML foundations.
 
 After working through this you should be able to:
 
@@ -30,26 +30,30 @@ After working through this you should be able to:
 
 ## Canonical learning path
 
-Notebook numbers are stable file identifiers, not the teaching order. The canonical
-order and direct prerequisites live in
+Semantic lesson IDs are stable identifiers. File numbers show local order within a
+section, while the authoritative teaching order and direct prerequisites live in
 [`docs/CURRICULUM_PATH.json`](docs/CURRICULUM_PATH.json) and are embedded into every
 generated notebook. In particular, the core ML spine intentionally teaches:
 
-> data workflow (03A) → linear regression and squared loss (04) → optimization
-> (03) → logistic regression (05) → metrics (09) → validation/leakage (10) →
-> experiment tracking (44) → feature engineering (11) → trees and ensembles (06–08)
+> data workflow (FND-03) → linear regression and squared loss (CML-01) →
+> optimization (FND-04) → logistic regression (CML-02) → metrics (MLE-01) →
+> validation/leakage (MLE-02) → experiment tracking (PROD-04) → feature engineering
+> (MLE-03) → trees and ensembles (CML-03 through CML-05)
 
 The Deep Learning spine is:
 
-> PyTorch foundations (13A) → neural networks from scratch (14) → backpropagation
-> (15) → stable neural training (15A) → CNN (16) and NLP representations (20) →
-> RNN/LSTM (17) → attention (18) → transformers (19)
+> PyTorch foundations (DL-01) → neural networks from scratch (DL-02) →
+> backpropagation (DL-03) → stable neural training (DL-04) → convolutional networks
+> (DL-05) and text representations (NLP-01) → RNN/LSTM (DL-06) → attention (DL-07)
+> → transformers (DL-08)
 
 Run `make validate` to reject unknown, missing, or forward-pointing prerequisites.
 New learners should use the two-pass study process and cumulative gates in
 [`docs/STUDENT_MASTERY_PATH.md`](docs/STUDENT_MASTERY_PATH.md).
-Integration work is defined at phase boundaries in
-[`docs/PHASE_MINI_PROJECTS.md`](docs/PHASE_MINI_PROJECTS.md).
+Integration work is defined at section boundaries in
+[`docs/INTEGRATION_PROJECTS.md`](docs/INTEGRATION_PROJECTS.md).
+Repository names and stable ID rules are defined in
+[`docs/REPOSITORY_NAMING_STANDARD.md`](docs/REPOSITORY_NAMING_STANDARD.md).
 
 ## Teaching method
 
@@ -95,17 +99,17 @@ ml-ai-refresher/
 ├── README.md
 ├── PROGRESS.md              # curriculum checklist (the build tracker)
 ├── requirements.txt
-├── notebooks/               # generated .ipynb files, grouped by phase
-│   ├── phase_minus1_onboarding/
-│   ├── phase0_foundations/
-│   ├── phase1_classical_ml/
+├── notebooks/               # generated .ipynb files, grouped by curriculum section
+│   ├── 00_prerequisites/
+│   ├── 01_ml_foundations/
+│   ├── 02_classical_ml/
 │   └── ...
 ├── projects/
 │   └── wine_classifier/    # real-data training, API, tests, monitoring, Docker
 └── tools/
     ├── nbbuild.py           # md()/code()/build() helpers
     ├── build_all.py         # regenerate all (or some) notebooks
-    └── builders/            # SOURCE OF TRUTH — one Python file per notebook
+    └── builders/            # SOURCE OF TRUTH — mirrors the notebook section tree
 ```
 
 The notebooks are **build artifacts**. To change a notebook, edit its builder
@@ -117,7 +121,7 @@ Python (no fragile JSON) and fully reproducible.
 ```bash
 pip install -r requirements.txt
 python3 tools/build_all.py          # build everything
-python3 tools/build_all.py 01       # build just notebook 01
+python3 tools/build_all.py RAG-05   # build one lesson by semantic ID
 jupyter lab notebooks/              # open and run
 ```
 
@@ -135,7 +139,7 @@ pip install -r requirements-evaluation-production.txt
 ```bash
 make build                 # regenerate all notebooks from builders
 make validate              # source sync, structure, syntax, and clean outputs
-make execute-foundations   # execute prerequisite + Phase 0 notebooks
+make execute-foundations   # execute prerequisite + ML foundation notebooks
 make execute-capstone      # execute the applied capstone notebook
 make execute-all           # execute all 62 notebooks
 make capstone-test          # train and test the deployable vertical slice
@@ -147,9 +151,11 @@ saved outputs so you execute them yourself (that *is* the learning).
 ## Roadmap
 
 See **[PROGRESS.md](PROGRESS.md)** for the full 62-notebook roadmap and live
-build status across the prerequisite phase and Phases 0–10 (Foundations → Classical ML → ML Engineering →
+build status across Sections 00–11 (Prerequisites → Foundations → Classical ML → ML Engineering →
 Deep Learning → NLP/LLMs → RAG → Agents → Evaluation → Production → System
 Design → Applied Capstone). The runnable project is
 documented in [projects/wine_classifier/README.md](projects/wine_classifier/README.md).
+The measured retrieval, grounded-answer, and persistent vector-store projects are
+documented in [projects/rag_foundations/README.md](projects/rag_foundations/README.md).
 Primary papers and implementation references are collected in
 [docs/REFERENCES.md](docs/REFERENCES.md).

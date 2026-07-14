@@ -1,6 +1,6 @@
 # Student Mastery Path and Remediation Guide
 
-This is the learner-facing route. Notebook numbers are stable identifiers; follow
+This is the learner-facing route. Semantic lesson IDs are stable identifiers; follow
 the canonical route card generated near the top of each notebook.
 
 ## How to study one module
@@ -17,7 +17,7 @@ Use two passes rather than attempting every senior detail at once.
 6. Complete the Required Core Mastery Gate.
 7. Continue only at 8/10 with successful teach-back.
 
-### Extension pass — revisit after the phase gate
+### Extension pass — revisit after the section gate
 
 - detailed history;
 - complete derivations beyond the core formula;
@@ -30,7 +30,7 @@ increase the stated workload.
 
 ## Gate A — Mathematical language and coding readiness
 
-After 00A–00E, without notes:
+After PRE-01 through PRE-05, without notes:
 
 - evaluate an expression while respecting operation order;
 - rearrange a one-variable equation;
@@ -41,12 +41,12 @@ After 00A–00E, without notes:
 - load, validate, filter, group, and safely join a DataFrame;
 - use a traceback to locate an error.
 
-If weak in notation or algebra, repeat 00A–00B. If code is the blocker, repeat
-00D–00E using a new five-row dataset.
+If weak in notation or algebra, repeat PRE-01 and PRE-02. If code is the blocker,
+repeat PRE-03 and PRE-05 using a new five-row dataset.
 
 ## Gate B — Mathematical ML readiness
 
-After 01–02:
+After FND-01 and FND-02:
 
 - distinguish scalar, vector, matrix, and their shapes;
 - compute a dot product and explain its meaning;
@@ -58,7 +58,7 @@ meaning, or if conditional probability is confused with intersection.
 
 ## Gate C — First valid ML experiment
 
-After 03A, 04, 03, 05, 09, and 10:
+After FND-03, CML-01, FND-04, CML-02, MLE-01, and MLE-02:
 
 - define prediction unit, target, prediction time, and naive baseline;
 - split before fitting learned transformations;
@@ -68,18 +68,18 @@ After 03A, 04, 03, 05, 09, and 10:
 - choose a metric and threshold from the decision cost;
 - explain why the test set is not a tuning tool.
 
-Remediate data-contract problems in 03A, optimization problems in 04/03, and
-evaluation problems in 09/10. Do not compensate with a more complex model.
+Remediate data-contract problems in FND-03, optimization problems in CML-01/FND-04,
+and evaluation problems in MLE-01/MLE-02. Do not compensate with a more complex model.
 
 ## Gate D — Classical ML mastery
 
 Complete the wine-classifier checkpoint. A passing score requires valid evidence,
 not merely accuracy. Then revisit optional derivations and senior extensions from
-04–13 and complete the unsupervised-learning module.
+CML-01 through MLE-05 and complete MLE-06.
 
 ## Gate E — Deep Learning mastery
 
-Complete 13A, 14, 15, 15A, 16, and the digit checkpoint. You must be able to trace
+Complete DL-01 through DL-05 and the digit checkpoint. You must be able to trace
 tensor shapes, write train/eval loops, gradient-check, diagnose learning curves, and
 justify why a neural model does or does not beat a simpler baseline.
 
@@ -87,12 +87,12 @@ justify why a neural model does or does not beat a simpler baseline.
 
 - Next day: repeat teach-back without notes.
 - One week: redo the independent task with different data.
-- End of phase: complete the cumulative gate before reviewing solutions.
+- End of section: complete the cumulative gate before reviewing solutions.
 - One month: diagnose one intentionally broken experiment from scratch.
 
 Record attempts, scores, misconception, remediation module, and retry date. Page
 completion is not mastery evidence.
 
-Use [`PHASE_MINI_PROJECTS.md`](PHASE_MINI_PROJECTS.md) after each corresponding
-gate. Lesson exercises build one skill; phase projects test whether skills work
+Use [`INTEGRATION_PROJECTS.md`](INTEGRATION_PROJECTS.md) after each corresponding
+gate. Lesson exercises build one skill; integration projects test whether skills work
 together.
