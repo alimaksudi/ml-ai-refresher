@@ -1,0 +1,23 @@
+{
+  "version":"1.0",
+  "answers":[
+    {"query_id":"q01","gold_answer":"Validation data may be used to choose hyperparameters.","required_terms":["validation","hyperparameter"]},
+    {"query_id":"q02","gold_answer":"The test set must remain untouched so it provides an unbiased final evaluation.","required_terms":["test","final evaluation"]},
+    {"query_id":"q03","gold_answer":"An imputer must learn its median from training data only.","required_terms":["training","imputer"]},
+    {"query_id":"q04","gold_answer":"Temporal leakage uses information from after the prediction timestamp.","required_terms":["temporal leakage","future"]},
+    {"query_id":"q05","gold_answer":"Recall measures how many actual positives were found.","required_terms":["recall","actual positives"]},
+    {"query_id":"q06","gold_answer":"Select a probability threshold using validation data and error costs.","required_terms":["validation","threshold"]},
+    {"query_id":"q07","gold_answer":"An excessive learning rate can cause oscillation or divergence.","required_terms":["learning rate","divergence"]},
+    {"query_id":"q08","gold_answer":"Standardization improves conditioning and can make gradient optimization converge more directly.","required_terms":["standardization","converge"]},
+    {"query_id":"q09","gold_answer":"No. Cross entropy expects raw logits and applies log-softmax internally.","required_terms":["logits","log-softmax"]},
+    {"query_id":"q10","gold_answer":"Use evaluation mode to disable training-only behavior and no-grad to stop gradient recording.","required_terms":["evaluation mode","no-grad"]},
+    {"query_id":"q11","gold_answer":"TF-IDF is a transparent exact-term retrieval baseline.","required_terms":["tf-idf","baseline"]},
+    {"query_id":"q12","gold_answer":"Use reciprocal rank fusion to combine lexical and dense rankings without adding raw scores.","required_terms":["reciprocal rank fusion","rank"]},
+    {"query_id":"q13","gold_answer":"Tiny chunks can omit context required to answer correctly.","required_terms":["small chunks","context"]},
+    {"query_id":"q14","gold_answer":"Choose chunk boundaries using a labelled query set and measured retrieval quality.","required_terms":["labelled query","retrieval"]},
+    {"query_id":"q15","gold_answer":"No. Data drift alone does not prove that model performance declined.","required_terms":["drift","does not prove"]},
+    {"query_id":"q16","gold_answer":"No. A drift alert should trigger investigation before controlled retraining.","required_terms":["investigation","retraining"]},
+    {"query_id":"q17","gold_answer":null,"required_terms":[]},
+    {"query_id":"q18","gold_answer":null,"required_terms":[]}
+  ]
+}

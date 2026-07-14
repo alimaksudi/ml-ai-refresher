@@ -1,0 +1,26 @@
+name: curriculum
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install foundation and validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy matplotlib pandas scikit-learn scipy nbformat nbclient ipykernel
+          python -m pip install joblib fastapi uvicorn pydantic httpx pytest
+      - name: Regenerate notebooks
+        run: python tools/build_all.py
+      - name: Validate and execute foundations
+        run: python tools/validate_curriculum.py --execute foundations
+      - name: Test deployable capstone
+        run: make capstone-test

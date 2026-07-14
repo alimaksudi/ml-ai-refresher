@@ -1,0 +1,453 @@
+{
+  "answers_sha256": "00f0bf12d7871e7e2f24e575eb267f1c5900bb39cfb86eed66d7f2598fd94a79",
+  "corpus_sha256": "0d3f5bb8056befa20cd8a59a88033749856d9d2f1ec518d3fa4b3cba433fafdf",
+  "failure_counts": {
+    "abstention_failure": 0,
+    "answer_failure": 9,
+    "attribution_failure": 0,
+    "grounding_failure": 0,
+    "retrieval_failure": 1,
+    "success": 8
+  },
+  "metrics": {
+    "abstention_accuracy": 0.9444444444444444,
+    "answer_correctness": 0.4444444444444444,
+    "citation_validity": 1.0,
+    "evidence_support": 1.0,
+    "mean_latency_ms": 0.8239398888888779,
+    "retrieval_recall_at_k": 0.9375
+  },
+  "mode": "dense_lsa",
+  "queries_sha256": "80cd90de61a96408293c134f26eccb94439e7d2d8e49096799ab53447344cbf3",
+  "rows": [
+    {
+      "abstention_correct": 1.0,
+      "answer": "Test data.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "splits.test"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.9202080000000334,
+      "outcome": "answer_failure",
+      "query_id": "q01",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "splits.test",
+        "splits.train",
+        "splits.validation",
+        "chunking.evaluate",
+        "metrics.threshold"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "The test set is an untouched final evaluation.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "splits.test"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8480419999999933,
+      "outcome": "success",
+      "query_id": "q02",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "splits.test",
+        "neural.early_stop",
+        "splits.validation",
+        "chunking.evaluate",
+        "neural.modes"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 0.0,
+      "answer": "I cannot answer from the available authorized evidence.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8259170000000093,
+      "outcome": "retrieval_failure",
+      "query_id": "q03",
+      "retrieval_recall_at_k": 0.0,
+      "retrieved_sections": [],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Data leakage occurs when training uses information that would not be available at prediction time or improperly learns from evaluation examples.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "leakage.definition"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8264999999999523,
+      "outcome": "answer_failure",
+      "query_id": "q04",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "leakage.definition",
+        "leakage.temporal",
+        "optimization.loss",
+        "monitoring.labels",
+        "neural.modes"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Recall is true positives divided by all actual positives.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "metrics.recall"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8128750000000462,
+      "outcome": "success",
+      "query_id": "q05",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "metrics.recall",
+        "metrics.precision",
+        "metrics.threshold",
+        "optimization.loss",
+        "monitoring.response"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "A probability threshold converts scores into decisions.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "metrics.threshold"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8122090000000082,
+      "outcome": "answer_failure",
+      "query_id": "q06",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "metrics.threshold",
+        "splits.validation",
+        "optimization.loss",
+        "leakage.preprocessing",
+        "retrieval.tfidf"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "The learning rate controls the update size; an excessive rate can cause oscillation or divergence.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "optimization.gradient"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8123749999999763,
+      "outcome": "success",
+      "query_id": "q07",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "optimization.gradient",
+        "chunking.tradeoff",
+        "monitoring.response",
+        "chunking.structure",
+        "retrieval.hybrid"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Standardization can make gradient-based optimization converge more directly.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "optimization.scaling"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8112499999999301,
+      "outcome": "success",
+      "query_id": "q08",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "optimization.scaling",
+        "optimization.gradient",
+        "neural.modes",
+        "leakage.preprocessing",
+        "splits.train"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Cross entropy applies a numerically stable log-softmax internally, so probabilities should not be passed through softmax first.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "neural.logits"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8130410000000143,
+      "outcome": "answer_failure",
+      "query_id": "q09",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "neural.logits",
+        "leakage.preprocessing",
+        "monitoring.drift",
+        "leakage.definition",
+        "monitoring.response"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Evaluation mode disables training-only behavior, and no-grad prevents gradient recording during validation or inference.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "neural.modes"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8149589999999485,
+      "outcome": "success",
+      "query_id": "q10",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "neural.modes",
+        "optimization.gradient",
+        "optimization.scaling",
+        "leakage.preprocessing",
+        "neural.early_stop"
+      ],
+      "slice": "multi_concept"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "It is a strong, transparent baseline for exact terminology but does not inherently understand synonyms.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "retrieval.tfidf"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8092499999999836,
+      "outcome": "answer_failure",
+      "query_id": "q11",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "retrieval.tfidf",
+        "monitoring.drift",
+        "monitoring.response",
+        "leakage.preprocessing",
+        "metrics.threshold"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Dense retrieval.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "retrieval.dense"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8105840000000031,
+      "outcome": "answer_failure",
+      "query_id": "q12",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "retrieval.dense",
+        "retrieval.hybrid",
+        "retrieval.tfidf",
+        "neural.logits",
+        "monitoring.labels"
+      ],
+      "slice": "multi_concept"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Small chunks improve retrieval specificity but may omit necessary context.",
+      "answer_correctness": 1.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "chunking.tradeoff"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8094999999999075,
+      "outcome": "success",
+      "query_id": "q13",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "chunking.tradeoff",
+        "retrieval.dense",
+        "chunking.evaluate",
+        "retrieval.tfidf",
+        "chunking.structure"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Every chunk should retain document, section, source, and version metadata for evidence tracing.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "chunking.structure"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8629999999999471,
+      "outcome": "answer_failure",
+      "query_id": "q14",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "chunking.structure",
+        "chunking.tradeoff",
+        "optimization.gradient",
+        "chunking.evaluate",
+        "monitoring.labels"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Drift.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "monitoring.drift"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8108749999999887,
+      "outcome": "answer_failure",
+      "query_id": "q15",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "monitoring.drift",
+        "retrieval.tfidf",
+        "monitoring.labels",
+        "leakage.definition",
+        "splits.validation"
+      ],
+      "slice": "paraphrase"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "Drift.",
+      "answer_correctness": 0.0,
+      "answerable": true,
+      "citation_validity": 1.0,
+      "citations": [
+        "monitoring.drift"
+      ],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8074580000000386,
+      "outcome": "answer_failure",
+      "query_id": "q16",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [
+        "monitoring.drift",
+        "metrics.precision",
+        "metrics.recall",
+        "monitoring.response",
+        "retrieval.tfidf"
+      ],
+      "slice": "direct"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "I cannot answer from the available authorized evidence.",
+      "answer_correctness": 1.0,
+      "answerable": false,
+      "citation_validity": 1.0,
+      "citations": [],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8022500000000043,
+      "outcome": "success",
+      "query_id": "q17",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [],
+      "slice": "unanswerable"
+    },
+    {
+      "abstention_correct": 1.0,
+      "answer": "I cannot answer from the available authorized evidence.",
+      "answer_correctness": 1.0,
+      "answerable": false,
+      "citation_validity": 1.0,
+      "citations": [],
+      "evidence_support": 1.0,
+      "latency_ms": 0.8206250000000193,
+      "outcome": "success",
+      "query_id": "q18",
+      "retrieval_recall_at_k": 1.0,
+      "retrieved_sections": [],
+      "slice": "unanswerable"
+    }
+  ],
+  "schema_version": "1.0",
+  "security": {
+    "pass_rate": 1.0,
+    "rows": [
+      {
+        "case_id": "s01",
+        "citation": "policy.current",
+        "outcome": "answer",
+        "passed": true
+      },
+      {
+        "case_id": "s02",
+        "citation": null,
+        "outcome": "abstain_stale",
+        "passed": true
+      },
+      {
+        "case_id": "s03",
+        "citation": null,
+        "outcome": "abstain_unsafe",
+        "passed": true
+      },
+      {
+        "case_id": "s04",
+        "citation": null,
+        "outcome": "abstain_unauthorized",
+        "passed": true
+      },
+      {
+        "case_id": "s05",
+        "citation": "security.secret",
+        "outcome": "answer",
+        "passed": true
+      }
+    ],
+    "version": "1.0"
+  },
+  "strategy": "sentence",
+  "top_k": 5
+}

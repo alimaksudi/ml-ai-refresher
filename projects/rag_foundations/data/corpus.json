@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "documents": [
+    {"id":"splits","title":"Evaluation Splits","sections":[
+      {"id":"splits.train","heading":"Training data","text":"Training data is used to fit model parameters and learned preprocessing such as scaling, imputation, and encoding."},
+      {"id":"splits.validation","heading":"Validation data","text":"Validation data supports model selection, hyperparameter tuning, threshold selection, and early stopping. Repeated decisions make it unsuitable as a final unbiased test."},
+      {"id":"splits.test","heading":"Test data","text":"The test set is an untouched final evaluation. It must not be used to select features, thresholds, hyperparameters, models, or training epochs."}
+    ]},
+    {"id":"leakage","title":"Data Leakage","sections":[
+      {"id":"leakage.definition","heading":"Definition","text":"Data leakage occurs when training uses information that would not be available at prediction time or improperly learns from evaluation examples."},
+      {"id":"leakage.preprocessing","heading":"Preprocessing leakage","text":"Fit scalers, imputers, encoders, and feature selectors on training data only. A pipeline applies the learned transformation consistently to validation, test, and serving inputs."},
+      {"id":"leakage.temporal","heading":"Temporal leakage","text":"Temporal leakage occurs when a feature uses future information relative to the prediction timestamp. Time-aware splits and point-in-time joins prevent this failure."}
+    ]},
+    {"id":"metrics","title":"Classification Decisions","sections":[
+      {"id":"metrics.precision","heading":"Precision","text":"Precision is true positives divided by all predicted positives. It answers: when the model predicts positive, how often is it correct?"},
+      {"id":"metrics.recall","heading":"Recall","text":"Recall is true positives divided by all actual positives. It answers: of the real positive cases, how many did the model find?"},
+      {"id":"metrics.threshold","heading":"Thresholds","text":"A probability threshold converts scores into decisions. Select the threshold on validation data using the relative costs of false positives and false negatives."}
+    ]},
+    {"id":"optimization","title":"Optimization","sections":[
+      {"id":"optimization.loss","heading":"Loss","text":"A loss function assigns a numerical penalty to prediction error. Training changes parameters to reduce this objective; a metric may instead describe decision quality."},
+      {"id":"optimization.gradient","heading":"Gradient descent","text":"Gradient descent updates parameters opposite the gradient of the loss. The learning rate controls the update size; an excessive rate can cause oscillation or divergence."},
+      {"id":"optimization.scaling","heading":"Feature scaling","text":"Features on very different scales create poorly conditioned loss surfaces. Standardization can make gradient-based optimization converge more directly."}
+    ]},
+    {"id":"neural","title":"Neural Network Training","sections":[
+      {"id":"neural.logits","heading":"Logits and cross entropy","text":"Classification networks output raw logits. Cross entropy applies a numerically stable log-softmax internally, so probabilities should not be passed through softmax first."},
+      {"id":"neural.modes","heading":"Training and evaluation modes","text":"Training mode enables behavior such as dropout updates. Evaluation mode disables training-only behavior, and no-grad prevents gradient recording during validation or inference."},
+      {"id":"neural.early_stop","heading":"Early stopping","text":"Early stopping selects the checkpoint with the best validation criterion after a declared patience. The final test set must not choose the stopping epoch."}
+    ]},
+    {"id":"retrieval","title":"Retrieval Foundations","sections":[
+      {"id":"retrieval.tfidf","heading":"Lexical retrieval","text":"TF-IDF represents documents with weighted terms. It is a strong, transparent baseline for exact terminology but does not inherently understand synonyms."},
+      {"id":"retrieval.dense","heading":"Dense retrieval","text":"Dense retrieval represents queries and passages in a lower-dimensional vector space and ranks by similarity. Its quality depends on the representation and evaluation domain."},
+      {"id":"retrieval.hybrid","heading":"Hybrid retrieval","text":"Hybrid retrieval combines lexical and dense rankings. Reciprocal rank fusion adds inverse rank contributions and avoids comparing incompatible raw score scales."}
+    ]},
+    {"id":"chunking","title":"Chunking","sections":[
+      {"id":"chunking.tradeoff","heading":"Chunk-size tradeoff","text":"Small chunks improve retrieval specificity but may omit necessary context. Large chunks preserve context but can dilute the relevant evidence with unrelated text."},
+      {"id":"chunking.structure","heading":"Structure-aware chunks","text":"Structure-aware chunking preserves headings and section boundaries. Every chunk should retain document, section, source, and version metadata for evidence tracing."},
+      {"id":"chunking.evaluate","heading":"Evaluate chunking","text":"Choose chunking with a labelled query set. Compare retrieval recall, ranking quality, context completeness, latency, and failure slices rather than relying on intuition."}
+    ]},
+    {"id":"monitoring","title":"Model Monitoring","sections":[
+      {"id":"monitoring.drift","heading":"Drift","text":"Data drift means the input distribution changed. Concept drift means the relationship between inputs and target changed. Drift alone does not prove performance degradation."},
+      {"id":"monitoring.labels","heading":"Delayed labels","text":"When production labels arrive late, monitor input quality, prediction distributions, calibrated confidence, and operational proxy signals while waiting for direct performance evidence."},
+      {"id":"monitoring.response","heading":"Response","text":"An alert should trigger investigation with slices, lineage, and recent changes. Automatic retraining is unsafe unless validation, deployment, rollback, and feedback-loop controls are in place."}
+    ]}
+  ]
+}

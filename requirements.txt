@@ -1,0 +1,24 @@
+# Core — needed to build and run every notebook
+numpy>=1.24
+matplotlib>=3.7
+nbformat>=5.7
+
+# Classical ML (Phase 1-2) — production-library sections
+scikit-learn>=1.3
+scipy>=1.10
+pandas>=2.0
+xgboost>=2.0
+shap>=0.44
+
+# Deep learning (Phase 3) — production-library sections
+torch>=2.1
+
+# NLP / LLM / RAG (Phase 4-6) — used only in the relevant notebooks
+# Install the relevant optional profile instead of expanding the core environment:
+# - requirements-nlp-rag.txt
+# - requirements-agents.txt
+# - requirements-evaluation-production.txt
+
+# Curriculum validation and notebook execution
+nbclient>=0.10
+ipykernel>=6.29

@@ -1,0 +1,206 @@
+{
+  "best_parameters": {
+    "model__C": 1.0
+  },
+  "class_names": {
+    "0": "class_0",
+    "1": "class_1",
+    "2": "class_2"
+  },
+  "dataset": {
+    "classes": 3,
+    "features": 13,
+    "license_note": "Use scikit-learn dataset documentation for provenance and citation.",
+    "name": "scikit-learn UCI Wine recognition dataset",
+    "samples": 178
+  },
+  "dataset_sha256": "3a28849ef2366c4b9d4e382b3fa5624a66f693c04d7fdcf43c529bbb0bb338d7",
+  "experiment": {
+    "candidate_C_values": [
+      0.03,
+      0.1,
+      0.3,
+      1.0,
+      3.0,
+      10.0
+    ],
+    "candidate_model": "StandardScaler plus LogisticRegression",
+    "hypothesis": "scaled multinomial logistic regression beats the majority baseline",
+    "minimum_practical_accuracy_lift": 0.2,
+    "selection_metric": "stratified five-fold macro F1 on training data only"
+  },
+  "feature_names": [
+    "alcohol",
+    "malic_acid",
+    "ash",
+    "alcalinity_of_ash",
+    "magnesium",
+    "total_phenols",
+    "flavanoids",
+    "nonflavanoid_phenols",
+    "proanthocyanins",
+    "color_intensity",
+    "hue",
+    "od280_od315_of_diluted_wines",
+    "proline"
+  ],
+  "intended_use": "Educational cultivar classification; not a quality, safety, or pricing decision.",
+  "metrics": {
+    "baseline_test_accuracy": 0.3888888888888889,
+    "baseline_test_macro_f1": 0.18666666666666668,
+    "confusion_matrix": [
+      [
+        12,
+        0,
+        0
+      ],
+      [
+        0,
+        14,
+        0
+      ],
+      [
+        0,
+        1,
+        9
+      ]
+    ],
+    "cv_best_macro_f1": 0.9796369712159185,
+    "test_accuracy": 0.9722222222222222,
+    "test_accuracy_ci95": [
+      0.9166666666666666,
+      1.0
+    ],
+    "test_accuracy_lift_over_baseline": 0.5833333333333333,
+    "test_balanced_accuracy": 0.9666666666666667,
+    "test_log_loss": 0.07384747399579965,
+    "test_macro_f1": 0.9709618874773139
+  },
+  "model_version": "wine-logreg-v1",
+  "problem_framing": {
+    "error_implication": "a sample is routed to the wrong cultivar group",
+    "prediction_unit": "one wine sample represented by 13 chemical measurements",
+    "prohibited_decisions": [
+      "quality",
+      "price",
+      "authenticity",
+      "safety"
+    ],
+    "supported_decision": "educational laboratory triage and dataset exploration",
+    "target": "cultivar class in the bundled recognition dataset"
+  },
+  "reference_statistics": {
+    "alcalinity_of_ash": {
+      "max": 30.0,
+      "mean": 19.625352112676055,
+      "min": 10.6,
+      "q01": 11.282,
+      "q99": 27.885000000000005,
+      "std": 3.368922522190694
+    },
+    "alcohol": {
+      "max": 14.83,
+      "mean": 12.971478873239436,
+      "min": 11.03,
+      "q01": 11.4264,
+      "q99": 14.602400000000001,
+      "std": 0.7996900343021106
+    },
+    "ash": {
+      "max": 3.22,
+      "mean": 2.364859154929578,
+      "min": 1.36,
+      "q01": 1.7264,
+      "q99": 2.8659,
+      "std": 0.26743364562177563
+    },
+    "color_intensity": {
+      "max": 13.0,
+      "mean": 4.98964788028169,
+      "min": 1.28,
+      "q01": 1.8055999999999999,
+      "q99": 11.360500000000004,
+      "std": 2.3267108994616588
+    },
+    "flavanoids": {
+      "max": 3.74,
+      "mean": 1.9853521126760565,
+      "min": 0.34,
+      "q01": 0.47,
+      "q99": 3.6285000000000003,
+      "std": 0.9485939646758671
+    },
+    "hue": {
+      "max": 1.71,
+      "mean": 0.948985915492958,
+      "min": 0.48,
+      "q01": 0.5441,
+      "q99": 1.4036,
+      "std": 0.22584723073930435
+    },
+    "magnesium": {
+      "max": 162.0,
+      "mean": 99.63380281690141,
+      "min": 70.0,
+      "q01": 78.0,
+      "q99": 146.08000000000004,
+      "std": 14.884758663416786
+    },
+    "malic_acid": {
+      "max": 5.8,
+      "mean": 2.34,
+      "min": 0.74,
+      "q01": 0.8941,
+      "q99": 5.317300000000001,
+      "std": 1.0974002569453234
+    },
+    "nonflavanoid_phenols": {
+      "max": 0.63,
+      "mean": 0.36014084507042254,
+      "min": 0.13,
+      "q01": 0.14,
+      "q99": 0.63,
+      "std": 0.11879077307728886
+    },
+    "od280_od315_of_diluted_wines": {
+      "max": 3.92,
+      "mean": 2.6061971830985917,
+      "min": 1.27,
+      "q01": 1.2941,
+      "q99": 3.7462000000000004,
+      "std": 0.6872170171965036
+    },
+    "proanthocyanins": {
+      "max": 3.58,
+      "mean": 1.6002112676056337,
+      "min": 0.42,
+      "q01": 0.4733,
+      "q99": 3.128300000000001,
+      "std": 0.577731684286028
+    },
+    "proline": {
+      "max": 1515.0,
+      "mean": 739.4788732394367,
+      "min": 278.0,
+      "q01": 331.97,
+      "q99": 1467.7,
+      "std": 300.43552232515174
+    },
+    "total_phenols": {
+      "max": 3.88,
+      "mean": 2.2737323943661973,
+      "min": 0.98,
+      "q01": 1.1615,
+      "q99": 3.706500000000001,
+      "std": 0.6192619518482813
+    }
+  },
+  "schema_version": "1.0",
+  "split": {
+    "random_state": 42,
+    "strategy": "stratified holdout with stratified CV inside training data",
+    "test_samples": 36,
+    "train_samples": 142
+  },
+  "trained_at_utc": "2026-07-12T12:08:30.916071+00:00"
+}

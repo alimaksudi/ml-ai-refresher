@@ -1,0 +1,2541 @@
+{
+  "corpus_sha256": "0d3f5bb8056befa20cd8a59a88033749856d9d2f1ec518d3fa4b3cba433fafdf",
+  "corpus_version": "1.0",
+  "experiments": {
+    "fixed:dense_lsa": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 48,
+      "mean_latency_ms": 0.9826666666666749,
+      "mrr": 0.7552083333333333,
+      "ndcg_at_k": 0.7851003944778032,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q01",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "splits.test",
+            "splits.train",
+            "neural.early_stop",
+            "chunking.evaluate",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation",
+            "chunking.evaluate",
+            "neural.modes"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels",
+            "neural.modes"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "metrics.precision",
+            "optimization.loss",
+            "metrics.threshold",
+            "chunking.evaluate"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold",
+            "splits.validation",
+            "splits.test",
+            "metrics.recall",
+            "chunking.evaluate"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff",
+            "monitoring.response",
+            "optimization.loss",
+            "retrieval.hybrid"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits",
+            "retrieval.hybrid",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.scaling",
+            "optimization.gradient",
+            "monitoring.response",
+            "leakage.preprocessing"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf",
+            "retrieval.hybrid",
+            "leakage.preprocessing",
+            "leakage.definition",
+            "leakage.temporal"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "optimization.loss",
+            "monitoring.drift"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "chunking.evaluate",
+            "retrieval.dense",
+            "retrieval.hybrid",
+            "monitoring.labels"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.5,
+          "query_id": "q14",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff",
+            "chunking.evaluate",
+            "monitoring.labels",
+            "leakage.temporal"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels",
+            "chunking.tradeoff",
+            "retrieval.dense"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.43067655807339306,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.25,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "metrics.precision",
+            "metrics.recall",
+            "monitoring.response",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "fixed:hybrid_rrf": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 48,
+      "mean_latency_ms": 1.2605995000000147,
+      "mrr": 0.734375,
+      "ndcg_at_k": 0.7538503944778032,
+      "recall_at_k": 0.8125,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q01",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.train",
+            "chunking.evaluate",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation",
+            "splits.train",
+            "leakage.preprocessing"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels",
+            "splits.test"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "optimization.loss",
+            "metrics.precision",
+            "metrics.threshold",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold",
+            "splits.validation",
+            "splits.test",
+            "splits.train",
+            "leakage.preprocessing"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff",
+            "splits.validation",
+            "splits.train",
+            "splits.test"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits",
+            "leakage.preprocessing",
+            "leakage.definition",
+            "metrics.precision",
+            "retrieval.hybrid"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling",
+            "splits.validation",
+            "leakage.preprocessing"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf",
+            "leakage.preprocessing",
+            "leakage.definition",
+            "splits.validation",
+            "leakage.temporal"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense",
+            "leakage.preprocessing",
+            "splits.train",
+            "chunking.evaluate"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "splits.train",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff",
+            "splits.train",
+            "leakage.temporal",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels",
+            "splits.train",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.43067655807339306,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.25,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "metrics.precision",
+            "metrics.recall",
+            "monitoring.response",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.7142857142857143
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "fixed:lexical": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 48,
+      "mean_latency_ms": 1.0973706666666774,
+      "mrr": 0.7208333333333333,
+      "ndcg_at_k": 0.7592945196485911,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.38685280723454163,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.2,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.train",
+            "chunking.evaluate",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "splits.validation",
+            "neural.early_stop"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "optimization.loss",
+            "metrics.precision",
+            "metrics.threshold"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "splits.test"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "retrieval.dense",
+            "chunking.tradeoff",
+            "chunking.evaluate"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.5,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "metrics.precision",
+            "monitoring.response",
+            "metrics.recall",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "sentence:dense_lsa": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 70,
+      "mean_latency_ms": 1.592233999999995,
+      "mrr": 0.7395833333333333,
+      "ndcg_at_k": 0.7889507889556063,
+      "recall_at_k": 0.9375,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.5,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "splits.test",
+            "splits.train",
+            "splits.validation",
+            "chunking.evaluate",
+            "metrics.threshold"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation",
+            "chunking.evaluate",
+            "neural.modes"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels",
+            "neural.modes"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "metrics.precision",
+            "metrics.threshold",
+            "optimization.loss",
+            "monitoring.response"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold",
+            "splits.validation",
+            "optimization.loss",
+            "leakage.preprocessing",
+            "retrieval.tfidf"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff",
+            "monitoring.response",
+            "chunking.structure",
+            "retrieval.hybrid"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "optimization.gradient",
+            "neural.modes",
+            "leakage.preprocessing",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits",
+            "leakage.preprocessing",
+            "monitoring.drift",
+            "leakage.definition",
+            "monitoring.response"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling",
+            "leakage.preprocessing",
+            "neural.early_stop"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf",
+            "monitoring.drift",
+            "monitoring.response",
+            "leakage.preprocessing",
+            "metrics.threshold"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "retrieval.dense",
+            "retrieval.hybrid",
+            "retrieval.tfidf",
+            "neural.logits",
+            "monitoring.labels"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "retrieval.tfidf",
+            "chunking.structure"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.43067655807339306,
+          "query_id": "q14",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.25,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff",
+            "optimization.gradient",
+            "chunking.evaluate",
+            "monitoring.labels"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels",
+            "leakage.definition",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.43067655807339306,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.25,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "metrics.precision",
+            "metrics.recall",
+            "monitoring.response",
+            "retrieval.tfidf"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 1.0
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "sentence:hybrid_rrf": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 70,
+      "mean_latency_ms": 0.809470055555539,
+      "mrr": 0.7604166666666666,
+      "ndcg_at_k": 0.7894331095982161,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.5,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "splits.train",
+            "splits.test",
+            "splits.validation",
+            "chunking.evaluate",
+            "neural.early_stop"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation",
+            "leakage.definition",
+            "leakage.preprocessing"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "metrics.precision",
+            "optimization.loss",
+            "metrics.threshold",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold",
+            "splits.validation",
+            "splits.train",
+            "leakage.preprocessing",
+            "leakage.definition"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff",
+            "splits.validation",
+            "leakage.preprocessing",
+            "monitoring.response"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "optimization.gradient",
+            "neural.modes",
+            "splits.train",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits",
+            "leakage.definition",
+            "leakage.preprocessing",
+            "splits.train",
+            "monitoring.drift"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling",
+            "splits.validation",
+            "splits.train"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf",
+            "splits.train",
+            "leakage.preprocessing",
+            "splits.validation",
+            "monitoring.drift"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense",
+            "leakage.definition",
+            "splits.train",
+            "retrieval.tfidf"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "splits.test",
+            "splits.train"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "chunking.structure",
+            "splits.validation",
+            "splits.train",
+            "splits.test"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels",
+            "splits.train",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.5,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "metrics.precision",
+            "monitoring.response",
+            "metrics.recall",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "sentence:lexical": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 70,
+      "mean_latency_ms": 0.7926622222222216,
+      "mrr": 0.75,
+      "ndcg_at_k": 0.7827324383928644,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "splits.train",
+            "splits.validation",
+            "splits.test",
+            "chunking.evaluate",
+            "neural.early_stop"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "metrics.precision",
+            "optimization.loss",
+            "metrics.threshold"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "optimization.gradient",
+            "splits.train",
+            "neural.modes",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "retrieval.dense",
+            "chunking.tradeoff",
+            "chunking.evaluate"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "chunking.structure"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "monitoring.response",
+            "metrics.precision",
+            "metrics.recall",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "structure:dense_lsa": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 24,
+      "mean_latency_ms": 1.0094075555555637,
+      "mrr": 0.73125,
+      "ndcg_at_k": 0.7674776292468072,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.38685280723454163,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.2,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.train",
+            "chunking.evaluate",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "metrics.precision",
+            "metrics.recall",
+            "optimization.loss",
+            "metrics.threshold",
+            "chunking.evaluate"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "leakage.definition"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "metrics.recall"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "monitoring.response",
+            "metrics.precision",
+            "metrics.recall",
+            "splits.train"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "structure:hybrid_rrf": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 24,
+      "mean_latency_ms": 0.8002476666666671,
+      "mrr": 0.73125,
+      "ndcg_at_k": 0.7674776292468072,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.38685280723454163,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.2,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.train",
+            "chunking.evaluate",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation",
+            "leakage.definition",
+            "metrics.precision"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "metrics.precision",
+            "metrics.recall",
+            "optimization.loss",
+            "metrics.threshold",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition",
+            "leakage.preprocessing"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "leakage.definition"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition",
+            "leakage.preprocessing"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling",
+            "metrics.recall",
+            "splits.train"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition",
+            "leakage.preprocessing"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate",
+            "splits.train",
+            "metrics.recall"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff",
+            "splits.validation",
+            "metrics.precision",
+            "leakage.definition"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels",
+            "splits.validation",
+            "metrics.precision"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "monitoring.response",
+            "metrics.precision",
+            "splits.train",
+            "metrics.recall"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    },
+    "structure:lexical": {
+      "answerable_zero_result_rate": 0.0625,
+      "chunks": 24,
+      "mean_latency_ms": 1.0972569999999997,
+      "mrr": 0.7625,
+      "ndcg_at_k": 0.7905445196485911,
+      "recall_at_k": 0.875,
+      "rows": [
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.38685280723454163,
+          "query_id": "q01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.2,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.train",
+            "chunking.evaluate",
+            "splits.validation"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "splits.test",
+            "neural.early_stop",
+            "splits.validation"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": true,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q03",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q04",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "leakage.definition",
+            "leakage.temporal",
+            "optimization.loss",
+            "monitoring.labels"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q05",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.recall",
+            "metrics.precision",
+            "optimization.loss",
+            "metrics.threshold"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q06",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "metrics.threshold"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q07",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.gradient",
+            "chunking.tradeoff"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q08",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "optimization.scaling",
+            "neural.modes",
+            "optimization.gradient",
+            "splits.train",
+            "leakage.definition"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q09",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.logits"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q10",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "neural.modes",
+            "optimization.gradient",
+            "optimization.scaling"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q11",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.tfidf"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q12",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "retrieval.hybrid",
+            "retrieval.dense"
+          ],
+          "slice": "multi_concept"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q13",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "chunking.tradeoff",
+            "retrieval.dense",
+            "chunking.evaluate"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.0,
+          "query_id": "q14",
+          "recall_at_k": 0.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [
+            "chunking.structure",
+            "chunking.tradeoff"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 1.0,
+          "query_id": "q15",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "retrieval.tfidf",
+            "monitoring.labels"
+          ],
+          "slice": "paraphrase"
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "q16",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "monitoring.drift",
+            "monitoring.response",
+            "splits.train",
+            "metrics.precision",
+            "metrics.recall"
+          ],
+          "slice": "direct"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q17",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        },
+        {
+          "abstained": true,
+          "answerable": false,
+          "ndcg_at_k": 1.0,
+          "query_id": "q18",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.0,
+          "retrieved_sections": [],
+          "slice": "unanswerable"
+        }
+      ],
+      "slices": {
+        "direct": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        },
+        "multi_concept": {
+          "count": 2,
+          "recall_at_k": 1.0
+        },
+        "paraphrase": {
+          "count": 7,
+          "recall_at_k": 0.8571428571428571
+        }
+      },
+      "unanswerable_abstention_rate": 1.0
+    }
+  },
+  "queries_sha256": "80cd90de61a96408293c134f26eccb94439e7d2d8e49096799ab53447344cbf3",
+  "query_version": "1.0",
+  "schema_version": "1.0",
+  "top_k": 5
+}

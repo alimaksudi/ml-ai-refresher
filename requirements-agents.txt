@@ -1,0 +1,7 @@
+-r requirements-nlp-rag.txt
+
+# Agent orchestration and memory demonstrations
+langgraph>=0.1
+crewai>=0.35
+mem0ai>=0.1
+letta>=0.3

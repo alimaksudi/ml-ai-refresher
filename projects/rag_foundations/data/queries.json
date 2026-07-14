@@ -1,0 +1,23 @@
+{
+  "version":"1.0",
+  "queries":[
+    {"id":"q01","query":"Which data may choose hyperparameters?","relevant_sections":["splits.validation"],"slice":"direct"},
+    {"id":"q02","query":"Why must the final exam dataset remain untouched?","relevant_sections":["splits.test"],"slice":"paraphrase"},
+    {"id":"q03","query":"Where should an imputer learn its median?","relevant_sections":["leakage.preprocessing"],"slice":"paraphrase"},
+    {"id":"q04","query":"What leak uses facts from after prediction time?","relevant_sections":["leakage.temporal"],"slice":"direct"},
+    {"id":"q05","query":"Which metric asks how many real positives were found?","relevant_sections":["metrics.recall"],"slice":"direct"},
+    {"id":"q06","query":"Where should a probability cutoff be selected?","relevant_sections":["metrics.threshold"],"slice":"paraphrase"},
+    {"id":"q07","query":"What happens when the step size is excessive?","relevant_sections":["optimization.gradient"],"slice":"paraphrase"},
+    {"id":"q08","query":"Why standardize before gradient-based training?","relevant_sections":["optimization.scaling"],"slice":"direct"},
+    {"id":"q09","query":"Should softmax be applied before cross entropy?","relevant_sections":["neural.logits"],"slice":"direct"},
+    {"id":"q10","query":"How are dropout and gradient recording handled during inference?","relevant_sections":["neural.modes"],"slice":"multi_concept"},
+    {"id":"q11","query":"What is a transparent exact-term search baseline?","relevant_sections":["retrieval.tfidf"],"slice":"paraphrase"},
+    {"id":"q12","query":"How can keyword and vector rankings be combined without score normalization?","relevant_sections":["retrieval.hybrid"],"slice":"multi_concept"},
+    {"id":"q13","query":"Why can tiny passages hurt answer context?","relevant_sections":["chunking.tradeoff"],"slice":"paraphrase"},
+    {"id":"q14","query":"How should chunk boundaries be chosen empirically?","relevant_sections":["chunking.evaluate"],"slice":"direct"},
+    {"id":"q15","query":"Does a shifted input distribution prove accuracy declined?","relevant_sections":["monitoring.drift"],"slice":"paraphrase"},
+    {"id":"q16","query":"Should a drift alert immediately retrain the model?","relevant_sections":["monitoring.response"],"slice":"direct"},
+    {"id":"q17","query":"What is the office Wi-Fi password?","relevant_sections":[],"slice":"unanswerable"},
+    {"id":"q18","query":"Who won the 2030 football world cup?","relevant_sections":[],"slice":"unanswerable"}
+  ]
+}
