@@ -31,6 +31,12 @@ or named methods.
 
 - Lewis et al., “Retrieval-Augmented Generation for Knowledge-Intensive NLP
   Tasks,” NeurIPS 2020. https://arxiv.org/abs/2005.11401
+- Qdrant, “Local Quickstart.”
+  https://qdrant.tech/documentation/quick-start/
+- Qdrant, “Payload.”
+  https://qdrant.tech/documentation/concepts/payload/
+- Qdrant, “Filtering.”
+  https://qdrant.tech/documentation/search/filtering/
 - Yao et al., “ReAct: Synergizing Reasoning and Acting in Language Models,” 2022.
   https://arxiv.org/abs/2210.03629
 - Shinn et al., “Reflexion: Language Agents with Verbal Reinforcement Learning,”

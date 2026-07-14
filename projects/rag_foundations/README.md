@@ -17,10 +17,13 @@ sentence embedding. A later ablation may add a pinned local embedding model whil
 keeping this offline baseline.
 
 ```bash
+pip install -r projects/rag_foundations/requirements.txt
 make rag-foundations-evaluate
 make rag-foundations-test
 make grounded-rag-evaluate
 make grounded-rag-checkpoint
+make vector-store-evaluate
+make vector-store-checkpoint
 ```
 
 The committed retrieval report is written to `artifacts/evaluation.json`; the
@@ -32,3 +35,13 @@ answers, evidence citations, abstention, answer correctness, evidence support,
 citation validity, component failure taxonomy, and stale/injection/authorization
 security cases. Its deliberately simple baseline exposes the difference between
 retrieving relevant evidence and selecting the correct evidence to answer.
+
+The vector-store extension fits the same deterministic LSA representation, keeps
+NumPy exact search as the control, persists the vectors and payloads in Qdrant local
+mode, closes and reopens the index, and reruns the labelled retrieval set. It also
+tests idempotent upserts and mandatory freshness, unsafe-content, and authorization
+filters. The committed report is `artifacts/vector_store_evaluation.json`.
+
+Qdrant local mode validates database behavior without a server or network. This tiny
+corpus does **not** provide a credible distributed-HNSW throughput benchmark. Use the
+same labelled queries against a deployed collection before making scale or ANN claims.

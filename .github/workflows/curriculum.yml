@@ -18,9 +18,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy matplotlib pandas scikit-learn scipy nbformat nbclient ipykernel
           python -m pip install joblib fastapi uvicorn pydantic httpx pytest
+          python -m pip install "qdrant-client>=1.9,<2"
       - name: Regenerate notebooks
         run: python tools/build_all.py
       - name: Validate and execute foundations
         run: python tools/validate_curriculum.py --execute foundations
       - name: Test deployable capstone
         run: make capstone-test
+      - name: Test measured RAG projects
+        run: make rag-foundations-test

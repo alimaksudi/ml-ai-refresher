@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -44,6 +44,9 @@ rag-foundations-evaluate:
 grounded-rag-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.grounded_cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/grounded_evaluation.json
 
+vector-store-evaluate:
+	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.vector_store_cli --data-dir projects/rag_foundations/data --index-dir projects/rag_foundations/.local/vector_index --output projects/rag_foundations/artifacts/vector_store_evaluation.json
+
 rag-foundations-test:
 	PYTHONPATH=projects/rag_foundations/src python3 -m pytest projects/rag_foundations/tests -q
 
@@ -52,6 +55,9 @@ rag-foundations-checkpoint: validate rag-foundations-test
 
 grounded-rag-checkpoint: validate rag-foundations-test grounded-rag-evaluate
 	@echo "Automated grounded-answer gate passed. Complete the grounded-answer extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
+
+vector-store-checkpoint: validate rag-foundations-test vector-store-evaluate
+	@echo "Automated vector-store gate passed. Complete the vector-store extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
 
 capstone-serve:
 	PYTHONPATH=projects/wine_classifier/src uvicorn wine_classifier.app:app --host 127.0.0.1 --port 8000

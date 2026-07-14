@@ -33,3 +33,23 @@ Before vector databases or reranking, explain why retrieval recall is higher tha
 extractive answer correctness, diagnose one retrieval failure and three answer
 failures, validate every citation, and pass all stale, injection, and authorization
 cases.
+
+## Persistent vector-store extension
+
+Before hybrid search, the learner must:
+
+1. Explain what persistence, CRUD, payload filters, and idempotent upserts add beyond
+   a NumPy or FAISS search index.
+2. Rebuild the Qdrant-local index, close it, reopen it, and reproduce the same ranked
+   results.
+3. Prove NumPy exact and Qdrant-local exact retrieval have **100% section-ranking
+   parity** on the labelled set and retain at least **90% recall@5**.
+4. Demonstrate that public search excludes stale, unsafe, and restricted records,
+   while an authorized search can retrieve the restricted record.
+5. Explain why a local 70-point exact-search run cannot establish production ANN
+   latency, capacity, replication, or recall.
+6. Diagnose dimension mismatch, duplicate indexing, stale manifests, and metadata
+   filter failures from the saved report.
+
+Pass requires `make vector-store-checkpoint`, all six explanations, and no failure on
+items 2–5. RAG-06 remains blocked until this gate passes.

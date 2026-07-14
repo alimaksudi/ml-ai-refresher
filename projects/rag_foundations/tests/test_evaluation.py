@@ -5,6 +5,11 @@ from pathlib import Path
 
 from rag_foundations.evaluation import build_chunks, evaluate, load_json
 from rag_foundations.grounded import ABSTENTION, evaluate_answers, evaluate_security
+from rag_foundations.vector_store import (
+    QdrantVectorStore,
+    VectorRecord,
+    evaluate_vector_store,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -79,3 +84,44 @@ def test_security_cases_block_stale_unsafe_and_unauthorized_evidence():
     assert report["pass_rate"] == 1.0
     outcomes = {row["outcome"] for row in report["rows"]}
     assert {"answer", "abstain_stale", "abstain_unsafe", "abstain_unauthorized"}.issubset(outcomes)
+
+
+def test_persistent_vector_store_matches_exact_baseline(tmp_path):
+    report = evaluate_vector_store(DATA, tmp_path / "index", tmp_path / "report.json")
+    exact = report["numpy_exact"]
+    stored = report["qdrant_local_exact"]
+    for metric in (
+        "recall_at_k", "mrr", "ndcg_at_k", "answerable_zero_result_rate",
+        "unanswerable_abstention_rate",
+    ):
+        assert stored[metric] == exact[metric]
+    assert report["parity"]["mean_section_overlap_at_k"] == 1.0
+    assert report["parity"]["exact_ranking_match_rate"] == 1.0
+    assert report["persistence"]["restart_result_match"]
+    assert report["persistence"]["duplicate_upsert_idempotent"]
+    assert report["policy_filters"]["passed"]
+
+
+def test_vector_store_filters_before_search_and_persists(tmp_path):
+    path = tmp_path / "store"
+    records = [
+        VectorRecord("public", [1.0, 0.0], {"access_level": "public"}),
+        VectorRecord("restricted", [1.0, 0.0], {"access_level": "restricted"}),
+        VectorRecord("stale", [1.0, 0.0], {"current": False}),
+        VectorRecord("unsafe", [1.0, 0.0], {"unsafe": True}),
+    ]
+    store = QdrantVectorStore(path, "test", dimension=2, reset=True)
+    store.upsert(records)
+    store.upsert(records)
+    assert store.count() == 4
+    assert [item.id for item in store.search([1.0, 0.0], k=10)] == ["public"]
+    assert set(item.id for item in store.search(
+        [1.0, 0.0], k=10, user_access="restricted"
+    )) == {"public", "restricted"}
+    store.close()
+
+    reopened = QdrantVectorStore(path, "test", dimension=2)
+    assert reopened.count() == 4
+    reopened.delete(["public"])
+    assert not reopened.search([1.0, 0.0], k=10)
+    reopened.close()
