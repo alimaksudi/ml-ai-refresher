@@ -82,6 +82,12 @@ creating repetitive toy projects.
   simplest-supported-system recommendation.
 - **Evaluation:** RAG foundation mastery checkpoint.
 
+**RAG-06 extension:** use `hybrid_corpus.json` and `hybrid_queries.json` to prove one
+exact-identifier ranking win for BM25, one paraphrase ranking win for dense LSA, one
+mixed-intent recall improvement from RRF, one no-gain control, and one correct
+abstention. Preserve identical hashes, chunks, labels, candidate depth, and `top_k`
+across every retriever comparison.
+
 ## H. Evidence-grounded assistant — after RAG-05 through RAG-08 and EVAL-03
 
 - **Goal:** add vector indexing, reranking, and generation only when each component

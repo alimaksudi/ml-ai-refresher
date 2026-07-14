@@ -29,6 +29,9 @@ make hybrid-rag-evaluate
 make hybrid-rag-checkpoint
 ```
 
+Use `HYBRID_MASTERY_EVIDENCE.md` as a mentor scoring reference after attempting the
+hybrid-search teach-back independently.
+
 The committed retrieval report is written to `artifacts/evaluation.json`; the
 grounded-answer report is written to `artifacts/grounded_evaluation.json`. Corpus,
 query, and answer hashes make evaluation-data changes visible.
@@ -49,8 +52,11 @@ Qdrant local mode validates database behavior without a server or network. This 
 corpus does **not** provide a credible distributed-HNSW throughput benchmark. Use the
 same labelled queries against a deployed collection before making scale or ANN claims.
 
-The hybrid-search extension replaces the TF-IDF branch with BM25 and compares each
-base retriever with RRF and five alpha-weighted settings on the same structure-aware
-chunks and labelled queries. It records candidate lists, stable evidence IDs, query
-slices, abstention, and local latency in `artifacts/hybrid_evaluation.json`. These
-local timings teach measurement mechanics; they are not production capacity claims.
+The hybrid-search extension uses the versioned `data/hybrid_corpus.json` and
+`data/hybrid_queries.json` benchmark. Its five diagnostic slices cover an exact
+identifier, a paraphrase, mixed intent, a no-gain control, and an unanswerable query.
+It compares BM25 and four-component dense LSA with RRF and five alpha-weighted
+settings on the same structure-aware chunks and labels. The report records candidate
+lists, stable evidence IDs, abstention, and local latency in
+`artifacts/hybrid_evaluation.json`. These local timings teach measurement mechanics;
+they are not production capacity claims.

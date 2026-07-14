@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "documents": [
+    {
+      "id": "devices",
+      "title": "Device Operations",
+      "sections": [
+        {
+          "id": "devices.zx410",
+          "heading": "ZX-410 fault E17",
+          "text": "To reset the ZX-410 solar inverter after fault E17, isolate AC power, wait thirty seconds, and reconnect the supply."
+        },
+        {
+          "id": "devices.zx400",
+          "heading": "ZX-400 fault E12",
+          "text": "To restart the ZX-400 solar inverter after fault E12, disconnect the panel input, inspect the cable, and restore power."
+        },
+        {
+          "id": "devices.converter",
+          "heading": "Power converter recovery",
+          "text": "A power converter that stops after an overload should cool before an operator restores electrical service."
+        }
+      ]
+    },
+    {
+      "id": "benefits",
+      "title": "Employee Benefits",
+      "sections": [
+        {
+          "id": "benefits.parental",
+          "heading": "Parental leave",
+          "text": "Employees may take six weeks of paid leave after the birth or adoption of a child. Manager approval records the family absence."
+        },
+        {
+          "id": "benefits.medical",
+          "heading": "Medical leave",
+          "text": "Employees recovering from illness may request medical leave with a clinician certificate and manager approval."
+        },
+        {
+          "id": "benefits.vacation",
+          "heading": "Vacation allowance",
+          "text": "Employees schedule annual vacation in the time-off system after confirming team coverage."
+        }
+      ]
+    },
+    {
+      "id": "language",
+      "title": "Policy Language",
+      "sections": [
+        {
+          "id": "language.caregiver",
+          "heading": "Caregiver terminology",
+          "text": "A new parent becomes a caregiver after a birth or adoption. Family support policies describe help for the caregiver and child."
+        },
+        {
+          "id": "language.absence",
+          "heading": "Time-away terminology",
+          "text": "Time away from work is also called leave or paid absence. Vacation, medical recovery, and family events are different absence categories."
+        },
+        {
+          "id": "language.equipment",
+          "heading": "Equipment terminology",
+          "text": "An inverter is a power converter. Reset, restart, and restore describe related equipment recovery actions."
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "title": "Account Security",
+      "sections": [
+        {
+          "id": "security.mfa",
+          "heading": "Multi-factor authentication",
+          "text": "MFA requires a password and a one-time code before account access is granted."
+        },
+        {
+          "id": "security.passwords",
+          "heading": "Password rotation",
+          "text": "Privileged service passwords rotate every ninety days and must not be shared."
+        },
+        {
+          "id": "security.access",
+          "heading": "Access review",
+          "text": "Managers review account permissions quarterly and remove access that is no longer required."
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "title": "General Operations",
+      "sections": [
+        {
+          "id": "operations.travel",
+          "heading": "Travel reimbursement",
+          "text": "Submit transport and hotel receipts within thirty days after business travel."
+        },
+        {
+          "id": "operations.backup",
+          "heading": "Backup restoration",
+          "text": "Restore a database backup in an isolated environment before replacing production data."
+        },
+        {
+          "id": "operations.retention",
+          "heading": "Record retention",
+          "text": "Finance records remain available for seven years before approved deletion."
+        }
+      ]
+    }
+  ]
+}

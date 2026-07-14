@@ -65,7 +65,13 @@ def build_chunks(corpus: dict, strategy: str, words: int = 18) -> list[Chunk]:
 
 
 class RetrievalIndex:
-    def __init__(self, chunks: list[Chunk], mode: str, seed: int = 42):
+    def __init__(
+        self,
+        chunks: list[Chunk],
+        mode: str,
+        seed: int = 42,
+        dense_components: int | None = None,
+    ):
         self.chunks = chunks
         self.mode = mode
         self.vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True, stop_words="english")
@@ -74,7 +80,10 @@ class RetrievalIndex:
         if mode == "lexical":
             self.matrix = Normalizer().fit_transform(sparse)
         elif mode == "dense_lsa":
-            components = min(32, sparse.shape[0] - 1, sparse.shape[1] - 1)
+            requested_components = 32 if dense_components is None else dense_components
+            if requested_components < 2:
+                raise ValueError("dense_components must be at least 2")
+            components = min(requested_components, sparse.shape[0] - 1, sparse.shape[1] - 1)
             self.svd = TruncatedSVD(n_components=max(2, components), random_state=seed)
             self.matrix = Normalizer().fit_transform(self.svd.fit_transform(sparse))
         else:

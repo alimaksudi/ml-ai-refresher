@@ -30,6 +30,10 @@ def minmax_score_fusion(
     """Fuse the union of two candidate lists after per-list min-max scaling."""
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
+    if alpha == 0:
+        return list(sparse_results)
+    if alpha == 1:
+        return list(dense_results)
 
     def normalize(results: list[tuple[Chunk, float]]) -> dict[str, float]:
         if not results:
@@ -85,20 +89,23 @@ def _metric_summary(rows: list[dict]) -> dict:
 def evaluate_hybrid(
     data_dir: Path,
     output_path: Path | None = None,
-    top_k: int = 5,
+    top_k: int = 3,
     candidate_multiplier: int = 3,
     alpha_values: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0),
+    corpus_filename: str = "hybrid_corpus.json",
+    query_filename: str = "hybrid_queries.json",
+    dense_components: int = 4,
 ) -> dict:
     """Evaluate all retrievers on one corpus, label set, and chunk strategy."""
     if top_k < 1 or candidate_multiplier < 1:
         raise ValueError("top_k and candidate_multiplier must be positive")
-    corpus_path = data_dir / "corpus.json"
-    query_path = data_dir / "queries.json"
+    corpus_path = data_dir / corpus_filename
+    query_path = data_dir / query_filename
     corpus = load_json(corpus_path)
     query_data = load_json(query_path)
     chunks = build_chunks(corpus, "structure")
     sparse = BM25Index(chunks)
-    dense = RetrievalIndex(chunks, "dense_lsa")
+    dense = RetrievalIndex(chunks, "dense_lsa", dense_components=dense_components)
     candidate_k = top_k * candidate_multiplier
 
     mode_names = ["bm25", "dense_lsa", "hybrid_rrf"] + [
@@ -168,9 +175,12 @@ def evaluate_hybrid(
         "schema_version": "1.0",
         "corpus_version": corpus["version"],
         "query_version": query_data["version"],
+        "corpus_file": corpus_filename,
+        "query_file": query_filename,
         "corpus_sha256": file_sha256(corpus_path),
         "queries_sha256": file_sha256(query_path),
         "chunk_strategy": "structure",
+        "dense_representation": f"lsa_{dense_components}_components",
         "top_k": top_k,
         "candidate_k": candidate_k,
         "latency_note": "Local teaching measurements; hybrid branches are modelled as concurrent.",

@@ -63,9 +63,9 @@ Before RAG evaluation, the learner must:
    depth.
 2. Calculate one RRF result manually and explain why a document missing from one
    candidate list receives no contribution from that list.
-3. Diagnose one query where a base retriever wins, one where fusion improves ranking,
-   and one where fusion provides no improvement. If the current labelled set lacks
-   one category, add a labelled case instead of inventing a conclusion.
+3. Use component rows to show that BM25 ranks `h01` better, dense LSA ranks `h02`
+   better, RRF recovers both relevant sections for `h03`, and fusion adds no ranking
+   gain for `h04`. Explain the metric used for each comparison.
 4. Explain why both branches must apply equivalent authorization, freshness, and
    safety policies before fusion while keeping branch-specific tokenization.
 5. Demonstrate stable-ID deduplication, evidence provenance, candidate-depth control,
@@ -75,4 +75,5 @@ Before RAG evaluation, the learner must:
    an unconditional sum.
 
 Pass requires `make hybrid-rag-checkpoint`, all six explanations, and a scored query
-failure analysis. EVAL-03 remains blocked until this gate passes.
+failure analysis. The automated report must retain the four diagnostic behaviors in
+item 3 and abstain on `h05`. EVAL-03 remains blocked until this gate passes.

@@ -266,9 +266,12 @@ cells = [
     md(r"""
     ## 6 · Visualization and Measured Project Comparison
 
-    Now evaluate every method on the same corpus, structure-aware chunks, query
-    labels, `top_k=5`, and candidate depth 15. Dense LSA is a real statistical dense
-    representation, but it is not a neural sentence encoder.
+    Now evaluate every method on the versioned `hybrid_corpus.json` and
+    `hybrid_queries.json` benchmark with the same structure-aware chunks, labels,
+    `top_k=3`, and candidate depth 9. Its slices cover exact identifier, paraphrase,
+    mixed intent, no-gain control, and unanswerable behavior. Four-component dense
+    LSA is a real statistical dense representation, but it is not a neural sentence
+    encoder.
     """),
 
     code(r"""
@@ -298,10 +301,10 @@ cells = [
     """),
 
     md(r"""
-    **Expected result for the committed dataset.** BM25, dense LSA, RRF, and every
-    tested alpha reach Recall@5 of 0.875. BM25 has the best ranking metrics among the
-    simplest methods, and every method abstains on both unanswerable queries. If labels
-    or corpus hashes change, treat the printed report—not these historical expected
+    **Expected result for the committed diagnostic benchmark.** BM25 reaches
+    Recall@3 0.875, dense LSA reaches 0.75, and RRF reaches 1.0. RRF also has the best
+    MRR (0.875) and nDCG@3 (about 0.923). Every method abstains on `h05`. If labels or
+    corpus hashes change, treat the printed report—not these historical expected
     values—as authoritative and review the diff.
 
     A valid but weaker result is not a code failure. It means the method did not earn
@@ -319,9 +322,9 @@ cells = [
     rrf_recall = hybrid_report['experiments']['hybrid_rrf']['recall_at_k']
 
     fig, ax = plt.subplots()
-    ax.plot(alpha_values, alpha_recall, 'o-', label='Alpha fusion Recall@5')
+    ax.plot(alpha_values, alpha_recall, 'o-', label='Alpha fusion Recall@3')
     ax.plot(alpha_values, alpha_mrr, 's-', label='Alpha fusion MRR')
-    ax.axhline(rrf_recall, color='tab:red', linestyle='--', label=f'RRF Recall@5={rrf_recall:.3f}')
+    ax.axhline(rrf_recall, color='tab:red', linestyle='--', label=f'RRF Recall@3={rrf_recall:.3f}')
     ax.set_xlabel('alpha (0 = BM25 only, 1 = dense only)')
     ax.set_ylabel('Metric value')
     ax.set_ylim(0, 1.05)
@@ -332,12 +335,13 @@ cells = [
     """),
 
     md(r"""
-    **Interpretation.** The flat Recall@5 curve means hybrid search has not earned its
-    extra complexity on this labelled set. Alpha values from 0 through 0.75 reproduce
-    BM25's ranking metrics; alpha 1 reproduces dense LSA. RRF reproduces the dense
-    ranking metrics. This is a valid negative result, not a broken experiment. The
-    dataset also lacks a dedicated identifier slice, so the next responsible step is
-    to add representative labels—not to invent a hybrid gain.
+    **Interpretation.** RRF earns further evaluation on this diagnostic benchmark:
+    `h01` shows BM25's identifier ranking advantage, `h02` shows dense LSA's paraphrase
+    ranking advantage, and RRF recovers both relevant sections for mixed-intent `h03`.
+    All methods already rank `h04` correctly, so hybrid adds no value there. Weighted
+    alpha fusion does not match RRF on this set; a familiar alpha such as 0.5 is not
+    automatically a good default. Five teaching queries are still too small for a
+    deployment claim.
     """),
 
     code(r"""
@@ -346,6 +350,19 @@ cells = [
         method: {row['query_id']: row for row in result['rows']}
         for method, result in hybrid_report['experiments'].items()
     }
+    assert rows_by_method['bm25']['h01']['reciprocal_rank'] > rows_by_method['dense_lsa']['h01']['reciprocal_rank']
+    assert rows_by_method['dense_lsa']['h02']['reciprocal_rank'] > rows_by_method['bm25']['h02']['reciprocal_rank']
+    assert rows_by_method['hybrid_rrf']['h03']['recall_at_k'] == 1.0
+    assert rows_by_method['bm25']['h04']['reciprocal_rank'] == 1.0
+    assert rows_by_method['dense_lsa']['h04']['reciprocal_rank'] == 1.0
+    assert rows_by_method['hybrid_rrf']['h05']['abstained']
+
+    print('h01: BM25 ranks the exact identifier higher than dense LSA.')
+    print('h02: dense LSA ranks the paraphrase higher than BM25.')
+    print('h03: RRF retrieves both mixed-intent evidence sections.')
+    print('h04: all three methods rank the control correctly; fusion adds no gain.')
+    print('h05: RRF abstains when neither branch supplies evidence.')
+
     improvements = []
     for query_id in rows_by_method['hybrid_rrf']:
         bm25_value = rows_by_method['bm25'][query_id]['recall_at_k']
@@ -354,7 +371,7 @@ cells = [
         if rrf_value > min(bm25_value, dense_value):
             improvements.append((query_id, bm25_value, dense_value, rrf_value))
     if improvements:
-        print('Queries where RRF improves Recall@5 over at least one base retriever:')
+        print('Queries where RRF improves Recall@3 over at least one base retriever:')
         for query_id, bm25_value, dense_value, rrf_value in improvements:
             print(f'  {query_id}: BM25={bm25_value:.1f}, dense={dense_value:.1f}, RRF={rrf_value:.1f}')
     else:
@@ -428,22 +445,21 @@ cells = [
     ## 9 · Realistic Case Study — Curriculum Assistant
 
     **Teaching scenario, not a production benchmark.** The local curriculum assistant
-    receives direct, paraphrased, multi-concept, and unanswerable questions. Its
-    structure-aware chunks retain document and section provenance.
+    receives exact-identifier, paraphrased, mixed-intent, control, and unanswerable
+    questions. Its structure-aware chunks retain document and section provenance.
 
     **Measured workflow:**
 
-    1. BM25 and dense LSA each retrieve 15 candidates for a final `top_k` of 5.
+    1. BM25 and dense LSA each retrieve 9 candidates for a final `top_k` of 3.
     2. RRF or alpha fusion combines the candidate union by stable chunk ID.
     3. If neither branch has meaningful evidence, the system abstains.
     4. Recall, MRR, nDCG, abstention, latency, slices, and component rows are saved.
 
-    **Observed local result:** all methods reach Recall@5 of 0.875 and abstain on both
-    unanswerable queries. BM25 has the strongest ranking metrics among the simplest
-    options. On current evidence, keep BM25 and expand the labelled set with exact-ID
-    and mixed-intent slices before paying for a second index. This result does not
-    establish neural-embedding quality, distributed throughput, business lift, or
-    safety for another corpus.
+    **Observed local result:** RRF reaches Recall@3 1.0 versus BM25 0.875 and dense
+    LSA 0.75. It preserves abstention on the unanswerable query and improves the
+    mixed-intent case without changing the no-gain control. This supports a larger
+    evaluation, not immediate deployment. It does not establish neural-embedding
+    quality, distributed throughput, business lift, or safety for another corpus.
     """),
 
     md(r"""
@@ -573,9 +589,10 @@ cells = [
     - **Goal:** decide whether hybrid retrieval should replace the best single branch.
     - **Dataset columns:** query ID, query text, slice, relevant section IDs,
       answerable flag; candidate rows include stable section IDs and branch rankings.
-    - **Workflow:** add at least four labelled queries covering exact identifier,
-      paraphrase, mixed intent, and unanswerable → predict outcomes → evaluate BM25,
-      dense, RRF, and alpha → inspect slices → recommend one deployment choice.
+    - **Workflow:** predict the outcomes for committed cases `h01`–`h05` → evaluate
+      BM25, dense, RRF, and alpha → verify the expected diagnostic behavior → add one
+      fresh labelled query from a new domain → inspect slices → recommend one next
+      experiment or deployment choice.
     - **Expected output:** a versioned JSON report and a short decision note citing
       Recall@k, MRR, nDCG, abstention, candidate depth, latency limitations, and at
       least two query-level examples.

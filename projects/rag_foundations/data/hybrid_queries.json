@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "queries": [
+    {
+      "id": "h01",
+      "query": "ZX-410 reset",
+      "relevant_sections": ["devices.zx410"],
+      "slice": "exact_identifier"
+    },
+    {
+      "id": "h02",
+      "query": "What paid family help is available after becoming a caregiver?",
+      "relevant_sections": ["benefits.parental"],
+      "slice": "paraphrase"
+    },
+    {
+      "id": "h03",
+      "query": "ZX-410 recovery and paid time away for a new caregiver",
+      "relevant_sections": ["devices.zx410", "benefits.parental"],
+      "slice": "mixed_intent"
+    },
+    {
+      "id": "h04",
+      "query": "MFA password one-time code",
+      "relevant_sections": ["security.mfa"],
+      "slice": "no_gain_control"
+    },
+    {
+      "id": "h05",
+      "query": "Where is the vegan cafeteria menu?",
+      "relevant_sections": [],
+      "slice": "unanswerable"
+    }
+  ]
+}

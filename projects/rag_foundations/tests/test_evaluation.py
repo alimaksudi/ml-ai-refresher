@@ -63,6 +63,9 @@ def test_hybrid_report_compares_branches_on_the_same_labels(tmp_path):
     first = evaluate_hybrid(DATA, tmp_path / "hybrid-first.json")
     second = evaluate_hybrid(DATA, tmp_path / "hybrid-second.json")
     assert first["candidate_k"] == first["top_k"] * 3
+    assert first["corpus_file"] == "hybrid_corpus.json"
+    assert first["query_file"] == "hybrid_queries.json"
+    assert first["dense_representation"] == "lsa_4_components"
     assert first["corpus_sha256"] == second["corpus_sha256"]
     assert first["queries_sha256"] == second["queries_sha256"]
     expected_modes = {
@@ -73,8 +76,10 @@ def test_hybrid_report_compares_branches_on_the_same_labels(tmp_path):
     assert set(first["experiments"]) == expected_modes
     for mode in expected_modes:
         experiment = first["experiments"][mode]
-        assert len(experiment["rows"]) == 18
-        assert {"direct", "paraphrase", "multi_concept"}.issubset(experiment["slices"])
+        assert len(experiment["rows"]) == 5
+        assert {
+            "exact_identifier", "paraphrase", "mixed_intent", "no_gain_control"
+        }.issubset(experiment["slices"])
         for metric in ("recall_at_k", "mrr", "ndcg_at_k"):
             assert experiment[metric] == second["experiments"][mode][metric]
             assert 0 <= experiment[metric] <= 1
@@ -84,6 +89,38 @@ def test_hybrid_report_compares_branches_on_the_same_labels(tmp_path):
             assert isinstance(row["dense_candidate_sections"], list)
             if not row["sparse_candidate_sections"] and not row["dense_candidate_sections"]:
                 assert row["abstained"]
+
+    rows = {
+        mode: {row["query_id"]: row for row in experiment["rows"]}
+        for mode, experiment in first["experiments"].items()
+    }
+    assert rows["bm25"]["h01"]["reciprocal_rank"] > rows["dense_lsa"]["h01"]["reciprocal_rank"]
+    assert rows["dense_lsa"]["h02"]["reciprocal_rank"] > rows["bm25"]["h02"]["reciprocal_rank"]
+    assert rows["hybrid_rrf"]["h03"]["recall_at_k"] == 1.0
+    assert rows["hybrid_rrf"]["h03"]["recall_at_k"] > rows["bm25"]["h03"]["recall_at_k"]
+    assert rows["hybrid_rrf"]["h03"]["recall_at_k"] > rows["dense_lsa"]["h03"]["recall_at_k"]
+    assert all(rows[mode]["h04"]["reciprocal_rank"] == 1.0 for mode in expected_modes)
+    assert all(rows[mode]["h05"]["abstained"] for mode in expected_modes)
+    assert first["experiments"]["hybrid_rrf"]["recall_at_k"] == 1.0
+    for metric in ("recall_at_k", "mrr", "ndcg_at_k"):
+        assert first["experiments"]["hybrid_alpha_0.00"][metric] == first["experiments"]["bm25"][metric]
+        assert first["experiments"]["hybrid_alpha_1.00"][metric] == first["experiments"]["dense_lsa"][metric]
+
+
+def test_hybrid_benchmark_labels_reference_real_evidence():
+    corpus = load_json(DATA / "hybrid_corpus.json")
+    queries = load_json(DATA / "hybrid_queries.json")
+    section_ids = {
+        section["id"]
+        for document in corpus["documents"]
+        for section in document["sections"]
+    }
+    assert {query["slice"] for query in queries["queries"]} == {
+        "exact_identifier", "paraphrase", "mixed_intent",
+        "no_gain_control", "unanswerable",
+    }
+    for query in queries["queries"]:
+        assert set(query["relevant_sections"]).issubset(section_ids)
 
 
 def test_alpha_fusion_uses_candidate_union_and_stable_ids():

@@ -1,395 +1,135 @@
 {
-  "candidate_k": 15,
+  "candidate_k": 9,
   "chunk_strategy": "structure",
-  "corpus_sha256": "0d3f5bb8056befa20cd8a59a88033749856d9d2f1ec518d3fa4b3cba433fafdf",
+  "corpus_file": "hybrid_corpus.json",
+  "corpus_sha256": "4b0d5f2fc2d84e90f573c5ba2cb489580cf6cf331a33b407e0c8f48517bd7e9e",
   "corpus_version": "1.0",
+  "dense_representation": "lsa_4_components",
   "experiments": {
     "bm25": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.019509333974888757,
-      "mrr": 0.7625,
-      "ndcg_at_k": 0.7905445196485911,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.019316398538649082,
+      "mrr": 0.7083333333333333,
+      "ndcg_at_k": 0.7343758374885467,
       "recall_at_k": 0.875,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q02",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ],
-          "slice": "paraphrase",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q06",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
+          ],
+          "ndcg_at_k": 0.3065735963827292,
+          "query_id": "h03",
+          "recall_at_k": 0.5,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410"
+          ],
+          "slice": "mixed_intent",
+          "sparse_candidate_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q07",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "optimization.gradient"
+            "security.mfa",
+            "security.passwords"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -397,19 +137,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -418,415 +146,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.6,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.3333333333333333,
+          "recall_at_k": 0.5
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "dense_lsa": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.2502869982789788,
-      "mrr": 0.73125,
-      "ndcg_at_k": 0.7674776292468072,
-      "recall_at_k": 0.875,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.30893359798938036,
+      "mrr": 0.625,
+      "ndcg_at_k": 0.6577324383928644,
+      "recall_at_k": 0.75,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q02",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup"
           ],
-          "slice": "direct",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "devices.zx410",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q06",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "metrics.threshold"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q07",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
           ],
           "ndcg_at_k": 0.0,
-          "query_id": "q14",
+          "query_id": "h03",
           "recall_at_k": 0.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400"
           ],
-          "slice": "direct",
+          "slice": "mixed_intent",
           "sparse_candidate_sections": [
-            "chunking.structure"
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q15",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -834,19 +302,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -855,403 +311,153 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.5285714285714286,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.0,
+          "recall_at_k": 0.0
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_alpha_0.00": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.2541317759702603,
-      "mrr": 0.7625,
-      "ndcg_at_k": 0.7905445196485911,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.30964220059104264,
+      "mrr": 0.7083333333333333,
+      "ndcg_at_k": 0.7343758374885467,
       "recall_at_k": 0.875,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q02",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop"
+            "devices.zx410",
+            "language.equipment"
           ],
-          "slice": "paraphrase",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q06",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
+          ],
+          "ndcg_at_k": 0.3065735963827292,
+          "query_id": "h03",
+          "recall_at_k": 0.5,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410"
+          ],
+          "slice": "mixed_intent",
+          "sparse_candidate_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q07",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "optimization.gradient"
+            "security.mfa",
+            "security.passwords"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -1259,19 +465,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -1280,406 +474,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.6,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.3333333333333333,
+          "recall_at_k": 0.5
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_alpha_0.25": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.252490775892511,
-      "mrr": 0.7625,
-      "ndcg_at_k": 0.7905445196485911,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.3151085926219821,
+      "mrr": 0.7083333333333333,
+      "ndcg_at_k": 0.7343758374885467,
       "recall_at_k": 0.875,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q02",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop"
+            "devices.zx410",
+            "devices.zx400",
+            "operations.backup"
           ],
-          "slice": "paraphrase",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q06",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
+          ],
+          "ndcg_at_k": 0.3065735963827292,
+          "query_id": "h03",
+          "recall_at_k": 0.5,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410"
+          ],
+          "slice": "mixed_intent",
+          "sparse_candidate_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q07",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "optimization.gradient"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "optimization.gradient"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -1687,19 +630,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -1708,406 +639,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.6,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.3333333333333333,
+          "recall_at_k": 0.5
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_alpha_0.50": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.2526227763155475,
-      "mrr": 0.7625,
-      "ndcg_at_k": 0.7905445196485911,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.31305018928833306,
+      "mrr": 0.7083333333333333,
+      "ndcg_at_k": 0.7343758374885467,
       "recall_at_k": 0.875,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q02",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop"
+            "devices.zx410",
+            "devices.zx400",
+            "operations.backup"
           ],
-          "slice": "paraphrase",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q06",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "benefits.medical"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
+          ],
+          "ndcg_at_k": 0.3065735963827292,
+          "query_id": "h03",
+          "recall_at_k": 0.5,
+          "reciprocal_rank": 0.3333333333333333,
+          "retrieved_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410"
+          ],
+          "slice": "mixed_intent",
+          "sparse_candidate_sections": [
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q07",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "optimization.gradient"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "splits.train",
-            "optimization.gradient",
-            "leakage.definition"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -2115,19 +795,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -2136,406 +804,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.6,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.3333333333333333,
+          "recall_at_k": 0.5
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_alpha_0.75": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.25210866038428825,
-      "mrr": 0.7625,
-      "ndcg_at_k": 0.7905445196485911,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.31240879907272756,
+      "mrr": 0.75,
+      "ndcg_at_k": 0.7544456402014998,
       "recall_at_k": 0.875,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
+          ],
+          "ndcg_at_k": 1.0,
+          "query_id": "h01",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "devices.zx410",
+            "devices.zx400",
+            "operations.backup"
+          ],
+          "slice": "exact_identifier",
+          "sparse_candidate_sections": [
+            "devices.zx410",
+            "language.equipment"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
+          ],
+          "ndcg_at_k": 0.6309297535714575,
+          "query_id": "h02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 0.5,
+          "retrieved_sections": [
+            "language.caregiver",
+            "benefits.parental",
+            "benefits.medical"
+          ],
+          "slice": "paraphrase",
+          "sparse_candidate_sections": [
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
           ],
           "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q02",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
-          "recall_at_k": 1.0,
+          "query_id": "h03",
+          "recall_at_k": 0.5,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss"
+            "language.absence",
+            "devices.zx410",
+            "operations.retention"
           ],
-          "slice": "direct",
+          "slice": "mixed_intent",
           "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q05",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation"
           ],
-          "slice": "direct",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q06",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "metrics.threshold"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q07",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.gradient"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "splits.train",
-            "optimization.gradient",
-            "leakage.definition"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -2543,19 +960,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -2564,406 +969,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.6,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 0.5
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_alpha_1.00": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.2524789468023098,
-      "mrr": 0.73125,
-      "ndcg_at_k": 0.7674776292468072,
-      "recall_at_k": 0.875,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.30924180755391717,
+      "mrr": 0.625,
+      "ndcg_at_k": 0.6577324383928644,
+      "recall_at_k": 0.75,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q02",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
-          ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup"
           ],
-          "slice": "direct",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "devices.zx410",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q06",
+          "query_id": "h02",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "metrics.threshold"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical"
           ],
           "slice": "paraphrase",
           "sparse_candidate_sections": [
-            "metrics.threshold"
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q07",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.gradient"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
           ],
           "ndcg_at_k": 0.0,
-          "query_id": "q14",
+          "query_id": "h03",
           "recall_at_k": 0.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [
-            "chunking.structure"
+            "language.absence",
+            "operations.retention",
+            "devices.zx400"
           ],
-          "slice": "direct",
+          "slice": "mixed_intent",
           "sparse_candidate_sections": [
-            "chunking.structure"
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q15",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -2971,19 +1125,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -2992,415 +1134,155 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.5285714285714286,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.0,
+          "recall_at_k": 0.0
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     },
     "hybrid_rrf": {
-      "answerable_zero_result_rate": 0.0625,
-      "mean_latency_ms": 0.25329393974971026,
-      "mrr": 0.73125,
-      "ndcg_at_k": 0.7674776292468072,
-      "recall_at_k": 0.875,
+      "answerable_zero_result_rate": 0.0,
+      "mean_latency_ms": 0.31465018982999027,
+      "mrr": 0.875,
+      "ndcg_at_k": 0.9233566009043177,
+      "recall_at_k": 1.0,
       "rows": [
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.train",
-            "chunking.evaluate",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "leakage.preprocessing",
-            "monitoring.drift",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 0.38685280723454163,
-          "query_id": "q01",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.2,
-          "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "chunking.evaluate",
-            "splits.train",
-            "splits.validation",
-            "leakage.definition",
-            "metrics.threshold",
-            "monitoring.drift",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx400",
+            "devices.zx410",
+            "operations.backup",
+            "operations.travel",
+            "operations.retention",
+            "language.equipment",
+            "security.access",
+            "benefits.medical",
+            "benefits.vacation"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q02",
+          "query_id": "h01",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment",
+            "devices.zx400"
           ],
-          "slice": "paraphrase",
+          "slice": "exact_identifier",
           "sparse_candidate_sections": [
-            "splits.test",
-            "neural.early_stop",
-            "splits.validation"
+            "devices.zx410",
+            "language.equipment"
           ]
-        },
-        {
-          "abstained": true,
-          "answerable": true,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 0.0,
-          "query_id": "q03",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": []
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "benefits.parental",
+            "language.caregiver",
+            "benefits.medical",
+            "operations.retention",
+            "language.absence",
+            "benefits.vacation",
+            "language.equipment",
+            "devices.converter"
           ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q04",
+          "ndcg_at_k": 1.0,
+          "query_id": "h02",
+          "recall_at_k": 1.0,
+          "reciprocal_rank": 1.0,
+          "retrieved_sections": [
+            "benefits.parental",
+            "language.caregiver",
+            "language.absence"
+          ],
+          "slice": "paraphrase",
+          "sparse_candidate_sections": [
+            "language.caregiver",
+            "benefits.parental",
+            "language.absence",
+            "operations.retention"
+          ]
+        },
+        {
+          "abstained": false,
+          "answerable": true,
+          "dense_candidate_sections": [
+            "language.absence",
+            "operations.retention",
+            "devices.zx400",
+            "devices.zx410",
+            "benefits.medical",
+            "operations.backup",
+            "benefits.vacation",
+            "benefits.parental",
+            "operations.travel"
+          ],
+          "ndcg_at_k": 0.6934264036172708,
+          "query_id": "h03",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.5,
           "retrieved_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "language.absence",
+            "devices.zx410",
+            "benefits.parental"
           ],
-          "slice": "direct",
+          "slice": "mixed_intent",
           "sparse_candidate_sections": [
-            "leakage.definition",
-            "leakage.temporal",
-            "optimization.loss",
-            "monitoring.labels"
+            "language.absence",
+            "language.caregiver",
+            "devices.zx410",
+            "devices.converter",
+            "benefits.parental",
+            "language.equipment"
           ]
         },
         {
           "abstained": false,
           "answerable": true,
           "dense_candidate_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q05",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "metrics.precision",
-            "metrics.recall",
-            "optimization.loss",
-            "metrics.threshold",
-            "chunking.evaluate"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "metrics.recall",
-            "metrics.precision",
-            "optimization.loss",
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "metrics.threshold"
+            "security.mfa",
+            "security.access",
+            "benefits.vacation",
+            "security.passwords",
+            "operations.travel",
+            "language.absence",
+            "operations.backup",
+            "devices.converter",
+            "benefits.medical"
           ],
           "ndcg_at_k": 1.0,
-          "query_id": "q06",
+          "query_id": "h04",
           "recall_at_k": 1.0,
           "reciprocal_rank": 1.0,
           "retrieved_sections": [
-            "metrics.threshold"
+            "security.mfa",
+            "security.passwords",
+            "security.access"
           ],
-          "slice": "paraphrase",
+          "slice": "no_gain_control",
           "sparse_candidate_sections": [
-            "metrics.threshold"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q07",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.gradient",
-            "chunking.tradeoff"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "optimization.gradient",
-            "splits.train",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q08",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "optimization.scaling",
-            "neural.modes",
-            "splits.train",
-            "leakage.definition",
-            "splits.test"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "optimization.scaling",
-            "splits.train",
-            "neural.modes",
-            "leakage.definition",
-            "splits.test",
-            "optimization.loss",
-            "leakage.preprocessing"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.logits"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q09",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.logits"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "neural.logits"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q10",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "neural.modes",
-            "optimization.gradient",
-            "optimization.scaling"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "neural.modes",
-            "optimization.gradient"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.tfidf"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q11",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.tfidf"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "retrieval.tfidf"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q12",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ],
-          "slice": "multi_concept",
-          "sparse_candidate_sections": [
-            "retrieval.hybrid",
-            "retrieval.dense"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q13",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate",
-            "metrics.recall"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "chunking.tradeoff",
-            "retrieval.dense",
-            "chunking.evaluate"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "ndcg_at_k": 0.0,
-          "query_id": "q14",
-          "recall_at_k": 0.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [
-            "chunking.structure",
-            "chunking.tradeoff"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "chunking.structure"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "ndcg_at_k": 1.0,
-          "query_id": "q15",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 1.0,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ],
-          "slice": "paraphrase",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "retrieval.tfidf",
-            "monitoring.labels"
-          ]
-        },
-        {
-          "abstained": false,
-          "answerable": true,
-          "dense_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
-          ],
-          "ndcg_at_k": 0.6309297535714575,
-          "query_id": "q16",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.5,
-          "retrieved_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train"
-          ],
-          "slice": "direct",
-          "sparse_candidate_sections": [
-            "monitoring.drift",
-            "monitoring.response",
-            "metrics.precision",
-            "metrics.recall",
-            "splits.train",
-            "splits.validation"
+            "security.mfa",
+            "security.passwords"
           ]
         },
         {
@@ -3408,19 +1290,7 @@
           "answerable": false,
           "dense_candidate_sections": [],
           "ndcg_at_k": 1.0,
-          "query_id": "q17",
-          "recall_at_k": 1.0,
-          "reciprocal_rank": 0.0,
-          "retrieved_sections": [],
-          "slice": "unanswerable",
-          "sparse_candidate_sections": []
-        },
-        {
-          "abstained": true,
-          "answerable": false,
-          "dense_candidate_sections": [],
-          "ndcg_at_k": 1.0,
-          "query_id": "q18",
+          "query_id": "h05",
           "recall_at_k": 1.0,
           "reciprocal_rank": 0.0,
           "retrieved_sections": [],
@@ -3429,28 +1299,34 @@
         }
       ],
       "slices": {
-        "direct": {
-          "count": 7,
-          "mrr": 0.5285714285714286,
-          "recall_at_k": 0.8571428571428571
+        "exact_identifier": {
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         },
-        "multi_concept": {
-          "count": 2,
+        "mixed_intent": {
+          "count": 1,
+          "mrr": 0.5,
+          "recall_at_k": 1.0
+        },
+        "no_gain_control": {
+          "count": 1,
           "mrr": 1.0,
           "recall_at_k": 1.0
         },
         "paraphrase": {
-          "count": 7,
-          "mrr": 0.8571428571428571,
-          "recall_at_k": 0.8571428571428571
+          "count": 1,
+          "mrr": 1.0,
+          "recall_at_k": 1.0
         }
       },
       "unanswerable_abstention_rate": 1.0
     }
   },
   "latency_note": "Local teaching measurements; hybrid branches are modelled as concurrent.",
-  "queries_sha256": "80cd90de61a96408293c134f26eccb94439e7d2d8e49096799ab53447344cbf3",
+  "queries_sha256": "256827125f092861ca9f05ad8053fdc6e6994bb0d478e4096c009fc34f227a2e",
+  "query_file": "hybrid_queries.json",
   "query_version": "1.0",
   "schema_version": "1.0",
-  "top_k": 5
+  "top_k": 3
 }
