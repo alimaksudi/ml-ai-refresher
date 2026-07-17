@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "chunk_strategy": "sentence",
+  "queries": [
+    {"query_id":"q01","split":"development","relevant_passages":["splits.validation::sentence::1"]},
+    {"query_id":"q02","split":"development","relevant_passages":["splits.test::sentence::1"]},
+    {"query_id":"q03","split":"development","relevant_passages":["leakage.preprocessing::sentence::1"]},
+    {"query_id":"q04","split":"development","relevant_passages":["leakage.temporal::sentence::1"]},
+    {"query_id":"q05","split":"development","relevant_passages":["metrics.recall::sentence::1","metrics.recall::sentence::2"]},
+    {"query_id":"q06","split":"development","relevant_passages":["metrics.threshold::sentence::2"]},
+    {"query_id":"q07","split":"development","relevant_passages":["optimization.gradient::sentence::2"]},
+    {"query_id":"q08","split":"development","relevant_passages":["optimization.scaling::sentence::1","optimization.scaling::sentence::2"]},
+    {"query_id":"q17","split":"development","relevant_passages":[]},
+    {"query_id":"q09","split":"evaluation","relevant_passages":["neural.logits::sentence::2"]},
+    {"query_id":"q10","split":"evaluation","relevant_passages":["neural.modes::sentence::2"]},
+    {"query_id":"q11","split":"evaluation","relevant_passages":["retrieval.tfidf::sentence::2"]},
+    {"query_id":"q12","split":"evaluation","relevant_passages":["retrieval.hybrid::sentence::2"]},
+    {"query_id":"q13","split":"evaluation","relevant_passages":["chunking.tradeoff::sentence::1"]},
+    {"query_id":"q14","split":"evaluation","relevant_passages":["chunking.evaluate::sentence::1","chunking.evaluate::sentence::2"]},
+    {"query_id":"q15","split":"evaluation","relevant_passages":["monitoring.drift::sentence::3"]},
+    {"query_id":"q16","split":"evaluation","relevant_passages":["monitoring.response::sentence::1","monitoring.response::sentence::2"]},
+    {"query_id":"q18","split":"evaluation","relevant_passages":[]}
+  ]
+}

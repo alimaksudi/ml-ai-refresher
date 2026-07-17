@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -53,6 +53,13 @@ hybrid-rag-evaluate:
 rag-system-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.rag_evaluation_cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/rag_system_evaluation.json
 
+reranking-evaluate:
+	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.reranking_cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/reranking_evaluation.json
+
+neural-reranking-evaluate:
+	@test -n "$(RERANKER_MODEL)" || (echo "Set RERANKER_MODEL to a local path or Hugging Face model name." && exit 1)
+	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.reranking_cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/neural_reranking_evaluation.json --neural-model "$(RERANKER_MODEL)" $(if $(RERANKER_REVISION),--neural-revision "$(RERANKER_REVISION)",) $(if $(LOCAL_FILES_ONLY),--local-files-only,)
+
 rag-foundations-test:
 	PYTHONPATH=projects/rag_foundations/src python3 -m pytest projects/rag_foundations/tests -q
 
@@ -70,6 +77,9 @@ hybrid-rag-checkpoint: validate rag-foundations-test hybrid-rag-evaluate
 
 rag-system-checkpoint: validate rag-foundations-test rag-system-evaluate
 	@echo "Automated RAG evaluation gate passed. Complete the EVAL-03 extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
+
+reranking-checkpoint: validate rag-foundations-test reranking-evaluate
+	@echo "Automated reranking gate passed. Complete the RAG-07 extension in projects/rag_foundations/MASTERY_CHECKPOINT.md."
 
 capstone-serve:
 	PYTHONPATH=projects/wine_classifier/src uvicorn wine_classifier.app:app --host 127.0.0.1 --port 8000

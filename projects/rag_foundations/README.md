@@ -1,8 +1,9 @@
 # Measured RAG Foundations
 
-This project is the measurement spine for the retrieval curriculum. It uses a local,
-versioned corpus and labelled query/evidence set; no network, paid model, vector
-database, mock judge, or generated labels are required.
+This project is the measurement spine for the retrieval curriculum. Its standard
+checkpoints use a local, versioned corpus and labelled query/evidence set; no network,
+paid model, vector database server, mock judge, or generated labels are required. An
+optional pinned neural reranker extension is isolated from those offline checkpoints.
 
 Implemented comparisons:
 
@@ -29,10 +30,13 @@ make hybrid-rag-evaluate
 make hybrid-rag-checkpoint
 make rag-system-evaluate
 make rag-system-checkpoint
+make reranking-evaluate
+make reranking-checkpoint
 ```
 
-Use `HYBRID_MASTERY_EVIDENCE.md` and `RAG_EVALUATION_MASTERY_EVIDENCE.md` as mentor
-scoring references after attempting each teach-back independently.
+Use `HYBRID_MASTERY_EVIDENCE.md`, `RAG_EVALUATION_MASTERY_EVIDENCE.md`, and
+`RERANKING_MASTERY_EVIDENCE.md` as mentor scoring references after attempting each
+teach-back independently.
 
 The committed retrieval report is written to `artifacts/evaluation.json`; the
 grounded-answer report is written to `artifacts/grounded_evaluation.json`. Corpus,
@@ -69,3 +73,23 @@ retrieval precision/recall separate from required-term correctness, extractive s
 citation validity, and abstention. Required-term correctness and extractive support are
 explicitly named as proxies. Its committed report is
 `artifacts/rag_system_evaluation.json`.
+
+The RAG-07 extension freezes each hybrid RRF candidate set before comparing its
+original order with a query-aware pair scorer. Passage labels are split into
+development and held-out evaluation queries. Only development labels choose the
+blend weight. The deterministic scorer uses character n-gram TF-IDF so the benchmark
+remains offline and transparent; it is explicitly **not** presented as a neural
+cross-encoder. Its committed report is `artifacts/reranking_evaluation.json`.
+
+To measure a real neural cross-encoder without silently downloading a model during
+the standard checkpoint, run it explicitly:
+
+```bash
+make neural-reranking-evaluate \
+  RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  RERANKER_REVISION=c5ee24cb16019beea0893ab7796b1df96625c6b8
+```
+
+Add `LOCAL_FILES_ONLY=1` when that exact revision is already cached. Neural results
+belong to that model, revision, machine, candidate set, and label hash; they are not
+universal quality or latency claims.

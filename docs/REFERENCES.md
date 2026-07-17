@@ -49,6 +49,10 @@ or named methods.
 - Saad-Falcon et al., “ARES: An Automated Evaluation Framework for
   Retrieval-Augmented Generation Systems,” NAACL 2024.
   https://doi.org/10.18653/v1/2024.naacl-long.20
+- Nogueira and Cho, “Passage Re-ranking with BERT,” 2019.
+  https://arxiv.org/abs/1901.04085
+- Sentence Transformers, “CrossEncoder Usage.”
+  https://www.sbert.net/docs/cross_encoder/usage/usage.html
 - Qdrant, “Local Quickstart.”
   https://qdrant.tech/documentation/quick-start/
 - Qdrant, “Payload.”

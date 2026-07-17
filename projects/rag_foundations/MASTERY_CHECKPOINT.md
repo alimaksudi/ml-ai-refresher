@@ -97,3 +97,26 @@ Before reranking, the learner must:
 
 Pass requires `make rag-system-checkpoint`, all six explanations, and a fresh trace
 diagnosis scoring at least 8/10. RAG-07 remains blocked until this gate passes.
+
+## RAG-07 reranking extension
+
+Before advanced RAG, the learner must:
+
+1. Run `make reranking-evaluate` and verify the corpus, query, and passage-label hashes.
+2. Explain candidate retrieval versus reranking using a concrete fixed candidate list.
+3. Calculate one reciprocal-rank change manually and explain why candidate recall is
+   a hard ceiling that reranking cannot exceed.
+4. Explain why the character n-gram pair scorer teaches reranking mechanics but is
+   not a neural cross-encoder.
+5. State why tuning the blend on evaluation labels would leak information, then show
+   that the committed alpha was selected only from development queries.
+6. Diagnose one improvement, one regression or no-gain row, and the `q14` candidate
+   miss without changing retrieval depth, labels, and reranker together.
+7. Treat raw reranker scores as ordering values, not calibrated relevance
+   probabilities, unless calibration is separately demonstrated.
+8. If running the optional neural model, record its model name, revision, candidate
+   hash, label hash, device, and measured local latency before comparing it.
+
+Pass requires `make reranking-checkpoint`, all eight explanations, and a fresh
+held-out trace diagnosis scoring at least 8/10. RAG-08 remains blocked until this
+gate passes.

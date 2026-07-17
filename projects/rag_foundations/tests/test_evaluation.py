@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
+import pytest
+
 from rag_foundations.evaluation import build_chunks, evaluate, load_json
 from rag_foundations.grounded import ABSTENTION, evaluate_answers, evaluate_security
 from rag_foundations.hybrid import evaluate_hybrid, minmax_score_fusion
@@ -10,6 +13,10 @@ from rag_foundations.rag_evaluation import (
     apply_quality_gate,
     context_precision_at_k,
     evaluate_rag_systems,
+)
+from rag_foundations.reranking import (
+    blend_pair_and_candidate_scores,
+    evaluate_reranking,
 )
 from rag_foundations.vector_store import (
     QdrantVectorStore,
@@ -169,6 +176,60 @@ def test_rag_metric_helpers_make_edge_cases_explicit():
     assert gate["violations"] == [
         {"metric": "recall", "observed": 0.7, "required": 0.8}
     ]
+
+
+def test_reranking_labels_are_passage_level_and_split_before_tuning():
+    corpus = load_json(DATA / "corpus.json")
+    canonical_queries = load_json(DATA / "queries.json")["queries"]
+    labels = load_json(DATA / "reranking_queries.json")["queries"]
+    passage_ids = {
+        chunk.id for chunk in build_chunks(corpus, "sentence")
+    }
+    assert {label["query_id"] for label in labels} == {
+        query["id"] for query in canonical_queries
+    }
+    assert {label["split"] for label in labels} == {"development", "evaluation"}
+    assert all(
+        set(label["relevant_passages"]).issubset(passage_ids)
+        for label in labels
+    )
+    assert any(not label["relevant_passages"] for label in labels)
+
+
+def test_reranking_uses_fixed_candidates_and_held_out_evaluation(tmp_path):
+    first = evaluate_reranking(DATA, tmp_path / "reranking-first.json")
+    second = evaluate_reranking(DATA, tmp_path / "reranking-second.json")
+    assert first["corpus_sha256"] == second["corpus_sha256"]
+    assert first["queries_sha256"] == second["queries_sha256"]
+    assert first["reranking_labels_sha256"] == second["reranking_labels_sha256"]
+    assert first["local_pair_scorer"]["selected_alpha"] == 0.7
+    evaluation = first["systems"]["evaluation"]
+    repeated = second["systems"]["evaluation"]
+    for metric in (
+        "candidate_passage_recall", "candidate_hit_rate", "mrr",
+        "ndcg_at_k", "top_1_accuracy", "unanswerable_abstention_rate",
+    ):
+        assert evaluation["baseline_metrics"][metric] == repeated["baseline_metrics"][metric]
+        assert evaluation["local_pair_reranker_metrics"][metric] == repeated["local_pair_reranker_metrics"][metric]
+    assert evaluation["local_pair_reranker_metrics"]["mrr"] > evaluation["baseline_metrics"]["mrr"]
+    assert evaluation["local_pair_reranker_metrics"]["ndcg_at_k"] > evaluation["baseline_metrics"]["ndcg_at_k"]
+
+    rows = {row["query_id"]: row for row in evaluation["rows"]}
+    for row in rows.values():
+        assert set(row["baseline_ranking"]) == set(row["reranked_ranking"])
+    assert rows["q09"]["reranked_ranking"][0] == "neural.logits::sentence::2"
+    assert not rows["q14"]["candidate_hit"]
+    assert not set(rows["q14"]["reranked_ranking"]) & set(rows["q14"]["relevant_passages"])
+    assert rows["q18"]["reranked_ranking"] == []
+
+
+def test_reranking_blend_rejects_invalid_contracts():
+    pair_scores = np.array([0.2, 0.9, 0.4])
+    assert np.argmax(blend_pair_and_candidate_scores(pair_scores, 3, alpha=1.0)) == 1
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        blend_pair_and_candidate_scores(pair_scores, 3, alpha=1.1)
+    with pytest.raises(ValueError, match="score count"):
+        blend_pair_and_candidate_scores(pair_scores, 2, alpha=0.5)
 
 
 def test_alpha_fusion_uses_candidate_union_and_stable_ids():
