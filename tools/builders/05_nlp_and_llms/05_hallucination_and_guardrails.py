@@ -8,9 +8,9 @@ cells = [
     # NLP-05 · Hallucination and Guardrails
     ### Section 05 — Modern NLP and LLMs · *ML/AI Senior Mastery Curriculum*
 
-    > LLMs generate tokens by maximising $p(y_t | y_{<t}, x)$ — not by checking
-    > facts. When the model doesn't know something, it generates the most probable-
-    > looking continuation of the prompt, which is often a confident fabrication.
+    > LLMs estimate a next-token distribution $p(y_t | y_{<t}, x)$ and decode from it;
+    > this objective does not check facts. A fluent continuation may therefore be
+    > unsupported even when its token probability is high.
     > This is **hallucination**. This notebook teaches: why it happens (mathematically),
     > how to detect it (consistency checking, NLI, SelfCheckGPT), and how to build
     > **guardrail pipelines** that intercept unsafe inputs and outputs before they
@@ -35,15 +35,33 @@ cells = [
     - Visualising hallucination rate vs temperature and how it interacts with model size.
 
     **Why it matters**
-    - Hallucination is the primary production risk in every LLM deployment. A senior
-      ML engineer must be able to (1) quantify hallucination rate, (2) build detection,
-      and (3) choose the right mitigation for the risk profile.
+    - Unsupported generation is an important risk when outputs make factual claims.
+      Its severity depends on the application. A senior ML engineer must define the
+      failure, measure it, and choose mitigation appropriate to the risk profile.
 
     **Typical interview questions**
     - "What is hallucination and why does it happen?"
     - "How does SelfCheckGPT detect hallucination without a reference document?"
     - "What is the difference between intrinsic and extrinsic hallucination?"
     - "How do you build a guardrail pipeline for a production LLM?"
+    """),
+
+    md(r"""
+    ### Evidence rule for simulations and proxies
+
+    The synthetic samples and temperature curves below illustrate detector mechanics;
+    they are not measurements of a real model's hallucination rate. Temperature alone
+    neither causes nor fixes unsupported claims. For assessed work, use a declared
+    local model or fixed versioned outputs and keep these outcomes separate:
+
+    - factual correctness;
+    - support from supplied evidence;
+    - citation validity;
+    - refusal behavior;
+    - input/output safety-policy compliance.
+
+    Do not name lexical overlap, sample disagreement, or rule matches as factuality.
+    They are proxies whose relationship to the intended construct must be validated.
     """),
 
     md(r"""

@@ -62,6 +62,7 @@ lightning_logs/
 checkpoints/
 projects/*/artifacts/local/
 projects/*/artifacts/tmp/
+projects/tiny_language_model/artifacts/
 
 # Logs, profiles, and temporary files
 *.log

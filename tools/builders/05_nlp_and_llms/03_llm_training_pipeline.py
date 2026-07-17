@@ -16,9 +16,11 @@ cells = [
     > exams, and following nuanced instructions? This notebook traces the **four-stage
     > pipeline** used to build every modern LLM: **pre-training** (learn language from
     > text) → **continual pre-training** (adapt to a domain) → **supervised fine-tuning
-    > / SFT** (learn to follow instructions) → **alignment** (RLHF or DPO — make it
-    > helpful and safe). We implement each stage from first principles before showing
-    > the production tooling.
+    > / SFT** (learn to follow instructions) → **alignment** (RLHF or DPO — optimize
+    > measured preferences and constraints). This notebook maps the lifecycle after the
+    > student has trained the real decoder in `projects/tiny_language_model`. BPE is
+    > implemented fully; SFT, DPO, and LoRA use deliberately small arithmetic
+    > demonstrations. Those demonstrations are not completed model-training runs.
     """),
 
     md(r"""
@@ -38,8 +40,8 @@ cells = [
       reference model.
     - **DPO** (Direct Preference Optimisation): no reward model needed, just preference
       pairs — the Bradley-Terry model and the DPO loss.
-    - **LoRA** (Low-Rank Adaptation): freeze base model, add $BA$ adapters to attention
-      projections, train <1% of parameters.
+    - **LoRA** (Low-Rank Adaptation): freeze base weights and add low-rank adapters to
+      selected projections; measure trainable state and retention rather than assuming it.
 
     **Why it matters**
     - Understanding the training pipeline is prerequisite to: fine-tuning LLMs for
@@ -50,7 +52,26 @@ cells = [
     - "Explain BPE tokenisation."
     - "What is the difference between SFT and RLHF?"
     - "Why is DPO simpler than RLHF? What does it sacrifice?"
-    - "How does LoRA work and why does it avoid catastrophic forgetting?"
+    - "How does LoRA work, and why must retention still be evaluated?"
+    """),
+
+    md(r"""
+    ### Required entry evidence: train a language model before adapting one
+
+    Do not begin this pipeline as an API-only learner. First complete
+    `projects/tiny_language_model/MASTERY_CHECKPOINT.md`. You should be able to point to
+    a real checkpoint and show tokenization, shifted targets, causal masking, forward
+    loss, backward gradients, AdamW updates, validation loss, and generation.
+
+    | Evidence label | What it supports |
+    |---|---|
+    | **Executed training** | Parameters were updated and measured on held-out data |
+    | **Arithmetic demonstration** | A formula behaves as described on controlled numbers |
+    | **Schematic** | A relationship is visualized but not estimated here |
+    | **Tool pattern** | Integration code whose result needs a declared model and data |
+
+    The random-logit SFT and DPO cells below are arithmetic demonstrations. They cannot
+    establish convergence, alignment quality, safety, or production readiness.
     """),
 
     md(r"""
@@ -78,9 +99,11 @@ cells = [
     52K GPT-4-generated instruction-response pairs for ~$600. Spawned the instruction-
     tuning cottage industry.
 
-    **DPO (Rafailov et al., 2023)** simplified RLHF: derive that the optimal RLHF
+    **DPO (Rafailov et al., 2023)** offers a simpler offline preference-optimization
+    route for a particular regularized objective: derive that the optimal RLHF
     policy implicitly defines a reward, so you can optimise it directly from preference
-    pairs without ever training a reward model. Eliminates the unstable PPO loop.
+    pairs without training a separate reward model or running PPO. This removes parts
+    of the RLHF pipeline but introduces its own data, reference-policy, and tuning risks.
 
     **LoRA (Hu et al., 2021)** made fine-tuning affordable: instead of updating all
     $d \times k$ parameters of a weight matrix, add two low-rank matrices $A$ ($d
@@ -110,11 +133,13 @@ cells = [
 
     **LoRA intuition.** A pre-trained weight matrix $W_0 \in \mathbb{R}^{d \times k}$
     stores everything the model learned about language. Fine-tuning wants to add a
-    small correction $\Delta W$. LoRA assumes $\Delta W = BA$ where $B \in \mathbb{R}^{
-    d \times r}$ and $A \in \mathbb{R}^{r \times k}$ with $r \ll \min(d,k)$. Instead
+    small correction $\Delta W$. Using the row-vector convention in this notebook,
+    LoRA assumes $\Delta W = AB$ where $A \in \mathbb{R}^{d \times r}$ and
+    $B \in \mathbb{R}^{r \times k}$ with $r \ll \min(d,k)$. Instead
     of storing $dk$ floats for $\Delta W$, we store only $r(d+k)$ — with $r=8$,
     $d=k=4096$, that's 65K vs 16M. The hypothesis: the *task adaptation* of a large
-    model lives in a low-dimensional subspace.
+    model may be approximated in a low-dimensional subspace. Rank is a measured
+    capacity choice, not a guarantee.
 
     **DPO intuition.** RLHF trains a reward model $r_\phi$ and then optimises the
     policy with PPO. DPO notices that the optimal policy under the RLHF objective is:
@@ -202,7 +227,7 @@ cells = [
     ### 4.6 LoRA
 
     Replace a forward pass $h = xW_0$ with:
-    $$h = xW_0 + x\underbrace{BA}_{\Delta W},\quad B \in \mathbb{R}^{d \times r},\ A \in \mathbb{R}^{r \times k}$$
+    $$h = xW_0 + x\underbrace{AB}_{\Delta W},\quad A \in \mathbb{R}^{d \times r},\ B \in \mathbb{R}^{r \times k}$$
     Initialise $B=0$, $A \sim \mathcal{N}(0, \sigma^2)$ so $\Delta W = 0$ at start
     (no change to pre-trained behaviour). Scale by $\alpha/r$ (hyperparameter $\alpha$).
     Only $A$ and $B$ are trained; $W_0$ is frozen.
@@ -293,7 +318,10 @@ cells = [
     """),
 
     md(r"""
-    ### 5b Pre-training loss (causal LM cross-entropy)
+    ### 5b Pre-training loss arithmetic (causal LM cross-entropy)
+
+    This controlled calculation verifies the loss formula. The executed pre-training
+    run and held-out learning curve are in `projects/tiny_language_model`.
     """),
 
     code(r"""
@@ -325,7 +353,7 @@ cells = [
     """),
 
     md(r"""
-    ### 5c SFT loss — mask the prompt, train only on response tokens
+    ### 5c SFT loss arithmetic — mask direct prompt-token losses
     """),
 
     code(r"""
@@ -350,11 +378,12 @@ cells = [
     print(f"CLM loss (all 8 tokens):       {loss_clm_all:.3f}")
     print(f"SFT loss (response 4 tokens):  {loss_sft_only:.3f}")
     print("The SFT loss only penalises wrong predictions on the RESPONSE side.")
-    print("Prompt tokens provide context but don't contribute gradients.")
+    print("Prompt positions have no direct loss term, but their representations condition")
+    print("response predictions, so gradients can still flow through the prompt context.")
     """),
 
     md(r"""
-    ### 5d DPO loss from scratch
+    ### 5d DPO objective arithmetic
     """),
 
     code(r"""
@@ -392,15 +421,17 @@ cells = [
                         logits_w_ref,    logits_l_ref,
                         targets_w_dpo,   targets_l_dpo)
     print(f"DPO loss (policy prefers winner): {loss_dpo:.3f}  (lower is better)")
-    # Reverse: policy prefers loser.
-    loss_dpo_bad = dpo_loss(logits_l_policy, logits_w_policy,
+    # Bad policy: uncertain on winner targets and confident on loser targets.
+    logits_w_bad = rng.normal(0, 1, (T_dpo, V_sim))
+    logits_l_bad = np.eye(V_sim)[targets_l_dpo] * 5
+    loss_dpo_bad = dpo_loss(logits_w_bad, logits_l_bad,
                             logits_w_ref,    logits_l_ref,
                             targets_w_dpo,   targets_l_dpo)
     print(f"DPO loss (policy prefers loser):  {loss_dpo_bad:.3f}  (should be high)")
     """),
 
     md(r"""
-    ### 5e LoRA forward pass from scratch
+    ### 5e LoRA forward-pass arithmetic
     """),
 
     code(r"""
@@ -581,9 +612,9 @@ cells = [
     winner (positive margin), the loss is near zero and the gradient (red, dashed) is
     tiny — these "easy" preferences are already satisfied and contribute little to
     training. When the policy prefers the loser (negative margin), the loss is high
-    and the gradient is large — the model must be corrected. This **adaptive focusing
-    on hard preferences** is why DPO converges efficiently without the instability of
-    PPO's reward maximisation. Note: if the margin is very negative (model strongly
+    and the gradient is large — the objective applies a stronger correction. This
+    curve explains the local arithmetic; it does not establish that DPO will converge
+    faster or more reliably than PPO on a real model. If the margin is very negative
     prefers loser), the gradient *still* saturates — DPO doesn't give special
     treatment to very wrong answers, which can be a failure mode (§7).
     """),
@@ -593,7 +624,7 @@ cells = [
 
     | Failure | Symptom | Root cause | Mitigation |
     |---|---|---|---|
-    | **Catastrophic forgetting** | Model loses pre-trained capability after SFT | Full fine-tuning overwrites base weights | LoRA/PEFT; small LR; replay |
+    | **Catastrophic forgetting** | Model loses pre-trained capability after adaptation | Updates change useful behavior | Retention set; small LR; replay; compare LoRA and full tuning |
     | **Reward hacking (RLHF)** | Policy learns to fool reward model | Reward model not robust; KL penalty too weak | Stronger KL; better RM; constitutional AI |
     | **DPO collapse** | Policy ignores loser, doesn't learn winner | Margin saturates both sides | IPO/cDPO; add KL term; higher beta |
     | **Data contamination** | Inflated eval scores | Test prompts in SFT data | Dedup train vs eval; time-split evals |
@@ -624,9 +655,9 @@ cells = [
 
     print(f"Output change: full fine-tune = {delta_full:.4f}")
     print(f"Output change: LoRA (r=4)     = {delta_lora:.4f}")
-    print(f"LoRA protects base model output much better than full fine-tuning.")
-    print(f"At B=0 (init), delta_lora = 0 exactly; here B is randomly perturbed to show even")
-    print(f"a large LoRA perturbation stays controlled due to the low-rank bottleneck.")
+    print("This chosen low-rank perturbation changes fewer directions than the chosen full update.")
+    print("At B=0 the adapter update is zero, but later behavior can still regress.")
+    print("Use a retention holdout; this arithmetic example does not prove protection.")
     """),
 
     md(r"""
@@ -712,20 +743,21 @@ cells = [
     need domain accuracy without hallucination.
 
     **Pipeline chosen:**
-    1. **Continual pre-training** on 2B tokens of de-identified clinical notes + medical
-       textbooks (domain vocabulary adaptation, $\sim$200 GPU-hours on A100).
+    1. **Continual pre-training candidate** on licensed, de-identified clinical text.
+       Estimate compute from a measured pilot rather than a generic hardware number.
     2. **SFT** on 50K clinician-verified Q&A pairs in the ChatML format.
        Loss masked on prompt tokens.
     3. **DPO alignment** on 10K preference pairs where clinicians rated two responses
        and marked one as more accurate/safe.
 
-    **Why not RLHF?** PPO requires a reward model (additional training cost) and is
-    unstable — hyperparameter-sensitive, reward-hacking prone. DPO achieves comparable
-    quality with simpler training and is the current production default.
+    **Why compare DPO first?** PPO-based RLHF adds a reward model and online policy
+    optimization. DPO offers a simpler offline baseline. Neither is universally better;
+    compare task quality, safety slices, regressions, and operational cost.
 
-    **Why LoRA?** Full fine-tuning of 8B parameters requires 8× A100s and risks
-    catastrophic forgetting of medical knowledge already in the base model. LoRA on
-    $q$/$v$ projections ($r=16$) trains on 2 A100s in 6 hours.
+    **Why test LoRA?** It reduces optimizer and gradient state by updating adapters.
+    Hardware and duration depend on sequence length, batch, precision, and model. A
+    retention set is still required because frozen base weights do not prevent the
+    combined model from changing behavior.
 
     **Cost of mistakes:** hallucinated drug dosage → patient harm → liability. This
     mandates: (1) constitutional AI rules in the system prompt; (2) factual
@@ -739,21 +771,20 @@ cells = [
     md(r"""
     ## 10 · Production Considerations
 
-    - **Data quality > quantity for SFT.** 1K high-quality instruction-response pairs
-      often outperform 100K noisy ones. Data curation (filtering, dedup, quality
-      scoring) is the highest-leverage step.
+    - **Measure data quality and quantity together.** Filtering often helps, but no
+      fixed small dataset is universally sufficient. Compare controlled data slices.
     - **Deduplication for pre-training.** Near-duplicate removal (MinHash, exact
       substring) is essential — duplicates inflate effective data size, encourage
       memorisation, and leak test data.
     - **Gradient checkpointing + bf16.** Standard for fine-tuning on limited GPU:
       recompute activations during backward pass to save memory (at cost of ~30% more
       compute); use bfloat16 for numerical stability.
-    - **Learning rate schedule.** SFT: cosine decay from $2 \times 10^{-5}$ to $0$.
-      LoRA: $1 \times 10^{-4}$ (adapters start from scratch). DPO: $1 \times 10^{-6}$
-      (very conservative — small updates relative to SFT model).
+    - **Learning-rate schedule.** Treat published values as starting hypotheses. Run a
+      small sweep and diagnose divergence, underfitting, and retention on held-out data.
     - **Evaluation during training.** Monitor: SFT loss on held-out set, perplexity,
       and task-specific metrics (ROUGE, accuracy). Early-stop on task metric.
-    - **Merging LoRA for inference.** After training, merge $W = W_0 + BA\cdot\alpha/r$
+    - **Merging LoRA for inference.** With this notebook's row-vector convention, merge
+      $W = W_0 + AB\cdot\alpha/r$
       back into the base model weights — zero inference overhead vs the base model.
     - **System prompt as alignment.** For many production use cases, a well-crafted
       system prompt (Lesson NLP-04) combined with SFT is sufficient — RLHF/DPO adds
@@ -771,8 +802,8 @@ cells = [
     | Strategy | Cost | Risk | Quality | When to use |
     |---|---|---|---|---|
     | Prompt engineering | Zero | None | Baseline | Quick experiments (NLP-04) |
-    | LoRA/PEFT | Low (2–4 GPU) | Low (forgetting) | ≈full FT | **Default for domain adaptation** |
-    | Full fine-tuning | High (8-32 GPU) | Forgetting | Best | Sufficient data, compute budget |
+    | LoRA/PEFT | Lower trainable state | Behavior can still regress | Must measure | Resource-constrained adaptation |
+    | Full fine-tuning | Higher optimizer state | Behavior can regress | Must measure | Adapter capacity is measurably insufficient |
     | RAG (no FT) | Near-zero | Staleness | Good for factual | Knowledge-heavy tasks (RAG-02) |
 
     **Alignment strategy:**
@@ -780,18 +811,18 @@ cells = [
     | Strategy | RM needed | Stability | Cost | Quality |
     |---|---|---|---|---|
     | SFT only | No | High | Low | Good baseline |
-    | RLHF (PPO) | Yes | Low | High | Best (if tuned) |
-    | **DPO** | **No** | **High** | **Low** | **≈RLHF** |
-    | ORPO | No | High | Low | Combines SFT+DPO in one pass |
+    | RLHF (PPO) | Yes | More moving parts | Higher | Supports online policy optimization |
+    | **DPO** | **No separate RM** | Simpler offline loop | Lower | Baseline for preference pairs |
+    | ORPO | No | Needs its own evaluation | Lower | Combines supervised and preference terms |
 
     **LoRA rank selection:**
 
     | Rank | Trainable % | Quality | Memory | When |
     |---|---|---|---|---|
     | r=1 | ~0.05% | Low | Minimal | Prompt style only |
-    | r=8 | ~0.4% | Good | ~1GB | **Default** |
-    | r=16 | ~0.8% | Better | ~2GB | Domain-specific tasks |
-    | r=64 | ~3% | ≈Full FT | ~8GB | Complex domain shifts |
+    | r=8 | Depends on target layers | Unknown before evaluation | Lower | First capacity candidate |
+    | r=16 | Depends on target layers | Unknown before evaluation | Higher | Compare when rank 8 underfits |
+    | r=64 | Depends on target layers | Unknown before evaluation | Higher | Only after measured capacity failure |
     """),
 
     md(r"""
@@ -811,14 +842,14 @@ cells = [
       $\pi^*(y|x) \propto \pi_{\text{ref}} \exp(r/\beta)$ can be inverted to express
       $r$ as a function of $\pi^*$ and $\pi_{\text{ref}}$. Plugging into the Bradley-
       Terry preference model gives a loss purely in terms of policy log-ratios — no RM.
-    - *"How does LoRA avoid catastrophic forgetting?"* → $W_0$ is frozen; the full
-      pre-trained weight is preserved. $\Delta W = BA$ is initialised to zero so the
-      model starts at the same behaviour as the base. Gradients flow only through $A$
-      and $B$ — a tiny subspace. Even large adapter perturbations don't corrupt $W_0$.
+    - *"Does LoRA prevent catastrophic forgetting?"* → No guarantee. $W_0$ is frozen
+      and the adapter begins with zero effective update, but the combined model can
+      still change behavior. Measure task quality and retention on separate holdouts.
     - *"What is loss masking in SFT?"* → We compute the cross-entropy only on response
       tokens, not prompt tokens. If we trained on prompt tokens too, the model would
-      learn to "imitate" the instruction format, which wastes capacity and can cause
-      the model to predict the instruction rather than the response in edge cases.
+      optimize prompt reconstruction as an additional objective. The prompt remains
+      conditioning context, and response losses can still backpropagate through its
+      hidden representations.
 
     **Whiteboard questions**
     - "Write the DPO loss and explain each term." (§4.5)
@@ -827,11 +858,10 @@ cells = [
     **Strong vs weak answers**
     - *"When should we use RLHF vs DPO?"*
       - **Weak:** "RLHF is always better."
-      - **Strong:** "DPO is the default today: cheaper (no RM training), more stable
-        (no PPO), and achieves comparable quality on most tasks. RLHF/PPO may still
-        win if you have a very accurate RM (e.g., InstructGPT's scale of human labels),
-        or for online RL where the model needs to explore (DPO is offline). In practice,
-        start with DPO; only invest in RLHF if DPO plateaus."
+      - **Strong:** "DPO is a simpler offline baseline because it avoids a separate
+        reward model and PPO loop. PPO-based RLHF supports online policy optimization
+        but adds moving parts. Compare both only when the task, preference data, safety
+        slices, and operational budget justify the experiment."
 
     **Common mistakes:** thinking BPE is character-level (it's subword); confusing SFT
     loss (response-only) with pre-training loss (all tokens); not knowing LoRA merging
@@ -851,8 +881,8 @@ cells = [
     4. **RLHF stages.** Name the four steps. What is the reward model trained on?
     5. **DPO.** What is $\pi_{\text{ref}}$ and why is it needed? What does $\beta$
        control?
-    6. **LoRA.** Write $h = xW_0 + x(BA)\alpha/r$. Why is $B$ initialised to zero?
-    7. **Forgetting.** How does LoRA prevent catastrophic forgetting?
+    6. **LoRA.** Write $h = xW_0 + x(AB)\alpha/r$. Why is $B$ initialised to zero?
+    7. **Forgetting.** Why can a LoRA-adapted model regress even when $W_0$ is frozen?
     8. **When to use what.** Your company has 10K instruction-response pairs and 2 A100
        GPUs. What pipeline do you run?
     """),
@@ -901,9 +931,9 @@ cells = [
     internet-scale text via next-token prediction, budget by Chinchilla), **continual
     pre-training** (domain adaptation), **SFT** (teach instruction-following via
     response-only cross-entropy), and **alignment** (RLHF via PPO+RM, or DPO via
-    direct preference pairs — simpler and the current default). **LoRA** makes SFT
-    and DPO affordable by training only low-rank adapter matrices ($r \times (d+k)$
-    parameters) while keeping the base model frozen.
+    direct preference pairs with a simpler offline loop). **LoRA** can reduce trainable
+    state by updating low-rank adapter matrices while keeping base weights frozen; its
+    quality and retention still require direct evaluation.
 
     **Related lesson:** `NLP-04 · Prompt Engineering` — the other side of the LLM interface: how
     to construct system prompts, few-shot examples, chain-of-thought, and structured

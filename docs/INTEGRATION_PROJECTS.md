@@ -49,7 +49,23 @@ creating repetitive toy projects.
   complexity recommendation.
 - **Evaluation:** digit mastery checkpoint; the neural model is not required to win.
 
-## E. Text representation study — after DL-06 through NLP-03
+## E1. Tiny language model — after NLP-01 and DL-06 through DL-08
+
+- **Goal:** train and evaluate a decoder-only character language model without an API
+  key, then explain why every component exists.
+- **Dataset columns:** the bundled data is a raw character stream; generated training
+  examples contain input token IDs, next-token targets, split, and window position.
+- **Workflow:** contiguous text split, tokenizer fit on training text, shifted windows,
+  bigram baseline, one-batch overfit test, causal Transformer training, validation
+  checkpoint selection, decoding comparison, and one controlled architecture ablation.
+- **Expected output:** learning curves, dataset hash, model configuration, parameter
+  count, baseline and model validation loss, perplexity, saved weights, tokenizer,
+  fixed-seed samples, and a limitation statement.
+- **Evaluation:** no window may cross the split; future tokens must not affect earlier
+  logits; the student must report a losing comparison honestly. Use
+  `projects/tiny_language_model/MASTERY_CHECKPOINT.md`.
+
+## E2. Text representation study — after DL-06 through NLP-03
 
 - **Goal:** compare TF-IDF, static embeddings, recurrence, and a small Transformer
   representation on one classification or similarity task.
@@ -69,7 +85,10 @@ creating repetitive toy projects.
   stochastic variation, and classify failures.
 - **Expected output:** versioned prompt, eval set, validity/task/safety report, and
   regression examples.
-- **Evaluation:** no selection on final holdout and no unsupported “better” claim.
+- **Evaluation:** use a declared local model or fixed versioned outputs; synthetic
+  accuracy may test the harness but cannot rank prompt methods. No selection on the
+  final holdout and no unsupported “better” claim. Report correctness, grounding,
+  citation validity, refusal, and safety separately when they apply.
 
 ## G. Measured RAG foundation — after RAG-01 through RAG-03
 

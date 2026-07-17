@@ -501,19 +501,19 @@ cells = [
     """),
 
     code(r"""
-    # 8.2 OpenAI embeddings (guarded — requires API key).
-    print("OpenAI embeddings — production pattern (guarded):")
+    # 8.2 Optional hosted-embedding comparison. Core learning requires no API key.
+    print("Optional hosted embeddings pattern (guarded; not the default learning path):")
     print("  from openai import OpenAI")
     print("  client = OpenAI()")
     print("  resp = client.embeddings.create(")
-    print("    input=sentences, model='text-embedding-3-small')  # 1536d, $0.02/1M tokens")
+    print("    input=sentences, model='text-embedding-3-small')  # verify current specs before use")
     print("  embs = np.array([r.embedding for r in resp.data])")
     print()
     print("Key tradeoffs:")
     print("  - Proprietary: data leaves your infra")
     print("  - No fine-tuning control")
-    print("  - High quality but ongoing cost at scale")
-    print("  Prefer open-source (MiniLM, BGE, E5) for cost-sensitive production.")
+    print("  - Quality, latency, and current price must be measured for your data")
+    print("  Start locally for this course; add a hosted model only as a controlled comparison.")
     """),
 
     md(r"""
@@ -648,11 +648,10 @@ cells = [
     **Strong vs weak answers**
     - *"Should we use OpenAI embeddings or self-hosted in production?"*
       - **Weak:** "OpenAI is always better quality."
-      - **Strong:** "For most English tasks, `all-mpnet-base-v2` or `bge-large` is
-        within 1–2 Spearman points of `text-embedding-3-large` and costs zero per
-        query. Self-hosted wins on privacy, latency, and cost at scale (>100M calls/day
-        makes API cost prohibitive). OpenAI is the right default for early prototyping
-        or when fine-tuning isn't feasible."
+      - **Strong:** "Begin with a reproducible local baseline so the course works
+        without credentials. Compare hosted and self-hosted candidates on the same
+        retrieval slices, privacy constraints, latency, operational effort, and current
+        total cost. No provider is the universal default."
 
     **Common mistakes:** saying BERT embeddings are automatically good for semantic
     search (they're not without fine-tuning); confusing bi-encoder with cross-encoder;

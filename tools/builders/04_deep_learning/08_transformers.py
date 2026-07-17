@@ -17,11 +17,11 @@ cells = [
     > head self-attention** + **position-wise feed-forward** sub-layers, each wrapped in
     > a **residual connection** and **layer normalisation**, repeated $N$ times, topped
     > by token embeddings and **positional encoding** so the otherwise order-agnostic
-    > attention knows where each token sits. This is the architecture of GPT, BERT,
-    > Claude, Gemini, and every major LLM. We build a minimal **GPT-style** (decoder-
-    > only, causal) Transformer from scratch in NumPy, train it on a tiny character-
-    > level task, and close Section 04 by connecting every component back to what we built
-    > in Lessons DL-02 through DL-07.
+    > attention knows where each token sits. Variations of this block underpin GPT,
+    > BERT, T5, and many modern language models. We first expose a single-head forward
+    > pass in NumPy, then train a real multi-head **GPT-style** decoder with PyTorch
+    > autograd on a tiny character-level corpus. The two levels separate transparent
+    > arithmetic from a complete learning experiment.
     """),
 
     md(r"""
@@ -35,8 +35,9 @@ cells = [
     - **Token embeddings** and the **language-model head** (tied-weight linear layer).
     - **GPT (decoder-only, causal)** vs **BERT (encoder-only, bidirectional)** vs
       **encoder–decoder** — when each is used.
-    - A **miniature GPT from scratch** in NumPy: forward pass, training on a toy
-      character-level dataset, and generation via greedy / temperature sampling.
+    - A transparent single-head forward pass in NumPy followed by a real miniature
+      multi-head GPT trained with backpropagation and AdamW.
+    - Greedy, temperature, top-k, and top-p generation from learned weights.
     - **Scaling laws**, **pre-training vs fine-tuning**, and the production landscape
       of LLMs that Section 05 builds on.
 
@@ -135,9 +136,10 @@ cells = [
         return e / e.sum(axis=axis, keepdims=True)
 
     def layer_norm(x, eps=1e-5):
+        # Simplified LayerNorm without learned scale or shift.
         mean = x.mean(axis=-1, keepdims=True)
-        std = x.std(axis=-1, keepdims=True) + eps
-        return (x - mean) / std
+        variance = ((x - mean) ** 2).mean(axis=-1, keepdims=True)
+        return (x - mean) / np.sqrt(variance + eps)
 
     def gelu(x):
         return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x ** 3)))
@@ -154,8 +156,10 @@ cells = [
     $$PE(p,2i)=\sin\!\left(\frac{p}{10000^{2i/d}}\right),\quad
     PE(p,2i{+}1)=\cos\!\left(\frac{p}{10000^{2i/d}}\right).$$
     Different dimensions oscillate at different frequencies; each position gets a unique
-    vector. Crucially, $PE(p+k)$ can be expressed as a linear function of $PE(p)$, so
-    the model can generalise to unseen relative positions. Modern models often use
+    vector. $PE(p+k)$ has a structured relationship to $PE(p)$, which gives the model
+    a useful relative-position signal. This structure permits evaluation beyond the
+    trained length, but does not guarantee that the model will perform well there.
+    Modern models often use
     **RoPE** (Rotary Position Embedding) which bakes relative position into the Q/K
     dot product itself.
 
@@ -179,19 +183,20 @@ cells = [
     | **Encoder-decoder** | Enc: bi-dir; Dec: causal | Seq2seq (source→target) | Translation, summarisation |
 
     ### 4.5 Scaling laws
-    Kaplan et al.: loss $\propto (N/N_0)^{-\alpha_N}$, where $N$ is parameters, with
-    similar power laws in data and compute. Chinchilla: compute-optimal training uses
-    $N\approx 20C^{0.5}$ tokens per parameter (roughly 20 tokens per parameter).
-    Senior implication: to halve loss, you need roughly $10\times$ more compute — and
-    you should spend it equally on model size and data.
+    Kaplan et al. observed empirical power-law relationships between validation loss
+    and model size, data, and compute over the regimes they measured. Hoffmann et al.
+    later found that their studied compute-optimal models used roughly 20 training
+    tokens per parameter. Treat this as historical empirical guidance, not a universal
+    formula: architecture, data quality, objective, and the measured scale all matter.
     """),
 
     md(r"""
     ## 5 · Manual Implementation from Scratch
 
-    A minimal, single-layer, causal GPT in NumPy. We train it on a character-level
-    task (copy the last character seen twice, then generate) to verify the forward pass
-    and next-token loss, then do a greedy decode.
+    First inspect a minimal single-head causal forward pass in NumPy. This level is not
+    trainable because NumPy does not supply the autograd path used here. We then use a
+    directly implemented PyTorch decoder—without `nn.Transformer` or a hosted model—to
+    perform real multi-head training, validation, checkpoint preparation, and decoding.
     """),
 
     code(r"""
@@ -226,7 +231,7 @@ cells = [
         x = x + ffn(layer_norm(x), W1, b1, W2, b2)
         return x
 
-    # 5.5 Full mini-GPT forward pass (1 block).
+    # 5.5 Educational single-head decoder forward pass (1 block, no training yet).
     def init_params(vocab, d_model, d_ff, seed=0):
         r = np.random.default_rng(seed)
         s = 0.02
@@ -261,65 +266,53 @@ cells = [
     """),
 
     code(r"""
-    # 5.6 Train the mini-GPT on a character-level toy task.
-    # Task: learn "abcdefghij..." -- just predict the next char in a cyclic alphabet.
-    chars = "abcdefghijklmnopqrstuvwxyz "
-    c2i = {c: i for i, c in enumerate(chars)}
-    i2c = {i: c for c, i in c2i.items()}
+    # 5.6 Real training: import the inspectable project implementation.
+    import sys
+    from pathlib import Path
+    import torch
 
-    def make_batch(text, block_size=8):
-        ids = [c2i[c] for c in text]
-        xs, ys = [], []
-        for i in range(0, len(ids) - block_size, block_size):
-            xs.append(ids[i:i + block_size])
-            ys.append(ids[i + 1:i + block_size + 1])
-        return np.array(xs), np.array(ys)
+    candidates = [Path.cwd(), *Path.cwd().parents]
+    repo_root = next(path for path in candidates if (path / "projects/tiny_language_model").exists())
+    project_root = repo_root / "projects" / "tiny_language_model"
+    sys.path.insert(0, str(project_root / "src"))
 
-    # repeating "abcde..." at tiny scale
-    corpus = (chars * 60)[:300]
-    X_ids, Y_ids = make_batch(corpus, block_size=8)
+    from tiny_language_model.training import train
 
-    def cross_entropy(logits, targets):
-        probs = softmax(logits)
-        n = len(targets)
-        return -np.mean(np.log(probs[np.arange(n), targets] + 1e-12))
-
-    def compute_loss(params_all, X_ids, Y_ids):
-        total = 0.0
-        for x_row, y_row in zip(X_ids, Y_ids):
-            logits = forward(x_row, params_all)
-            total += cross_entropy(logits, y_row)
-        return total / len(X_ids)
-
-    # Simple gradient-free sanity: verify loss decreases with a few random-search steps
-    best_loss = compute_loss(params_all, X_ids[:4], Y_ids[:4])
-    print(f"Initial loss (random weights): {best_loss:.3f}")
-    print(f"Expected random loss: {np.log(vocab_size):.3f}  (uniform over {vocab_size} tokens)")
-    print("Loss is near random -- the model hasn't learned yet (training would require backprop).")
-    print("\\nThe key point: the FORWARD PASS and LOSS COMPUTATION are correct --")
-    print("backprop (DL-03) + Adam (FND-04) would drive this to near-zero for this easy task.")
+    corpus = (project_root / "data" / "learning_corpus.txt").read_text(encoding="utf-8")
+    trained_model, tokenizer, training_report = train(
+        corpus,
+        seed=42,
+        max_epochs=8,
+        batch_size=16,
+        config_overrides={"block_size": 32, "d_model": 32, "n_heads": 4, "n_layers": 1},
+    )
+    first_epoch = training_report["history"][0]
+    last_epoch = training_report["history"][-1]
+    print("initial validation loss:", round(training_report["initial_validation_loss"], 3))
+    print("first epoch:", {key: round(value, 3) if isinstance(value, float) else value for key, value in first_epoch.items()})
+    print("last epoch:", {key: round(value, 3) if isinstance(value, float) else value for key, value in last_epoch.items()})
+    print("best validation loss:", round(training_report["best_validation_loss"], 3))
+    print("bigram validation loss:", round(training_report["bigram_validation_loss"], 3))
+    assert training_report["best_validation_loss"] < training_report["initial_validation_loss"]
     """),
 
     code(r"""
-    # 5.7 Generation: greedy decode from the trained-weights GPT using temperature sampling.
-    def generate(params_all, seed_ids, n_new, temperature=1.0):
-        ids = list(seed_ids)
-        r = np.random.default_rng(99)
-        for _ in range(n_new):
-            logits = forward(np.array(ids[-16:]), params_all)   # use last 16 tokens
-            last_logit = logits[-1] / max(temperature, 1e-6)    # temperature scaling
-            probs = softmax(last_logit)
-            next_id = r.choice(len(probs), p=probs)
-            ids.append(next_id)
-        return "".join(i2c[i] for i in ids)
-
-    seed = "abc"
-    seed_ids = [c2i[c] for c in seed]
-    generated = generate(params_all, seed_ids, n_new=20, temperature=1.0)
-    print(f"Seed: '{seed}'")
-    print(f"Generated (random weights, temperature=1.0): '{generated}'")
-    print("\\nWith trained weights this would produce coherent continuations.")
-    print("Temperature < 1.0: sharper (less random); Temperature > 1.0: more creative.")
+    # 5.7 Generation from learned weights. Greedy is the deterministic baseline.
+    prompt = "the model"
+    prompt_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
+    greedy_ids = trained_model.generate(prompt_ids.clone(), 50, temperature=0)
+    top_k_ids = trained_model.generate(
+        prompt_ids.clone(), 50, temperature=0.8, top_k=8,
+        generator=torch.Generator().manual_seed(42),
+    )
+    top_p_ids = trained_model.generate(
+        prompt_ids.clone(), 50, temperature=0.8, top_p=0.9,
+        generator=torch.Generator().manual_seed(42),
+    )
+    print("greedy:", tokenizer.decode(greedy_ids[0].tolist()))
+    print("top-k :", tokenizer.decode(top_k_ids[0].tolist()))
+    print("top-p :", tokenizer.decode(top_p_ids[0].tolist()))
+    print("These samples demonstrate learned continuation mechanics, not factual reliability.")
     """),
 
     md(r"""
@@ -365,27 +358,24 @@ cells = [
     Ns = np.logspace(6, 12, 100)                        # 1M to 1T params
     alpha = 0.076                                       # Kaplan et al. exponent (approx)
     loss = 2.5 * (Ns / 1e6) ** (-alpha)                # illustrative power law
-    chinchilla = 2.5 * (Ns / 1e6) ** (-alpha * 1.15)  # compute-optimal frontier (lower)
+    data_balanced = 2.5 * (Ns / 1e6) ** (-alpha * 1.15)  # illustrative, not fitted data
     fig, ax = plt.subplots()
     ax.loglog(Ns / 1e9, loss, label="fixed dataset (original GPT3 regime)")
-    ax.loglog(Ns / 1e9, chinchilla, "--", label="compute-optimal (Chinchilla)")
+    ax.loglog(Ns / 1e9, data_balanced, "--", label="illustrative data-balanced curve")
     ax.set_xlabel("model size (B parameters)"); ax.set_ylabel("validation loss (schematic)")
     ax.set_title("Figure 2 — Scaling laws: loss is a smooth power law in model size")
     ax.legend()
     plt.show()
-    print("Key: to halve loss, you need ~10x more compute.")
-    print("Chinchilla: spend compute equally on data and model size (~20 tokens per param).")
+    print("Conceptual plot only: these curves are not measurements from this notebook.")
+    print("Scaling exponents and compute-optimal allocations depend on the measured regime.")
     """),
 
     md(r"""
-    **Figure 2.** Empirically (Kaplan et al., Chinchilla), validation loss follows a
-    smooth **power law** in model size $N$ — doubling parameters gives a predictable
-    improvement. The original GPT-3 regime (top, blue) used large models with fixed
-    data; the Chinchilla (dashed) result showed that scaling data *alongside* model
-    size achieves the same loss for less compute (~20 tokens per parameter is optimal).
-    This is why modern training runs carefully budget both dimensions. For a senior
-    engineer, scaling laws give principled guidance: "can we hit the target loss with
-    this compute budget, and how should we split it between model size and data?"
+    **Figure 2.** This is a labelled schematic, not benchmark evidence. Published work
+    has observed approximate power-law relationships over specific ranges of models,
+    data, and compute. The useful engineering lesson is to measure a small scaling
+    frontier for the actual architecture and data before extrapolating a large run;
+    a single tokens-per-parameter ratio is not a universal law.
     """),
 
     code(r"""
@@ -517,14 +507,12 @@ cells = [
     """),
 
     md(r"""
-    **Scratch vs production.** Our NumPy mini-GPT implements the exact same forward
-    pass as GPT-2, GPT-4, or Claude at the architectural level — embedding → positional
-    encoding → Transformer blocks (attention + FFN + layer norm + residual) → language
-    model head. What the production stack adds: BPE/BPE-byte tokenisation, billions of
-    parameters trained on trillions of tokens, Flash Attention, mixed-precision, KV
-    caching, alignment (RLHF/DPO), and the HuggingFace generation API (`model.generate`
-    handles beam search, top-p, temperature, stopping criteria). Section 05 builds on this
-    foundation.
+    **Teaching model vs production model.** The NumPy forward pass and trained PyTorch
+    project expose the common decoder pattern—embedding, positional information,
+    attention, FFN, normalization, residual paths, and an LM head. Production model
+    families vary in normalization, positional method, attention layout, activation,
+    tokenization, parallelism, and many other details. The project is an architectural
+    microscope, not a small replica of any proprietary model.
     """),
 
     md(r"""
@@ -536,10 +524,11 @@ cells = [
 
     **Architecture choice:**
     - **Decoder-only (GPT-style)** for open-ended response generation.
-    - **Start from a pre-trained base** (e.g., Llama, Mistral, GPT) — pre-training
-      would cost millions of dollars; fine-tuning on domain data costs thousands.
-    - **LoRA/PEFT** fine-tuning: freeze 99% of weights and train small adapter matrices
-      — efficient, prevents catastrophic forgetting of general capability.
+    - **Start from a suitable pre-trained base** when its license, data policy,
+      evaluation, and deployment constraints fit. Training cost depends strongly on
+      scale and infrastructure, so estimate it for the actual workload.
+    - **LoRA/PEFT** fine-tuning: freeze base weights and train small adapter matrices.
+      This reduces trainable parameters, but does not guarantee retention or quality.
 
     **Business objectives:** high factual accuracy on product/policy questions; latency
     under 2 s; avoid harmful or off-brand outputs.
@@ -564,8 +553,9 @@ cells = [
       each new token only computes $O(T)$ work rather than $O(T^2)$.
     - **Quantization** (INT8/INT4): reduce model size and inference cost with minimal
       quality loss — essential for edge/cost-sensitive deployments.
-    - **LoRA/PEFT fine-tuning**: fine-tune only low-rank adapter matrices (<<1% of
-      params) — prevents catastrophic forgetting and makes fine-tuning affordable.
+    - **LoRA/PEFT fine-tuning**: update low-rank adapters rather than every base-model
+      weight. Measure retention and task quality; limited updates do not prevent every
+      form of regression.
     - **Alignment** (RLHF/DPO): a language model trained on next-token prediction is
       not intrinsically helpful or safe — alignment is a separate production step
       (Lesson NLP-05).
@@ -594,15 +584,15 @@ cells = [
     |---|---|---|
     | Sinusoidal (original) | No learned params; relative-position expressible | Limited length extrapolation |
     | Learned absolute | Flexible | Doesn't extrapolate beyond trained length |
-    | **RoPE** | Relative, length-extrapolates, fast | More complex to implement |
-    | ALiBi | Simple bias on scores; extrapolates | Less expressive |
+    | **RoPE** | Encodes relative offsets in Q/K rotations; widely used | Long-length behavior still needs evaluation |
+    | ALiBi | Simple distance-dependent score bias | Quality and extrapolation depend on task and training |
 
     **Fine-tuning strategy:**
 
     | Strategy | Cost | Risk | Use |
     |---|---|---|---|
     | Full fine-tuning | High | Catastrophic forgetting | Enough data, enough budget |
-    | **LoRA/PEFT** | **Low** | Low | **Default for domain adaptation** |
+    | **LoRA/PEFT** | Lower trainable state | Still needs regression testing | Resource-constrained adaptation |
     | Prompt engineering | Zero | None | Quick experiments (NLP-04) |
     | RAG | Low (no gradient) | Freshness | Factual/knowledge-heavy tasks (Section 06) |
 
@@ -637,10 +627,10 @@ cells = [
     **Strong vs weak answers**
     - *"Should we pre-train or fine-tune for our domain?"*
       - **Weak:** "Pre-train from scratch for best results."
-      - **Strong:** "Almost never pre-train unless you have exceptional data and a
-        compute budget in the millions; start from an open-source pretrained model and
-        use LoRA/PEFT fine-tuning — same quality, <1% of compute, avoids catastrophic
-        forgetting."
+      - **Strong:** "First compare prompting, retrieval, and adaptation against a
+        measured baseline. If weight updates are justified, evaluate LoRA against full
+        tuning under the same data and holdout; lower trainable state does not guarantee
+        equal quality or prevent every regression."
     - *"Our Transformer loses coherence on sequences >4K tokens."*
       - **Weak:** "Use a larger model."
       - **Strong:** "The model's PE and attention patterns may not extrapolate beyond
@@ -682,10 +672,10 @@ cells = [
        optimise, and how does that differ from "understanding"?
 
     **Beginner → Intermediate (coding)**
-    3. Extend the mini-GPT to **2 Transformer blocks** and verify that the residual
-       stream variance stays controlled across both layers.
-    4. Add **temperature sampling** with $T\in\{0.1, 0.5, 1.0, 2.0\}$ to `generate`
-       and show how outputs become more/less random.
+    3. Run the project one-batch overfit diagnostic. If loss does not fall sharply,
+       inspect target shifting, the causal mask, gradients, and optimizer step in order.
+    4. Compare greedy, temperature, top-k, and top-p under one fixed prompt and seed.
+       Describe diversity without treating one sample as a quality evaluation.
 
     **Intermediate (analysis)**
     5. Replace sinusoidal PE with **random absolute PE** (learned during training) in
@@ -712,14 +702,16 @@ cells = [
     each wrapped in a **residual connection and layer normalisation** (Fig 4), with a
     **positional encoding** to give attention its missing sense of order (Fig 1). This
     fully-parallel architecture scales smoothly with data and compute (**scaling laws**,
-    Fig 2) and is the foundation of every modern LLM. We built a mini-GPT from scratch
-    in NumPy (§5), verified the forward pass and generation, and traced each component
+    Fig 2) and is the foundation of many modern LLM families. We exposed the arithmetic
+    in NumPy, then trained a real multi-head decoder with PyTorch (§5), verified that
+    validation loss falls, and generated from learned weights. We traced each component
     to its motivation: residuals from Lesson DL-03, attention from Lesson DL-07, LN from
     Lesson FND-04, loss from Lesson FND-02.
 
     **Section 04 (Deep Learning) is now complete.** You can build the full deep-learning
     stack from first principles: MLP → backprop → CNN → RNN/LSTM → attention →
-    Transformer.
+    Transformer. Complete `projects/tiny_language_model/MASTERY_CHECKPOINT.md` before
+    moving into sentence embeddings, alignment, prompting, or RAG.
 
     **Related lesson:** `Section 05 — NLP and LLMs` begins with `NLP-01 · TF-IDF and Word Embeddings` —
     how language was represented before Transformers and how those ideas live on inside

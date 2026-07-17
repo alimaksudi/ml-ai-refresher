@@ -1,0 +1,43 @@
+language models learn by predicting the next token.
+the tokenizer turns text into a sequence of token ids.
+the embedding table turns each token id into a vector.
+attention lets each token gather information from earlier tokens.
+the causal mask hides future tokens during next token prediction.
+the query asks what information the current token needs.
+the key describes what information an earlier token offers.
+the value carries the information that attention can combine.
+multiple heads can learn different ways to combine context.
+position embeddings tell the model where each token occurs.
+a residual connection preserves an earlier representation.
+layer normalization keeps the training signal well scaled.
+the feed forward network transforms each position independently.
+logits are unnormalized scores for every possible next token.
+softmax changes logits into probabilities that sum to one.
+cross entropy penalizes low probability for the correct next token.
+backpropagation calculates how each parameter affected the loss.
+adamw updates the parameters and applies decoupled weight decay.
+training loss measures fit on examples used for optimization.
+validation loss measures generalization to held out text.
+a bigram model is a useful baseline for a tiny language model.
+perplexity is the exponential of average cross entropy loss.
+greedy decoding always selects the highest probability token.
+temperature changes how sharp or flat the token distribution is.
+top k sampling keeps only the k highest scoring token choices.
+top p sampling keeps the smallest set with enough probability mass.
+generation repeats prediction one token at a time.
+a checkpoint stores learned parameters and reproducibility metadata.
+an overfit one batch test checks whether the training path can learn.
+lower loss alone does not prove that generated statements are true.
+retrieval supplies evidence but the language model still generates the answer.
+evaluation must separate retrieval quality from answer quality.
+
+tokens become vectors before they enter a transformer block.
+vectors become queries keys and values inside attention.
+attention mixes information across earlier sequence positions.
+the feed forward layer transforms the result at each position.
+residual paths and normalization make stacked blocks easier to train.
+the language model head maps hidden vectors back to token logits.
+teacher forcing predicts all next tokens in a training window in parallel.
+causal generation predicts one new token and then repeats the forward pass.
+the training objective rewards likely continuation rather than factual truth.
+small controlled experiments explain why each design choice is used.

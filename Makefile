@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-test tiny-lm-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -37,6 +37,15 @@ deep-learning-test:
 
 deep-learning-checkpoint: validate deep-learning-test
 	@echo "Automated checkpoint passed. Complete projects/digit_classifier/MASTERY_CHECKPOINT.md."
+
+tiny-lm-train:
+	PYTHONPATH=projects/tiny_language_model/src python3 -m tiny_language_model.training --output-dir projects/tiny_language_model/artifacts
+
+tiny-lm-test:
+	PYTHONPATH=projects/tiny_language_model/src python3 -m pytest projects/tiny_language_model/tests -q
+
+tiny-lm-checkpoint: validate tiny-lm-test
+	@echo "Automated language-model gate passed. Complete projects/tiny_language_model/MASTERY_CHECKPOINT.md before RAG."
 
 rag-foundations-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/evaluation.json

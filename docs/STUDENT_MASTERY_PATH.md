@@ -83,6 +83,21 @@ Complete DL-01 through DL-05 and the digit checkpoint. You must be able to trace
 tensor shapes, write train/eval loops, gradient-check, diagnose learning curves, and
 justify why a neural model does or does not beat a simpler baseline.
 
+## Gate F — Language Model foundations
+
+Complete NLP-01 and DL-06 through DL-08, then complete the
+`projects/tiny_language_model` checkpoint. You must be able to trace the full path
+from raw text to token IDs, shifted targets, `B × T × C` hidden states, causal
+attention, next-token logits, cross-entropy, backpropagation, validation, checkpoint,
+and generation without using a hosted API.
+
+Passing requires a one-batch overfit diagnostic, a controlled architecture ablation,
+comparison with a bigram baseline, and teach-back of why next-token likelihood is not
+the same as factual truth. Complete this gate before NLP-02, NLP-03, prompting,
+hallucination mitigation, or RAG. If it does not pass, remediate the smallest failed
+dependency: tensor shapes in DL-01, optimization in DL-04, sequence targets in DL-06,
+attention and masking in DL-07, or the complete decoder in DL-08.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

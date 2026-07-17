@@ -79,6 +79,46 @@ cells = [
     print("X", X.shape, X.dtype, X.device, "y", y.shape, y.dtype)
     """),
     md(r"""
+    ### 4.1 Sequence-tensor bridge for later language models
+
+    Image and tabular batches often use `(B,d)`. Language models add a sequence axis:
+    `(B,T,C)`, where $B$ is batch size, $T$ is tokens per training window, and $C$ is
+    the vector width for each token. Splitting $C$ across $H$ attention heads produces
+    `(B,H,T,D)`, where $D=C/H` is the width of one head.
+
+    A next-token target is not a separate label column. For token IDs
+    `[4, 9, 2, 7, 1]`, an input window `[4, 9, 2, 7]` has target `[9, 2, 7, 1]`.
+    This is **teacher forcing**: at every position, the model sees real earlier tokens
+    and predicts the following one. A causal mask hides positions to the right so a
+    prediction cannot copy its answer from the future.
+
+    Softmax converts one row of logits into probabilities. PyTorch cross-entropy uses
+    a numerically stable log-softmax internally, so pass raw logits rather than applying
+    softmax first. Broadcasting lets a `(C,)` position or bias vector combine with all
+    `B × T` token vectors; always write the intended expanded shape before relying on it.
+    """),
+    code(r"""
+    # Shape drill used by RNN, attention, Transformer, and language-model lessons.
+    B, T, C, H, V = 2, 4, 8, 2, 11
+    token_ids = torch.tensor([[4, 9, 2, 7, 1], [3, 5, 8, 6, 0]])
+    inputs, targets = token_ids[:, :-1], token_ids[:, 1:]
+    hidden = torch.randn(B, T, C)
+    qkv = torch.randn(B, T, 3 * C)
+    query, key, value = qkv.chunk(3, dim=-1)
+    query = query.view(B, T, H, C // H).transpose(1, 2)
+    scores = query @ query.transpose(-2, -1)
+    logits = torch.randn(B, T, V)
+    loss = nn.functional.cross_entropy(logits.reshape(B * T, V), targets.reshape(B * T))
+
+    print("inputs / targets:", inputs.shape, targets.shape, "(B,T)")
+    print("hidden:", hidden.shape, "(B,T,C)")
+    print("one split Q tensor:", query.shape, "(B,H,T,D)")
+    print("attention scores:", scores.shape, "(B,H,T,T)")
+    print("logits / scalar loss:", logits.shape, loss.shape)
+    assert inputs[0].tolist() == [4, 9, 2, 7]
+    assert targets[0].tolist() == [9, 2, 7, 1]
+    """),
+    md(r"""
     ## 5 · Manual Implementation from Scratch
 
     Autograd records tensor operations whose inputs require gradients. The scalar

@@ -39,7 +39,8 @@ The implemented Deep Learning path is:
 5. DL-05 convolutional networks and spatial inductive bias
 6. NLP-01 TF-IDF and word embeddings before sequence architectures
 7. DL-06 RNN/LSTM → DL-07 Attention → DL-08 Transformers
-8. Digit-classifier mastery checkpoint with baseline, ablation, and teach-back
+8. Pre-RAG language-model gate → `projects/tiny_language_model`
+9. Digit-classifier mastery checkpoint with baseline, ablation, and teach-back
 
 ---
 
@@ -80,6 +81,9 @@ The implemented Deep Learning path is:
 - [x] DL-06 — RNN and LSTM → `notebooks/04_deep_learning/06_rnn_and_lstm.ipynb`
 - [x] DL-07 — Attention Mechanism → `notebooks/04_deep_learning/07_attention_mechanism.ipynb`
 - [x] DL-08 — Transformers → `notebooks/04_deep_learning/08_transformers.ipynb`
+- [x] Offline tiny language model — true causal training, validation, checkpointing,
+  decoding comparisons, automated tests, and human mastery assessment →
+  `projects/tiny_language_model/`
 
 ## Section 05 — Modern NLP and LLMs
 - [x] NLP-01 — TF-IDF and Word Embeddings → `notebooks/05_nlp_and_llms/01_tfidf_and_word_embeddings.ipynb`

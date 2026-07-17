@@ -35,15 +35,29 @@ cells = [
     - When prompting beats fine-tuning and when fine-tuning is necessary (§11).
 
     **Why it matters**
-    - For 80% of production LLM tasks, a well-engineered prompt delivers as much value
-      as a fine-tuned model — at zero training cost. Knowing how to construct that
-      prompt is the highest-leverage LLM engineering skill.
+    - Prompting is the lowest-cost behavioral baseline because it does not update model
+      weights. Its value relative to retrieval or fine-tuning must be measured on a
+      versioned evaluation set rather than assumed from a few examples.
 
     **Typical interview questions**
     - "What is chain-of-thought prompting and why does it work?"
     - "How does ReAct work?"
     - "When would you use few-shot vs fine-tuning?"
     - "How do you prevent prompt injection in production?"
+    """),
+
+    md(r"""
+    ### Evidence rule for this lesson
+
+    Complete the tiny-language-model gate first so a prompt is understood as a token
+    sequence conditioning a next-token distribution, not as an API command. Several
+    cells below are explicitly simulated to make experiment structure runnable without
+    credentials. Their accuracy values are synthetic and cannot support a claim that
+    one prompting method is better.
+
+    The required integration lab must use either a declared local model or fixed,
+    versioned outputs from a declared model. Record model revision, prompt version,
+    decoding settings, evaluation cases, and failures. Hosted APIs are optional.
     """),
 
     md(r"""
