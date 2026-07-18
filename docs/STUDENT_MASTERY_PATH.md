@@ -140,6 +140,14 @@ Complete NLP-08 and the alignment checkpoint. Passing requires response-only seq
 log probabilities, a frozen reference, real DPO loss reduction, held-out preference
 improvement, retention evidence, correct PPO/DPO distinction, and at least 17/20.
 
+## Gate L — LLM evaluation mastery
+
+Complete EVAL-02 and `projects/language_model_adaptation/EVALUATION_CHECKPOINT.md`.
+Passing requires a predeclared evaluation contract, untouched paired examples,
+correct manual lexical metrics, real local model evidence, uncertainty plus coverage
+limits, slice inspection, and a regression gate that enforces retention guardrails.
+Complete this gate before changing prompts in NLP-04.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

@@ -112,6 +112,10 @@ creating repetitive toy projects.
 
 ## F. Prompt evaluation lab — after EVAL-02 and NLP-04 through NLP-05
 
+Before starting, pass the LLM evaluation checkpoint in
+`projects/language_model_adaptation/EVALUATION_CHECKPOINT.md`; prompt variants must
+not be created before the evaluation contract and fixed comparison set exist.
+
 - **Goal:** treat prompt changes as versioned experiments.
 - **Dataset columns:** case ID, input, expected schema, rubric/reference, safety slice,
   and prompt version.

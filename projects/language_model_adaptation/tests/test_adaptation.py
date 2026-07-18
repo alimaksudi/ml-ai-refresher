@@ -35,24 +35,44 @@ def test_sft_labels_ignore_prompt_and_padding_but_keep_response():
 def test_lora_starts_as_exact_zero_update_and_freezes_base():
     torch.manual_seed(4)
     tokenizer = CharacterTokenizer(BASE_TRAIN)
-    config = ModelConfig(tokenizer.vocab_size, block_size=16, d_model=16, n_heads=4, n_layers=1)
+    config = ModelConfig(
+        tokenizer.vocab_size, block_size=16, d_model=16, n_heads=4, n_layers=1
+    )
     base = TinyLanguageModel(config).eval()
     adapted = add_lora_to_attention(copy.deepcopy(base), rank=2).eval()
     tokens = torch.tensor([tokenizer.encode("the quick brown ")])
     assert torch.allclose(base(tokens)[0], adapted(tokens)[0], atol=1e-7)
-    assert all(not parameter.requires_grad for parameter in adapted.token_embedding.parameters())
-    assert any(parameter.requires_grad for name, parameter in adapted.named_parameters() if "adapter" in name)
+    assert all(
+        not parameter.requires_grad
+        for parameter in adapted.token_embedding.parameters()
+    )
+    assert any(
+        parameter.requires_grad
+        for name, parameter in adapted.named_parameters()
+        if "adapter" in name
+    )
 
 
 def test_full_lab_updates_every_real_stage_and_reports_retention_costs():
     report = run_adaptation_lab(seed=42)
     continued = report["continued_pretraining"]
     assert continued["domain_loss_after"] < continued["domain_loss_before"]
-    assert continued["base_retention_loss_after"] > continued["base_retention_loss_before"]
+    assert (
+        continued["base_retention_loss_after"] > continued["base_retention_loss_before"]
+    )
     tuning = report["instruction_tuning"]
     assert tuning["full"]["train_loss_after"] < tuning["full"]["train_loss_before"]
     assert tuning["lora"]["train_loss_after"] < tuning["lora"]["train_loss_before"]
-    assert tuning["lora"]["trainable_parameters"] < tuning["full"]["trainable_parameters"]
+    assert (
+        tuning["lora"]["trainable_parameters"] < tuning["full"]["trainable_parameters"]
+    )
     alignment = report["preference_alignment"]
     assert alignment["dpo_loss_after"] < alignment["dpo_loss_before"]
-    assert alignment["held_out_preference_accuracy_after"] > alignment["held_out_preference_accuracy_before"]
+    assert (
+        alignment["held_out_preference_accuracy_after"]
+        > alignment["held_out_preference_accuracy_before"]
+    )
+    details = alignment["held_out_examples"]
+    assert len(details) == 2
+    assert all(row["margin_after"] > row["margin_before"] for row in details)
+    assert all(row["correct_after"] for row in details)

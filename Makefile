@@ -78,7 +78,7 @@ language-model-adaptation-test:
 	PYTHONPATH=projects/language_model_adaptation/src:projects/tiny_language_model/src python3 -m pytest projects/language_model_adaptation/tests -q
 
 language-model-adaptation-checkpoint: validate language-model-adaptation-test language-model-adaptation-train
-	@echo "Automated adaptation gates passed. Complete all three checkpoints in projects/language_model_adaptation."
+	@echo "Automated adaptation gates passed. Complete all four checkpoints in projects/language_model_adaptation."
 
 rag-foundations-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/evaluation.json

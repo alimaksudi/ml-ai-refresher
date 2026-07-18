@@ -123,6 +123,9 @@ The implemented Deep Learning path is:
 ## Section 08 — Evaluation
 - [x] EVAL-01 — Classical ML Evaluation → `notebooks/08_evaluation/01_classical_ml_evaluation.ipynb`
 - [x] EVAL-02 — LLM Evaluation → `notebooks/08_evaluation/02_llm_evaluation.ipynb`
+  Rebuilt around an evaluation contract, real local adaptation outcomes, manual
+  perplexity/exact-match/token-F1/ROUGE-L, paired bootstrap uncertainty, honest
+  semantic-metric naming, slice inspection, and a predeclared regression gate.
 - [x] EVAL-03 — RAG Evaluation → `notebooks/08_evaluation/03_rag_evaluation.ipynb`
 - [x] EVAL-04 — Human Evaluation → `notebooks/08_evaluation/04_human_evaluation.ipynb`
 - [x] EVAL-05 — LLM-as-a-Judge → `notebooks/08_evaluation/05_llm_as_a_judge.ipynb`

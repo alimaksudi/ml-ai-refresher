@@ -1,943 +1,530 @@
-"""Builder for Lesson EVAL-02 — LLM Evaluation."""
-import os, sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from nbbuild import build, code, md
+"""Builder for EVAL-02 — LLM Evaluation Foundations."""
+
+import os
+import sys
+
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+from nbbuild import build, code, md  # noqa: E402
+
 
 cells = [
     md(r"""
-    # EVAL-02 · LLM Evaluation
-    ### Section 08 — Evaluation · *ML/AI Senior Mastery Curriculum*
+    # EVAL-02 · LLM Evaluation Foundations
+    ### Decide whether a language-model change really helped
 
-    > How do you know if your LLM is getting better or worse? This notebook teaches
-    > the complete LLM evaluation toolkit: reference-based metrics (BLEU, ROUGE-L,
-    > BERTScore), intrinsic metrics (perplexity), task-specific metrics (pass@k for
-    > code, exact match + F1 for QA), and production regression testing patterns.
+    A model can have lower training loss and still become worse for users. This lesson
+    builds a small, reproducible evaluation system around the local models trained in
+    NLP-03, NLP-07, and NLP-08. It moves from one evaluation question to an appropriate
+    metric, examines individual failures, and adds paired uncertainty before creating a
+    regression gate. No hosted API or model download is required.
+
+    **Prerequisites:** DL-08, NLP-03, NLP-07, NLP-08, train/validation/test separation,
+    cross-entropy, probability, and cosine similarity. **Core time:** 5–8 hours.
     """),
-
     md(r"""
     ## 1 · Learning Objectives
 
-    **What you will master**
-    - **BLEU** (from scratch): n-gram precision with brevity penalty — the standard for translation.
-    - **ROUGE-L** (from scratch): longest common subsequence — the standard for summarisation.
-    - **BERTScore** (intuition + cosine similarity): semantic similarity beyond n-gram overlap.
-    - **Perplexity** (from scratch): intrinsic language model quality measure.
-    - **Task-specific metrics**: exact match + token F1 for QA; pass@k for code generation.
-    - **pass@k formula**: $1 - \binom{n-c}{k}/\binom{n}{k}$ — unbiased estimator.
-    - **Production regression testing**: golden dataset, metric distributions, drift alerting.
-    - **Benchmark suite**: MMLU, GSM8K, HumanEval, TruthfulQA — what each measures.
+    After this lesson, you can:
 
-    **Why it matters**
-    - Every model update or prompt change needs a measurement of impact. Without evaluation
-      metrics, you are guessing. BLEU/ROUGE are easy to implement and fast; BERTScore is
-      more semantically aware. Pass@k is the industry standard for code generation.
-      Perplexity is used for language model selection and data quality filtering.
+    - write an evaluation contract before selecting a metric;
+    - keep evaluation examples separate from training and detect obvious contamination;
+    - convert held-out token loss to perplexity and explain what it does not measure;
+    - calculate exact match, token F1, and ROUGE-L by hand and in Python;
+    - distinguish lexical overlap, sentence-embedding similarity, and real BERTScore;
+    - compare the real base, continued-pretraining, SFT/LoRA, and DPO evidence;
+    - inspect paired examples, slices, and confidence intervals instead of trusting one mean;
+    - build a deterministic regression gate with an explicit acceptance policy.
     """),
-
     md(r"""
-    ## 2 · Historical Motivation
+    ## 2 · Historical Motivation and Practical Problem
 
-    **BLEU (Papineni et al., 2002).** Bilingual Evaluation Understudy. Introduced at IBM
-    for machine translation. Computes n-gram precision of the candidate translation against
-    one or more reference translations, with a brevity penalty to prevent trivially short
-    outputs. Still the most widely reported MT metric despite well-known limitations.
+    **Decision:** should we replace model A with model B after changing its data,
+    weights, alignment objective, or prompt?
 
-    **ROUGE (Lin, 2004).** Recall-Oriented Understudy for Gisting Evaluation. Designed
-    for summarisation (where recall of key content matters more than precision). ROUGE-N
-    (n-gram recall), ROUGE-L (longest common subsequence). Standard for summarisation tasks.
+    This is difficult because “better” depends on the task. A fluent answer can be
+    wrong. A correct answer can use different wording from one reference. A lower
+    perplexity can coexist with worse instruction following. An average can hide one
+    dangerous slice.
 
-    **BERTScore (Zhang et al., 2020).** Uses pre-trained BERT to compute token-level
-    cosine similarities between candidate and reference, then takes F1 of best-match scores.
-    Overcomes BLEU/ROUGE's weakness: "The president declared war" ≈ "The head of state
-    announced hostilities" but BLEU = 0 (no n-gram overlap). BERTScore captures semantics.
-
-    **Perplexity (Shannon, 1948 / Brown et al., 1992).** A language model's perplexity
-    on a test set measures how well it predicts unseen text. Lower perplexity = better model.
-    Derived from cross-entropy: $PP = 2^{H}$ where $H$ is the per-token cross-entropy.
-
-    **pass@k (Chen et al., 2021 — HumanEval paper).** Measures code generation quality:
-    the probability that at least one of k generated samples passes all unit tests.
-    Uses an unbiased estimator to avoid sampling all n candidates.
-
-    **MMLU (Hendrycks et al., 2021).** 57-subject multiple-choice benchmark spanning STEM,
-    humanities, and social science. Tests world knowledge and reasoning. Standard LLM capability metric.
+    The earlier baseline was training loss. It answers whether the optimizer fitted its
+    objective, not whether the system improved on untouched examples. Later, BLEU and
+    ROUGE automated reference comparison; embedding metrics added semantic matching.
+    None is a universal quality score. We therefore begin with the decision and data,
+    then choose a small metric suite whose limitations are visible.
     """),
-
     md(r"""
-    ## 3 · Intuition & Visual Understanding
+    ## 3 · Intuition and Evaluation Contract
 
-    **BLEU intuition:**
-    ```
-    Reference:  "The cat sat on the mat"
-    Candidate:  "The cat sat on the mat"  → BLEU = 1.0 (perfect)
-    Candidate:  "A cat on the mat"        → BLEU ≈ 0.5 (partial n-gram overlap)
-    Candidate:  "The dog ate the mat"     → BLEU ≈ 0.2 (few n-gram matches)
-    Candidate:  "The"                     → BLEU ≈ 0.0 (brevity penalty kills it)
-    ```
+    Think of evaluation as a driving test. Fuel efficiency, parking accuracy, braking
+    distance, and passenger comfort measure different things. Averaging them without a
+    rule cannot decide whether a driver is safe. The analogy stops where model outputs
+    become subjective: human rubrics and disagreement need their own design in EVAL-04.
 
-    **ROUGE-L intuition:**
-    ```
-    Reference: "The cat sat on the mat"
-    LCS:       "cat sat mat" → length 3
-    ROUGE-L = LCS / len(reference) [recall] or LCS / len(candidate) [precision]
-    ```
+    Write this contract before running either model:
 
-    **BERTScore intuition:**
-    ```
-    "The president declared war" ↔ "The head of state announced hostilities"
-    BLEU: 0.0 (no n-gram match)
-    BERTScore: ~0.85 (embeddings of "president" ≈ "head of state"; "declared" ≈ "announced")
-    ```
+    | Contract field | Tiny example |
+    |---|---|
+    | Decision | Replace the SFT policy with the DPO policy? |
+    | Unit | One untouched prompt and response comparison |
+    | Required behavior | Chosen response receives higher response-token probability |
+    | Primary metric | Held-out preference accuracy |
+    | Guardrail metric | Held-out SFT loss must not regress beyond the agreed budget |
+    | Slices | Prompt type and response length |
+    | Generation settings | Not applicable to this likelihood comparison |
+    | Acceptance rule | Improve primary metric and stay within the retention budget |
 
-    **Perplexity intuition:**
-    - Low perplexity: model assigns high probability to the test text → "not surprised."
-    - High perplexity: model is "confused" by the test text → poor fit.
-    - PP = 1: perfect prediction. PP = V (vocabulary size): random model.
-
-    **pass@k intuition:**
-    ```
-    n=10 samples generated, c=3 pass tests.
-    pass@1:  3/10 = 30% (average 1 sample)
-    pass@5:  P(at least 1 of 5 passes) = 1 - C(7,5)/C(10,5) ≈ 83%
-    pass@10: P(at least 1 of 10 passes) = 1 - C(7,10)/C(10,10) = 1 (if c≥1)
-    ```
+    Use automatic metrics for repeatable narrow claims. Avoid deploying from one score,
+    evaluating on training examples, or inventing a threshold after seeing the results.
+    Prefer exact executable checks for structured tasks; use EVAL-04 for human judgment
+    and EVAL-05 for carefully validated model-based judging.
     """),
-
-    code(r"""
-    import re
-    import math
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from collections import Counter
-    from itertools import combinations
-
-    rng = np.random.default_rng(42)
-    plt.rcParams['figure.figsize'] = (10, 5)
-    plt.rcParams['axes.grid'] = True
-    plt.rcParams['grid.alpha'] = 0.3
-    print('Dependencies loaded.')
-    """),
-
     md(r"""
     ## 4 · Mathematical Foundations
 
-    ### 4.1 BLEU
+    ### 4.1 Held-out loss and perplexity
 
-    Let $w$ = tokenised candidate, $r$ = tokenised reference.
+    For average held-out token loss $L$, perplexity is
 
-    **Modified n-gram precision:**
-    $p_n = \frac{\sum_{\text{n-gram} \in w} \min(\text{count}(\text{n-gram}, w), \text{count}(\text{n-gram}, r))}{\sum_{\text{n-gram} \in w} \text{count}(\text{n-gram}, w)}$
+    $$PP=\exp(L).$$
 
-    **Brevity penalty:**
-    $BP = \begin{cases} 1 & |w| > |r| \\ e^{1 - |r|/|w|} & |w| \le |r| \end{cases}$
+    **Read aloud:** perplexity equals the exponential of average negative log-likelihood.
+    $PP$ and $L$ are positive scalars; $\exp$ is the exponential function. If
+    $L=\ln 4\approx1.386$, then $PP=\exp(1.386)\approx4$. The model behaves as though it
+    faces roughly four equally plausible next-token choices on average. Lower is better
+    only on the same tokenization, text, and loss definition. It does not measure truth,
+    safety, or instruction following.
 
-    **BLEU-N:**
-    $\text{BLEU-N} = BP \cdot \exp\left(\sum_{n=1}^{N} w_n \log p_n\right)$
+    ### 4.2 Exact match and token F1
 
-    with uniform weights $w_n = 1/N$.
+    After a declared normalization, exact match is 1 when prediction and reference are
+    identical and 0 otherwise. For overlapping token counts:
 
-    ### 4.2 ROUGE-L
+    $$P=\frac{o}{m},\qquad R=\frac{o}{n},\qquad F_1=\frac{2PR}{P+R}.$$
 
-    Let $\text{LCS}(w, r)$ = length of longest common subsequence.
+    **Read aloud:** precision is overlap divided by predicted tokens; recall is overlap
+    divided by reference tokens; F1 is their harmonic mean. $o$ is the clipped overlap
+    count, $m$ is prediction length, and $n$ is reference length; all are non-negative
+    integers. For prediction `orbit around star` and reference `planet orbit around star`,
+    $o=3,m=3,n=4$, so $P=1$, $R=0.75$, and $F_1=0.857$. F1 gives partial lexical credit,
+    but word order, meaning, and factual correctness can still be wrong.
 
-    $R_{\text{lcs}} = \frac{\text{LCS}(w,r)}{|r|}$ (recall), $P_{\text{lcs}} = \frac{\text{LCS}(w,r)}{|w|}$ (precision)
+    ### 4.3 ROUGE-L
 
-    $\text{ROUGE-L} = \frac{(1+\beta^2) P_{\text{lcs}} R_{\text{lcs}}}{R_{\text{lcs}} + \beta^2 P_{\text{lcs}}}$ with $\beta \to \infty$ (recall-focused).
+    Let $\ell$ be the length of the longest common subsequence (LCS): matching tokens in
+    the same order, with gaps allowed. Set $P_L=\ell/m$, $R_L=\ell/n$, and apply the same
+    F1 formula. For `cat sat mat` versus `the cat sat on mat`, $\ell=3,m=3,n=5$;
+    $P_L=1$, $R_L=0.6$, and ROUGE-L F1 is `0.75`. It helps with ordered lexical coverage,
+    but a faithful paraphrase may score poorly and an incorrect copied sentence may score highly.
 
-    ### 4.3 BERTScore
+    ### 4.4 Paired change and bootstrap interval
 
-    Given contextual embeddings $\{\mathbf{x}_i\}$ (candidate) and $\{\mathbf{y}_j\}$ (reference):
-
-    $P_{\text{BERT}} = \frac{1}{|w|}\sum_{i} \max_j \cos(\mathbf{x}_i, \mathbf{y}_j)$ (precision)
-
-    $R_{\text{BERT}} = \frac{1}{|r|}\sum_{j} \max_i \cos(\mathbf{x}_i, \mathbf{y}_j)$ (recall)
-
-    $F_{\text{BERT}} = \frac{2 P_{\text{BERT}} R_{\text{BERT}}}{P_{\text{BERT}} + R_{\text{BERT}}}$
-
-    ### 4.4 Perplexity
-
-    For language model with per-token log-probability $\log p(w_t | w_{1:t-1})$:
-
-    $PP = \exp\left(-\frac{1}{T}\sum_{t=1}^T \log p(w_t | w_{1:t-1})\right) = 2^{H}$
-
-    where $H = -\frac{1}{T}\sum_t \log_2 p(w_t | w_{1:t-1})$ is per-token cross-entropy.
-
-    ### 4.5 pass@k (unbiased estimator)
-
-    Given $n$ total samples and $c$ passing samples:
-
-    $\text{pass@k} = 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}}$
-
-    This estimates P(at least one of k samples passes) without actually sampling $k$ times.
-    Using this estimator is unbiased and avoids variance from choosing which k samples to use.
+    For the same $N$ examples under models A and B, let $d_i=s_{B,i}-s_{A,i}$ and
+    $\bar d=N^{-1}\sum_i d_i$. Resample the **paired rows** with replacement, recompute
+    $\bar d$, and take the 2.5th and 97.5th percentiles for a 95% bootstrap interval.
+    Pairing keeps each prompt matched across models. The interval measures sampling
+    uncertainty in this dataset; it cannot repair biased, leaked, or tiny coverage.
     """),
-
     md(r"""
-    ## 5 · Implementations from Scratch
+    ## 5 · Manual Implementation from Scratch
 
-    ### 5a — BLEU from scratch
+    Start with a four-row answer set. The code prints normalized text, token overlap,
+    and both metrics so every intermediate result can be inspected.
     """),
-
     code(r"""
-    # 5a. BLEU from scratch: n-gram precision + brevity penalty.
+    import math
+    import re
+    from collections import Counter
 
-    def tokenise(text):
-        return text.lower().split()
+    import matplotlib.pyplot as plt
+    import numpy as np
 
-    def ngrams(tokens, n):
-        return [tuple(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
 
-    def modified_ngram_precision(candidate_tokens, reference_tokens, n):
-        cand_ngrams = Counter(ngrams(candidate_tokens, n))
-        ref_ngrams  = Counter(ngrams(reference_tokens, n))
-        if not cand_ngrams:
+    def normalize_answer(text):
+        lowercase = text.casefold()
+        letters_numbers_spaces = re.sub(r"[^\w\s]", " ", lowercase)
+        return " ".join(letters_numbers_spaces.split())
+
+
+    def exact_match(prediction, reference):
+        return int(normalize_answer(prediction) == normalize_answer(reference))
+
+
+    def token_f1(prediction, reference):
+        predicted_tokens = normalize_answer(prediction).split()
+        reference_tokens = normalize_answer(reference).split()
+        if not predicted_tokens or not reference_tokens:
+            return float(predicted_tokens == reference_tokens)
+        overlap = sum((Counter(predicted_tokens) & Counter(reference_tokens)).values())
+        if overlap == 0:
             return 0.0
-        # Clipped count: min of candidate count and reference count.
-        clipped = sum(min(count, ref_ngrams[ng]) for ng, count in cand_ngrams.items())
-        total = sum(cand_ngrams.values())
-        return clipped / total
-
-    def brevity_penalty(candidate_tokens, reference_tokens):
-        c = len(candidate_tokens)
-        r = len(reference_tokens)
-        if c >= r:
-            return 1.0
-        return math.exp(1 - r / c)
-
-    def bleu_score(candidate, reference, max_n=4):
-        cand_toks = tokenise(candidate)
-        ref_toks  = tokenise(reference)
-        bp = brevity_penalty(cand_toks, ref_toks)
-        precisions = []
-        for n in range(1, max_n + 1):
-            pn = modified_ngram_precision(cand_toks, ref_toks, n)
-            if pn == 0:
-                return 0.0   # log(0) = -inf; standard BLEU returns 0.
-            precisions.append(math.log(pn))
-        avg_log_prec = sum(precisions) / max_n
-        return bp * math.exp(avg_log_prec)
-
-    test_pairs = [
-        ('The cat sat on the mat',
-         'The cat sat on the mat',
-         'Perfect match'),
-        ('A cat sat on the mat',
-         'The cat sat on the mat',
-         '1 word change'),
-        ('The dog ate the hat',
-         'The cat sat on the mat',
-         '2 words match'),
-        ('The cat',
-         'The cat sat on the mat',
-         'Too short (BP kicks in)'),
-        ('Something completely different and unrelated to anything here',
-         'The cat sat on the mat',
-         'No match'),
-    ]
-
-    print('BLEU scores from scratch:')
-    print(f'  {"Description":35s} BLEU-4')
-    for cand, ref, desc in test_pairs:
-        score = bleu_score(cand, ref)
-        print(f'  {desc:35s} {score:.4f}')
-    """),
-
-    md(r"""
-    ### 5b — ROUGE-L from scratch
-    """),
-
-    code(r"""
-    # 5b. ROUGE-L: longest common subsequence based metric.
-
-    def lcs_length(a, b):
-        # Dynamic programming LCS length.
-        m, n = len(a), len(b)
-        dp = [[0] * (n + 1) for _ in range(m + 1)]
-        for i in range(1, m + 1):
-            for j in range(1, n + 1):
-                if a[i-1] == b[j-1]:
-                    dp[i][j] = dp[i-1][j-1] + 1
-                else:
-                    dp[i][j] = max(dp[i-1][j], dp[i][j-1])
-        return dp[m][n]
-
-    def rouge_l(candidate, reference, beta=1.0):
-        cand = tokenise(candidate)
-        ref  = tokenise(reference)
-        lcs  = lcs_length(cand, ref)
-        if lcs == 0:
-            return 0.0, 0.0, 0.0
-        prec = lcs / len(cand) if cand else 0.0
-        rec  = lcs / len(ref)  if ref  else 0.0
-        if prec + rec == 0:
-            return 0.0, 0.0, 0.0
-        f1 = (1 + beta**2) * prec * rec / (rec + beta**2 * prec)
-        return round(prec, 4), round(rec, 4), round(f1, 4)
-
-    summaries = [
-        ('The transformer model uses attention to capture long-range dependencies.',
-         'The transformer architecture uses self-attention mechanisms for long-range context.',
-         'Good summary'),
-        ('The model is fast and efficient with good performance on all tasks.',
-         'The transformer architecture uses self-attention mechanisms for long-range context.',
-         'Vague summary'),
-        ('Attention mechanism uses Q, K, V matrices and softmax normalisation.',
-         'The transformer architecture uses self-attention mechanisms for long-range context.',
-         'Different phrasing'),
-    ]
-
-    print('ROUGE-L scores from scratch:')
-    print(f'  {"Description":25s} {"P_lcs":8s} {"R_lcs":8s} {"F1_lcs":8s}')
-    for cand, ref, desc in summaries:
-        p, r, f1 = rouge_l(cand, ref)
-        print(f'  {desc:25s} {p:.4f}   {r:.4f}   {f1:.4f}')
-    """),
-
-    md(r"""
-    ### 5c — BERTScore (cosine similarity approximation)
-    """),
-
-    code(r"""
-    # 5c. BERTScore: token-level cosine similarity (simplified — uses hash embeddings).
-    # In production: use transformers.BERTScore with a real BERT model.
-
-    def word_embed(word, dim=32):
-        rng_w = np.random.default_rng(abs(hash(word.lower())) % (2**31))
-        v = rng_w.standard_normal(dim)
-        return v / (np.linalg.norm(v) + 1e-9)
-
-    def bert_score_approx(candidate, reference, dim=32):
-        cand_toks = tokenise(candidate)
-        ref_toks  = tokenise(reference)
-        cand_embs = np.array([word_embed(w, dim) for w in cand_toks])
-        ref_embs  = np.array([word_embed(w, dim) for w in ref_toks])
-        if len(cand_embs) == 0 or len(ref_embs) == 0:
-            return 0.0, 0.0, 0.0
-        # Similarity matrix: [len_cand, len_ref].
-        sim_matrix = cand_embs @ ref_embs.T   # cosine (embeddings normalised)
-        # Precision: for each candidate token, max similarity to any reference token.
-        p_bert = float(sim_matrix.max(axis=1).mean())
-        # Recall: for each reference token, max similarity to any candidate token.
-        r_bert = float(sim_matrix.max(axis=0).mean())
-        if p_bert + r_bert == 0:
-            return 0.0, 0.0, 0.0
-        f_bert = 2 * p_bert * r_bert / (p_bert + r_bert)
-        return round(p_bert, 4), round(r_bert, 4), round(f_bert, 4)
-
-    bert_test_pairs = [
-        ('The president declared war on the nation.',
-         'The head of state announced hostilities against the country.',
-         'Semantic paraphrase'),
-        ('The cat sat on the mat.',
-         'The cat sat on the mat.',
-         'Perfect match'),
-        ('Neural networks learn from data via gradient descent.',
-         'Deep learning models optimise using backpropagation.',
-         'Related but different wording'),
-        ('The sky is blue and birds sing.',
-         'The cat sat on the mat.',
-         'Unrelated'),
-    ]
-
-    print('BERTScore approximation (hash embeddings):')
-    print(f'  {"Description":30s} {"P_BERT":8s} {"R_BERT":8s} {"F_BERT":8s}')
-    for cand, ref, desc in bert_test_pairs:
-        p, r, f = bert_score_approx(cand, ref)
-        print(f'  {desc:30s} {p:.4f}   {r:.4f}   {f:.4f}')
-
-    print('\nNote: hash embeddings are non-semantic — in production, use BERT/sentence-transformer embeddings.')
-    print('BERTScore advantage: captures "president" ≈ "head of state" that BLEU misses.')
-    """),
-
-    md(r"""
-    ### 5d — Perplexity from scratch
-    """),
-
-    code(r"""
-    # 5d. Perplexity from scratch: bigram LM with Laplace smoothing.
-
-    class BigramLM:
-        # Simple bigram language model.
-        def __init__(self):
-            self.unigram_counts = Counter()
-            self.bigram_counts  = Counter()
-            self.vocab = set()
-
-        def train(self, corpus):
-            for sentence in corpus:
-                tokens = ['<s>'] + tokenise(sentence) + ['</s>']
-                self.vocab.update(tokens)
-                for t in tokens:
-                    self.unigram_counts[t] += 1
-                for i in range(len(tokens)-1):
-                    self.bigram_counts[(tokens[i], tokens[i+1])] += 1
-            self.V = len(self.vocab)
-
-        def log_prob(self, w1, w2, alpha=1.0):
-            # Laplace-smoothed bigram probability.
-            bigram_count = self.bigram_counts[(w1, w2)]
-            unigram_count = self.unigram_counts[w1]
-            return math.log((bigram_count + alpha) / (unigram_count + alpha * self.V))
-
-        def perplexity(self, sentence):
-            tokens = ['<s>'] + tokenise(sentence) + ['</s>']
-            T = len(tokens) - 1
-            if T == 0:
-                return float('inf')
-            log_prob_sum = sum(self.log_prob(tokens[i], tokens[i+1]) for i in range(T))
-            return math.exp(-log_prob_sum / T)
-
-    TRAIN_CORPUS = [
-        'the cat sat on the mat',
-        'the dog ran in the park',
-        'the cat ran on the mat',
-        'the dog sat in the park',
-        'neural networks learn from data',
-        'machine learning models train on data',
-        'deep learning uses gradient descent',
-        'attention mechanisms power transformers',
-        'language models predict the next token',
-        'perplexity measures language model quality',
-    ]
-
-    lm = BigramLM()
-    lm.train(TRAIN_CORPUS)
-
-    test_sentences = [
-        ('the cat sat on the mat', 'In-domain (training-like)'),
-        ('the dog ran on the mat', 'Slightly novel'),
-        ('neural networks process data', 'Related domain'),
-        ('quantum physics explains molecular behaviour', 'Out-of-domain'),
-        ('the the the the the', 'Repetitive degenerate'),
-    ]
-
-    print('Perplexity evaluation:')
-    print(f'  {"Sentence":45s} {"Perplexity":12s} {"Category"}')
-    for sentence, category in test_sentences:
-        pp = lm.perplexity(sentence)
-        print(f'  {sentence[:45]:45s} {pp:12.2f}  {category}')
-    print(f'\nVocabulary size: {lm.V}')
-    print('Lower perplexity = model is less "surprised" by the text.')
-    """),
-
-    md(r"""
-    ### 5e — QA evaluation: exact match and token F1
-    """),
-
-    code(r"""
-    # 5e. Question answering metrics: exact match and token-level F1.
-
-    def normalise_answer(text):
-        text = text.lower().strip()
-        text = re.sub(r'[^a-z0-9\s]', '', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-
-    def exact_match(prediction, ground_truth):
-        return int(normalise_answer(prediction) == normalise_answer(ground_truth))
-
-    def token_f1(prediction, ground_truth):
-        pred_toks = normalise_answer(prediction).split()
-        gt_toks   = normalise_answer(ground_truth).split()
-        pred_counter = Counter(pred_toks)
-        gt_counter   = Counter(gt_toks)
-        common = sum((pred_counter & gt_counter).values())
-        if common == 0:
-            return 0.0
-        precision = common / len(pred_toks)
-        recall    = common / len(gt_toks)
+        precision = overlap / len(predicted_tokens)
+        recall = overlap / len(reference_tokens)
         return 2 * precision * recall / (precision + recall)
 
-    qa_examples = [
-        ('The Eiffel Tower is in Paris, France.',        'Paris',               'Partial answer'),
-        ('Paris',                                         'Paris',               'Exact match'),
-        ('The tower is located in Paris',                 'Paris',               'Contains answer'),
-        ('London',                                        'Paris',               'Wrong answer'),
-        ('The French capital city, Paris, is in France.', 'Paris, France',       'Verbose but correct'),
+
+    answer_rows = [
+        ("Paris", "Paris", "same answer"),
+        ("Paris, France", "Paris", "correct core plus detail"),
+        ("The answer is Paris", "Paris", "verbose answer"),
+        ("London", "Paris", "wrong answer"),
     ]
 
-    print('QA evaluation: Exact Match and Token F1')
-    print(f'  {"Prediction":42s} {"Ground truth":20s} {"EM":4s} {"F1":8s}')
-    for pred, gt, desc in qa_examples:
-        em = exact_match(pred, gt)
-        f1 = token_f1(pred, gt)
-        print(f'  {pred[:42]:42s} {gt:20s} {em:4d} {f1:.3f}')
+    for prediction, reference, note in answer_rows:
+        print({
+            "note": note,
+            "normalized_prediction": normalize_answer(prediction),
+            "normalized_reference": normalize_answer(reference),
+            "exact_match": exact_match(prediction, reference),
+            "token_f1": round(token_f1(prediction, reference), 3),
+        })
     """),
-
     md(r"""
-    ### 5f — pass@k for code generation
+    **Expected result.** Exact match is 1 only for the identical normalized answer.
+    Token F1 gives partial credit to the two answers containing `Paris`. A value outside
+    `[0,1]` indicates broken metric code; a low valid value may instead expose an
+    unsuitable reference or genuinely weak output.
     """),
-
     code(r"""
-    # 5f. pass@k: unbiased estimator for code generation quality.
+    def lcs_length(left_tokens, right_tokens):
+        table = [[0] * (len(right_tokens) + 1) for _ in range(len(left_tokens) + 1)]
+        for left_index, left_token in enumerate(left_tokens, start=1):
+            for right_index, right_token in enumerate(right_tokens, start=1):
+                if left_token == right_token:
+                    table[left_index][right_index] = table[left_index - 1][right_index - 1] + 1
+                else:
+                    table[left_index][right_index] = max(
+                        table[left_index - 1][right_index],
+                        table[left_index][right_index - 1],
+                    )
+        return table[-1][-1], table
 
-    from math import comb
 
-    def pass_at_k(n, c, k):
-        # P(at least 1 of k randomly drawn samples passes tests).
-        # n = total samples generated, c = number that pass, k = samples drawn.
-        if n - c < k:
-            return 1.0
-        return 1.0 - comb(n - c, k) / comb(n, k)
+    def rouge_l_f1(candidate, reference):
+        candidate_tokens = normalize_answer(candidate).split()
+        reference_tokens = normalize_answer(reference).split()
+        if not candidate_tokens or not reference_tokens:
+            return float(candidate_tokens == reference_tokens)
+        lcs, _ = lcs_length(candidate_tokens, reference_tokens)
+        precision = lcs / len(candidate_tokens)
+        recall = lcs / len(reference_tokens)
+        return 0.0 if lcs == 0 else 2 * precision * recall / (precision + recall)
 
-    # Simulate HumanEval-style results for 5 coding problems.
-    problems = [
-        {'name': 'find_max',        'n': 10, 'c': 8},   # easy: 8/10 pass
-        {'name': 'binary_search',   'n': 10, 'c': 6},   # medium: 6/10 pass
-        {'name': 'lru_cache',       'n': 10, 'c': 3},   # hard: 3/10 pass
-        {'name': 'regex_parser',    'n': 10, 'c': 1},   # very hard: 1/10 pass
-        {'name': 'dp_knapsack',     'n': 10, 'c': 0},   # impossible: 0/10 pass
+
+    candidate = "cat sat mat"
+    reference = "the cat sat on mat"
+    lcs, dynamic_programming_table = lcs_length(candidate.split(), reference.split())
+    print("LCS length:", lcs)
+    print("Last table row:", dynamic_programming_table[-1])
+    print("ROUGE-L F1:", round(rouge_l_f1(candidate, reference), 3))
+    assert lcs == 3 and math.isclose(rouge_l_f1(candidate, reference), 0.75)
+    """),
+    md(r"""
+    **Code walkthrough.** The table stores the best subsequence length for every pair
+    of prefixes. Equal tokens extend the diagonal result; unequal tokens keep the best
+    result from skipping one side. The final cell must print LCS `3` and ROUGE-L `0.75`.
+    This is quadratic in both sequence lengths, so production libraries use optimized
+    implementations and batching where appropriate.
+    """),
+    md(r"""
+    ### Real local model evidence
+
+    The next cell reruns the actual adaptation laboratory. These are measured losses and
+    preference margins from trained PyTorch models—not fabricated outputs, API responses,
+    or a lexical proxy renamed as model quality.
+    """),
+    code(r"""
+    import sys
+    from pathlib import Path
+
+    candidate_roots = [Path.cwd(), *Path.cwd().parents]
+    repo_root = next(path for path in candidate_roots if (path / "projects/language_model_adaptation").exists())
+    sys.path[:0] = [
+        str(repo_root / "projects/language_model_adaptation/src"),
+        str(repo_root / "projects/tiny_language_model/src"),
     ]
 
-    print('pass@k for code generation (n=10 samples per problem):')
-    print(f'  {"Problem":18s} {"c":4s} {"pass@1":8s} {"pass@3":8s} {"pass@5":8s} {"pass@10"}')
-    for prob in problems:
-        n, c = prob['n'], prob['c']
-        p1  = pass_at_k(n, c, 1)
-        p3  = pass_at_k(n, c, 3)
-        p5  = pass_at_k(n, c, 5)
-        p10 = pass_at_k(n, c, 10)
-        print(f'  {prob["name"]:18s} {c:4d} {p1:.4f}   {p3:.4f}   {p5:.4f}   {p10:.4f}')
+    from language_model_adaptation.lab import run_adaptation_lab
 
-    # Overall pass@k across all problems.
-    for k in [1, 3, 5]:
-        mean_p = np.mean([pass_at_k(p['n'], p['c'], k) for p in problems])
-        print(f'\nMean pass@{k}: {mean_p:.4f}')
-    """),
+    adaptation_report = run_adaptation_lab(seed=42)
+    continued = adaptation_report["continued_pretraining"]
+    tuning = adaptation_report["instruction_tuning"]
+    alignment = adaptation_report["preference_alignment"]
 
-    md(r"""
-    ## 6 · Visualization
-    """),
-
-    code(r"""
-    # Figure 1 — BLEU and ROUGE-L across output quality spectrum.
-    quality_levels = {
-        'Perfect': ('The cat sat on the mat', 'The cat sat on the mat'),
-        'Near-perfect': ('The cat sat on the mat today', 'The cat sat on the mat'),
-        'Good': ('A cat was sitting on a mat', 'The cat sat on the mat'),
-        'Partial': ('Cat sitting mat', 'The cat sat on the mat'),
-        'Poor': ('The dog played in the park', 'The cat sat on the mat'),
-        'Unrelated': ('Quantum physics is fascinating', 'The cat sat on the mat'),
-    }
-    labels_q = list(quality_levels.keys())
-    bleu_scores  = [bleu_score(c, r) for c, r in quality_levels.values()]
-    rouge_scores = [rouge_l(c, r)[2] for c, r in quality_levels.values()]
-
-    x_q = np.arange(len(labels_q))
-    fig, ax = plt.subplots(figsize=(11, 5))
-    ax.plot(x_q, bleu_scores,  'o-', color='steelblue', label='BLEU-4', lw=2)
-    ax.plot(x_q, rouge_scores, 's-', color='seagreen',  label='ROUGE-L F1', lw=2)
-    ax.set_xticks(x_q); ax.set_xticklabels(labels_q, rotation=15)
-    ax.set_ylabel('Score'); ax.set_ylim(-0.05, 1.1)
-    ax.set_title('Figure 1 — BLEU and ROUGE-L across quality levels')
-    ax.legend()
-    plt.tight_layout(); plt.show()
-    """),
-
-    md(r"""
-    **Figure 1.** BLEU-4 and ROUGE-L F1 across a quality spectrum from perfect to unrelated.
-    Both metrics decline with quality, but at different rates. **BLEU** is more sensitive to
-    n-gram overlap — even small word changes cause a bigger BLEU drop than ROUGE-L drop.
-    **ROUGE-L** uses LCS (preserves word order but allows gaps) — more lenient than BLEU.
-    Key limitation: both score 0.0 for semantically equivalent but differently-worded text
-    ("A feline reclined upon the carpet" vs. "The cat sat on the mat"). This is why
-    BERTScore was developed — it captures meaning beyond surface overlap.
-    """),
-
-    code(r"""
-    # Figure 2 — pass@k curves for problems of varying difficulty.
-    k_range = list(range(1, 11))
-    fig, ax = plt.subplots(figsize=(10, 5))
-    colors_p = ['seagreen', 'steelblue', 'orange', 'coral', 'gray']
-    for prob, color in zip(problems, colors_p):
-        n, c = prob['n'], prob['c']
-        pk_vals = [pass_at_k(n, c, k) for k in k_range]
-        ax.plot(k_range, pk_vals, 'o-', color=color,
-                label=f'{prob["name"]} (c={c}/n={n})', lw=2)
-    ax.set_xlabel('k (samples drawn)'); ax.set_ylabel('pass@k')
-    ax.set_title('Figure 2 — pass@k curves by problem difficulty')
-    ax.legend(fontsize=9); ax.set_ylim(-0.05, 1.1)
-    plt.tight_layout(); plt.show()
-    """),
-
-    md(r"""
-    **Figure 2.** pass@k curves for five problems of varying difficulty. **Easy problems**
-    (c=8/10, green) reach pass@k ≈ 1.0 at k=3 — almost any 3 samples will include at
-    least one passing solution. **Hard problems** (c=1/10, orange) only reach pass@k ≈ 0.65
-    at k=10 — you need many samples to have a good chance. **Impossible problems** (c=0/10,
-    gray) have pass@k = 0 for all k. This curve structure is why pass@k is reported for
-    multiple k values: pass@1 measures "single-shot quality", pass@10 measures "best-of-10
-    quality." The gap between pass@1 and pass@10 measures how much diversity helps.
-    """),
-
-    code(r"""
-    # Figure 3 — Perplexity comparison: in-domain vs. out-of-domain.
-    corpus_sizes = [10, 50, 200, 1000]
-    domains = {
-        'ML/AI text': [
-            'neural networks learn from training data',
-            'gradient descent optimises the loss function',
-            'attention mechanism computes query key value matrices',
-            'transformers use self-attention for sequence modelling',
-            'language models are trained on large text corpora',
-        ] * 10,
-        'Legal text': [
-            'the defendant shall pay damages to the plaintiff',
-            'pursuant to section three of the contract hereinafter',
-            'indemnification clauses protect parties from liability',
-            'the court ruled in favour of the petitioner',
-            'arbitration proceedings shall be conducted confidentially',
-        ] * 10,
-    }
-
-    in_domain_test  = ['attention mechanism learns to focus on relevant tokens']
-    out_domain_test = ['the defendant shall pay damages pursuant to the contract']
-
-    pp_in, pp_out = [], []
-    for size in corpus_sizes:
-        for domain_corpus, test_sents, label_list in [
-            (domains['ML/AI text'][:size], in_domain_test, pp_in),
-            (domains['ML/AI text'][:size], out_domain_test, label_list := pp_out),
-        ]:
-            lm_tmp = BigramLM()
-            lm_tmp.train(domain_corpus[:size])
-            pp = lm_tmp.perplexity(test_sents[0])
-            label_list.append(min(pp, 500))
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(corpus_sizes, pp_in,  'o-', color='steelblue', label='In-domain (ML text)', lw=2)
-    ax.plot(corpus_sizes, pp_out, 's-', color='coral',     label='Out-of-domain (legal text)', lw=2)
-    ax.set_xlabel('Training corpus size (sentences)')
-    ax.set_ylabel('Perplexity (log scale)'); ax.set_yscale('log')
-    ax.set_title('Figure 3 — Perplexity vs. corpus size: in-domain vs. out-of-domain')
-    ax.legend(); plt.tight_layout(); plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** Perplexity vs. training corpus size for in-domain and out-of-domain
-    text. As training data grows, the LM improves on in-domain text (perplexity drops).
-    Out-of-domain text remains high perplexity — the model trained on ML/AI text is
-    "confused" by legal language. **Production use of perplexity:**
-    1. **Data quality filtering**: filter training data to keep only low-perplexity examples
-       (per a reference LM) — removes noise, code snippets, non-text.
-    2. **Domain shift detection**: if production text perplexity rises, the model is
-       encountering distribution shift — time to retrain or add domain data.
-    3. **Model selection**: compare two LMs on held-out text — lower perplexity wins
-       (all else equal).
-    """),
-
-    code(r"""
-    # Figure 4 — Metric comparison for summarisation task.
-    summaries_eval = [
-        {
-            'label': 'Extractive (verbatim copy)',
-            'candidate': 'The attention mechanism uses Q, K, V matrices and softmax normalisation. Multi-head attention uses H parallel heads concatenated and projected.',
-            'reference':  'The attention mechanism uses Q, K, V matrices. Multi-head attention runs H parallel heads then concatenates and projects the outputs.',
-        },
-        {
-            'label': 'Abstractive (paraphrase)',
-            'candidate': 'Transformers compute attention via query, key, and value projections, with multiple heads working in parallel for richer representations.',
-            'reference':  'The attention mechanism uses Q, K, V matrices. Multi-head attention runs H parallel heads then concatenates and projects the outputs.',
-        },
-        {
-            'label': 'Too brief',
-            'candidate': 'Attention uses Q, K, V.',
-            'reference':  'The attention mechanism uses Q, K, V matrices. Multi-head attention runs H parallel heads then concatenates and projects the outputs.',
-        },
-        {
-            'label': 'Off-topic',
-            'candidate': 'Gradient descent minimises the loss function using the negative gradient direction.',
-            'reference':  'The attention mechanism uses Q, K, V matrices. Multi-head attention runs H parallel heads then concatenates and projects the outputs.',
-        },
+    measured_rows = [
+        ("Base → continued", "domain perplexity", math.exp(continued["domain_loss_before"]), math.exp(continued["domain_loss_after"]), "lower"),
+        ("Base → continued", "base-retention perplexity", math.exp(continued["base_retention_loss_before"]), math.exp(continued["base_retention_loss_after"]), "lower"),
+        ("Full SFT → LoRA", "held-out SFT loss", tuning["full"]["held_out_loss"], tuning["lora"]["held_out_loss"], "lower"),
+        ("SFT → DPO", "preference accuracy", alignment["held_out_preference_accuracy_before"], alignment["held_out_preference_accuracy_after"], "higher"),
+        ("SFT → DPO", "SFT-retention loss", alignment["sft_retention_loss_before"], alignment["sft_retention_loss_after"], "lower"),
     ]
 
-    bleu_s = [bleu_score(s['candidate'], s['reference']) for s in summaries_eval]
-    rouge_s = [rouge_l(s['candidate'], s['reference'])[2] for s in summaries_eval]
-    bert_s  = [bert_score_approx(s['candidate'], s['reference'])[2] for s in summaries_eval]
-
-    x_s = np.arange(len(summaries_eval))
-    w = 0.25
-    fig, ax = plt.subplots(figsize=(11, 5))
-    ax.bar(x_s - w, bleu_s,  w, label='BLEU-4',    color='steelblue', alpha=0.8)
-    ax.bar(x_s,     rouge_s, w, label='ROUGE-L',   color='seagreen',  alpha=0.8)
-    ax.bar(x_s + w, bert_s,  w, label='BERTScore', color='coral',     alpha=0.8)
-    ax.set_xticks(x_s); ax.set_xticklabels([s['label'] for s in summaries_eval], rotation=15, ha='right', fontsize=9)
-    ax.set_ylabel('Score'); ax.set_ylim(0, 1.2)
-    ax.set_title('Figure 4 — BLEU vs. ROUGE-L vs. BERTScore for summarisation')
-    ax.legend(); plt.tight_layout(); plt.show()
+    print(f'{"comparison":20s} {"metric":28s} {"before":>10s} {"after":>10s}  direction')
+    for comparison, metric, before, after, direction in measured_rows:
+        print(f"{comparison:20s} {metric:28s} {before:10.3f} {after:10.3f}  {direction}")
     """),
-
     md(r"""
-    **Figure 4.** Metric comparison for summarisation across four candidate types.
-    **Extractive summary** (verbatim copy): high BLEU and ROUGE-L (exact n-gram overlap),
-    moderate BERTScore. **Abstractive summary** (good paraphrase): BLEU and ROUGE-L drop
-    significantly (different words), but BERTScore stays high — it captures semantic
-    equivalence. **Too brief**: ROUGE-L drops (low recall); BLEU drops (brevity penalty).
-    **Off-topic**: all metrics near 0. The key takeaway: for tasks where paraphrasing
-    is expected (summarisation, dialogue), **BERTScore is more appropriate** than BLEU.
-    For translation (where fidelity to wording matters), **BLEU remains standard**.
+    **Interpretation.** Continued pretraining improves domain perplexity but harms base
+    retention. LoRA has lower held-out instruction loss than full SFT in this tiny run.
+    DPO improves the narrow held-out preference signal but worsens SFT retention. There
+    is no single winner until the evaluation contract assigns a primary outcome and a
+    tolerated regression. Every comparison must use the same held-out examples and metric.
     """),
+    code(r"""
+    def paired_bootstrap_delta(before_scores, after_scores, draws=4000, seed=42):
+        before = np.asarray(before_scores, dtype=float)
+        after = np.asarray(after_scores, dtype=float)
+        if before.shape != after.shape or before.ndim != 1 or len(before) == 0:
+            raise ValueError("before and after must be non-empty paired one-dimensional arrays")
+        random_generator = np.random.default_rng(seed)
+        sampled_indices = random_generator.integers(0, len(before), size=(draws, len(before)))
+        sampled_deltas = (after[sampled_indices] - before[sampled_indices]).mean(axis=1)
+        return {
+            "observed_delta": float((after - before).mean()),
+            "ci_low": float(np.quantile(sampled_deltas, 0.025)),
+            "ci_high": float(np.quantile(sampled_deltas, 0.975)),
+        }
 
+
+    held_out = alignment["held_out_examples"]
+    accuracy_before = [float(row["correct_before"]) for row in held_out]
+    accuracy_after = [float(row["correct_after"]) for row in held_out]
+    interval = paired_bootstrap_delta(accuracy_before, accuracy_after)
+
+    for row in held_out:
+        print({
+            "prompt": row["prompt"],
+            "margin_before": round(row["margin_before"], 3),
+            "margin_after": round(row["margin_after"], 3),
+            "correct_before": row["correct_before"],
+            "correct_after": row["correct_after"],
+        })
+    print("Paired accuracy delta and interval:", interval)
+    print("Held-out examples:", len(held_out), "— far too narrow for a deployment claim.")
+    """),
     md(r"""
-    ## 7 · Failure Modes
+    The interval may look decisive because both tiny held-out examples move in the same
+    direction. This is a **mechanical demonstration**, not evidence of broad alignment.
+    Bootstrap resampling cannot invent missing prompt types, independent labels, safety
+    coverage, or a larger population.
+    """),
+    md(r"""
+    ## 6 · Visualization and Slice Inspection
+    """),
+    code(r"""
+    labels = ["domain PPL", "base-retention PPL", "preference accuracy", "SFT-retention loss"]
+    before_values = [
+        math.exp(continued["domain_loss_before"]),
+        math.exp(continued["base_retention_loss_before"]),
+        alignment["held_out_preference_accuracy_before"],
+        alignment["sft_retention_loss_before"],
+    ]
+    after_values = [
+        math.exp(continued["domain_loss_after"]),
+        math.exp(continued["base_retention_loss_after"]),
+        alignment["held_out_preference_accuracy_after"],
+        alignment["sft_retention_loss_after"],
+    ]
 
-    | Failure | Symptom | Root cause | Mitigation |
+    figure, axes = plt.subplots(1, 4, figsize=(14, 3.5))
+    for axis, label, before, after in zip(axes, labels, before_values, after_values):
+        axis.bar(["before", "after"], [before, after], color=["#8da0cb", "#66c2a5"])
+        axis.set_title(label, fontsize=9)
+        axis.bar_label(axis.containers[0], fmt="%.2f", fontsize=8)
+    figure.suptitle("Real local measurements: improvement and regression coexist")
+    figure.tight_layout()
+    plt.show()
+    """),
+    md(r"""
+    Each panel keeps its own scale because these metrics have different units and must
+    not be averaged. Always inspect per-example rows and meaningful slices after the
+    dashboard. A global mean can improve while one language, prompt type, response
+    length, or risk category regresses.
+    """),
+    md(r"""
+    ## 7 · Failure Modes, Beginner Mistakes, and Debugging
+
+    | Symptom | Likely cause | Inspect | Scoped repair |
     |---|---|---|---|
-    | **BLEU gaming** | Model generates short, high-precision outputs | Brevity penalty not strong enough; metric optimised directly | Use ROUGE-L + BERTScore alongside; human evaluation |
-    | **ROUGE-L doesn't penalise repetition** | Repetitive output scores high | LCS ignores repeated subsequences | Use ROUGE-L + factual consistency check |
-    | **BERTScore model sensitivity** | Scores change when BERT model updated | Contextual embeddings version-dependent | Pin BERT model version; recalibrate when updating |
-    | **Perplexity doesn't correlate with task quality** | Low-perplexity model generates bad outputs | Perplexity measures fluency, not factual accuracy | Use perplexity as auxiliary metric; not sole metric |
-    | **pass@k sampling variance** | pass@k varies widely across runs | Small n; high variance in c | Use large n (≥50); report 95% CI; use unbiased estimator |
-    | **Reference quality problem** | High BLEU/ROUGE with poor references | Reference answers are themselves poor | Curate references carefully; use multiple references |
-    """),
+    | Excellent evaluation score | train/evaluation overlap | hashes, duplicate entities, templates | rebuild the split before tuning |
+    | Paraphrase scores near zero | lexical metric used for semantic judgment | candidate/reference tokens | add human review or a validated semantic metric |
+    | “Semantic” score changes across runs | random/hash vectors mislabeled as embeddings | encoder and seed | use a trained pinned encoder; name proxies honestly |
+    | Lower perplexity, worse answers | fluency objective differs from task | task rows and retention slices | retain perplexity as diagnostic, add task metrics |
+    | Mean improves, critical slice falls | aggregation hides heterogeneity | per-slice counts and deltas | set slice-specific guardrails |
+    | CI is narrow on weak data | examples are duplicated or unrepresentative | unique prompts and collection process | improve coverage; uncertainty cannot fix bias |
+    | Regression gate flips randomly | sampling or versions uncontrolled | seed, decoding, weights, prompt, code | version the full evaluation manifest |
 
+    Common mistakes: selecting metrics after seeing results, comparing perplexity across
+    tokenizers, treating F1 as factuality, using one reference for open-ended writing,
+    reporting only the mean, and calling preference accuracy “alignment.”
+    """),
     md(r"""
-    ## 8 · Production Library Implementation
-    """),
+    ## 8 · Library and Tool Implementation
 
+    Production libraries reduce implementation mistakes but do not choose the right
+    contract. `evaluate`, `rouge-score`, and `bert-score` can compute established
+    metrics when installed and version-pinned. **Real BERTScore** performs contextual
+    token matching with a pretrained encoder; it is not random hash cosine and may
+    require a model download. This offline core therefore explains it but does not
+    pretend to execute it.
+
+    NLP-02 provides a real locally trained sentence bi-encoder and held-out retrieval
+    evaluation. Its cosine score is useful for its validated retrieval task, but it is
+    still **not BERTScore** and is not automatic proof that a generated answer is correct.
+    """),
     code(r"""
-    # 8.1 Evaluation libraries (guarded).
-    try:
-        from nltk.translate.bleu_score import corpus_bleu, sentence_bleu
-        print('NLTK BLEU available.')
-    except ImportError:
-        print('[nltk not installed] pip install nltk → from nltk.translate.bleu_score import corpus_bleu')
+    sentence_project = repo_root / "projects" / "sentence_embeddings"
+    family_project = repo_root / "projects" / "transformer_families"
+    sys.path[:0] = [str(sentence_project / "src"), str(family_project / "src")]
 
-    try:
-        from rouge_score import rouge_scorer  # noqa: F401
-        print('rouge_score available.')
-    except ImportError:
-        print('[rouge-score not installed] pip install rouge-score → from rouge_score import rouge_scorer')
+    from sentence_embeddings.training import run_experiment
 
-    try:
-        import bert_score  # noqa: F401
-        print('bert_score available.')
-    except ImportError:
-        print('[bert_score not installed] pip install bert-score → from bert_score import score as bert_score_fn')
-
-    lines = [
-        '',
-        'Production BERTScore usage:',
-        '  from bert_score import score',
-        '  P, R, F1 = score(candidates, references, lang="en", model_type="microsoft/deberta-xlarge-mnli")',
-        '',
-        'Production ROUGE:',
-        '  from rouge_score import rouge_scorer',
-        '  scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"])',
-        '  scores = scorer.score(reference, candidate)',
-        '  # scores["rougeL"].fmeasure',
-    ]
-    print('\n'.join(lines))
+    embedding_report = run_experiment(seed=42, steps=320)
+    print("TF-IDF held-out MRR:", round(embedding_report["tfidf_baseline"]["mrr"], 3))
+    print("Untrained encoder MRR:", round(embedding_report["untrained_transformer"]["mrr"], 3))
+    print("Trained local encoder MRR:", round(embedding_report["trained_contrastive_encoder"]["mrr"], 3))
+    print("Metric name: held-out retrieval MRR — not BERTScore and not answer correctness.")
     """),
+    md(r"""
+    ## 9 · Realistic Case Study — A Prompt-Change Regression Gate
 
+    A support team wants to change a prompt after EVAL-02. Before editing it, the team
+    freezes an evaluation manifest containing dataset hash, prompt version, model
+    checkpoint, tokenizer, decoding settings, metric code version, seed, and acceptance
+    rule. The suite has answerable, ambiguous, adversarial, short, and long prompts.
+
+    The primary metric is task correctness. Guardrails cover refusal behavior, critical
+    slices, latency, and cost. The new prompt is accepted only when its paired primary
+    change meets the declared rule and no critical guardrail fails. Borderline cases go
+    to the human protocol taught in EVAL-04. This process supports one release decision;
+    it does not prove universal model quality.
+    """),
     code(r"""
-    # 8.2 Production regression testing pattern.
+    def regression_decision(primary_delta, primary_ci_low, guardrail_deltas, limits):
+        primary_passes = primary_delta > 0 and primary_ci_low >= 0
+        failed_guardrails = {
+            name: change
+            for name, change in guardrail_deltas.items()
+            if change > limits[name]
+        }
+        return {
+            "decision": "accept" if primary_passes and not failed_guardrails else "review_or_reject",
+            "primary_passes": primary_passes,
+            "failed_guardrails": failed_guardrails,
+        }
 
-    GOLDEN_DATASET = [
-        {'input': 'Explain attention mechanism', 'ref': 'Attention uses Q, K, V matrices and softmax to weight values.'},
-        {'input': 'What is gradient descent?', 'ref': 'Gradient descent minimises loss by moving in the negative gradient direction.'},
-        {'input': 'Define NDCG', 'ref': 'NDCG normalises DCG by the ideal DCG. DCG weights relevance by log of position.'},
-    ]
 
-    def evaluate_model_on_golden(model_outputs, golden_dataset):
-        scores = {'bleu': [], 'rouge_l': [], 'em': []}
-        for output, example in zip(model_outputs, golden_dataset):
-            scores['bleu'].append(bleu_score(output, example['ref']))
-            scores['rouge_l'].append(rouge_l(output, example['ref'])[2])
-            scores['em'].append(exact_match(output, example['ref']))
-        return {k: round(float(np.mean(v)), 4) for k, v in scores.items()}
-
-    # Simulate model A (good) vs. model B (regressed).
-    model_a_outputs = [
-        'Attention computes Q, K, V dot products with softmax normalisation to weight the values.',
-        'Gradient descent minimises the loss function using the negative gradient of the loss.',
-        'NDCG is normalised discounted cumulative gain, computed as DCG divided by ideal DCG.',
-    ]
-    model_b_outputs = [   # regressed model — worse outputs.
-        'The model processes inputs.',
-        'Optimisation is the goal.',
-        'Ranking quality can be measured.',
-    ]
-
-    scores_a = evaluate_model_on_golden(model_a_outputs, GOLDEN_DATASET)
-    scores_b = evaluate_model_on_golden(model_b_outputs, GOLDEN_DATASET)
-
-    print('Production regression test:')
-    print(f'  {"Metric":10s} {"Model A":10s} {"Model B":10s} {"Delta":10s} {"Alert?"}')
-    sla_thresholds = {'bleu': 0.10, 'rouge_l': 0.30, 'em': 0.0}
-    for metric in ['bleu', 'rouge_l', 'em']:
-        a, b = scores_a[metric], scores_b[metric]
-        delta = b - a
-        alert = 'ALERT' if abs(delta) > sla_thresholds[metric] and delta < 0 else 'OK'
-        print(f'  {metric:10s} {a:10.4f} {b:10.4f} {delta:+10.4f} {alert}')
+    # Limits are declared before evaluating the candidate. Positive loss delta is worse.
+    retention_change = alignment["sft_retention_loss_after"] - alignment["sft_retention_loss_before"]
+    decision = regression_decision(
+        interval["observed_delta"],
+        interval["ci_low"],
+        {"sft_retention_loss": retention_change},
+        {"sft_retention_loss": 0.25},
+    )
+    print("Retention loss change:", round(retention_change, 3))
+    print("Decision:", decision)
+    assert decision["decision"] == "review_or_reject"
     """),
-
     md(r"""
-    ## 9 · Realistic Business Case Study — LLM Regression Testing
-
-    **Scenario.** An AI product team deploys Claude for customer-facing writing assistance.
-    They update the system prompt monthly to improve tone and task coverage. Each update
-    needs a regression test to ensure it doesn't degrade performance on existing use cases.
-
-    **Golden dataset:** 300 queries with reference outputs, curated by the team and
-    validated by human raters. Covers: email drafting (100), summarisation (100), Q&A (100).
-
-    **Evaluation pipeline (runs every deployment):**
-    1. Run all 300 golden queries through the new model version.
-    2. Compute BLEU, ROUGE-L, BERTScore, exact match per category.
-    3. Alert if any metric drops > 5% from previous version baseline.
-    4. Auto-block deployment if any metric drops > 10%.
-    5. Human review sample (20 queries) for any blocked deployment.
-
-    **Incident caught:** System prompt update in month 3 changed tone instructions,
-    which caused the model to produce shorter, bullet-point-heavy outputs. ROUGE-L
-    dropped 12% on email drafting tasks (users expect full paragraphs). Deployment blocked.
-    Root cause: tone instruction conflicted with length expectations. Fixed by adding
-    explicit length guidance. Estimated value: prevented rollout to 50,000 daily active users.
-
-    **Cost:** Full evaluation run = 300 API calls × $0.01 = $3.00. Scheduled daily.
-    Monthly cost: $90. Value of one prevented regression: user churn prevention worth
-    estimated $50,000+.
+    **Expected result:** the narrow preference metric improves, but the declared retention
+    budget fails, so the system prints `review_or_reject`. A gate is not “model B has a
+    higher average.” It is an explicit policy for resolving multiple measured outcomes.
     """),
-
     md(r"""
-    ## 10 · Production Considerations
+    ## 10 · Learning and Production Considerations
 
-    - **Multiple references.** Single reference BLEU/ROUGE is noisy — there are many valid
-      outputs for any task. Use multiple references (3–5) and compute max BLEU across references.
-      NLTK's `corpus_bleu` supports multiple references natively.
-    - **Domain-specific calibration.** BLEU scores mean different things for different tasks.
-      Translation BLEU > 0.40 = near-human quality. Summarisation BLEU > 0.15 = competitive.
-      Raw numbers without context are misleading — always compare to a baseline.
-    - **Statistical significance.** Metric differences of < 1 BLEU point are rarely significant.
-      Use bootstrap resampling to compute confidence intervals before declaring one model better.
-    - **pass@k sample size.** For reliable pass@k estimates, use n ≥ 50 (not just n=5).
-      Small n causes high variance. Report 95% CI via bootstrap or Wilson interval.
-    - **Evaluation regression testing in CI.** Add golden dataset evaluation to your CI/CD
-      pipeline. Pull request must not regress metrics beyond threshold before merging.
-      Fail the PR if ROUGE-L drops > 5% on the summarisation golden set.
-    - **Human-in-the-loop.** Automatic metrics miss fluency, factual accuracy, and instruction
-      following nuances. 10% of automatic evaluation should be verified by human raters.
+    - Freeze the test set; use a development set while iterating.
+    - Remove exact duplicates and audit semantic/template contamination separately.
+    - Version examples, labels, rubrics, model weights, tokenizer, prompt, decoding, and metric code.
+    - Use deterministic likelihood metrics where possible; otherwise repeat stochastic generation.
+    - Report counts, distributions, paired deltas, uncertainty, failures, and slices—not only means.
+    - Calibrate thresholds on historical decisions before release; do not copy universal numbers.
+    - Protect evaluation data containing personal, licensed, or security-sensitive information.
+    - Separate this teaching-scale implementation from a production service with access control,
+      audit logs, resilient execution, review ownership, and incident response.
     """),
-
     md(r"""
-    ## 11 · Tradeoff Analysis
+    ## 11 · Tradeoff and Related-Concept Analysis
 
-    **Metric selection guide:**
+    | Concept | Main purpose | Strength | Weakness | Use when |
+    |---|---|---|---|---|
+    | Loss / perplexity | next-token prediction fit | reference-free and cheap | not task correctness | same tokenizer and held-out text |
+    | Exact match | strict structured correctness | transparent | rejects valid variants | canonical short answers |
+    | Token F1 | partial answer overlap | simple partial credit | ignores order and meaning | extractive QA |
+    | ROUGE-L | ordered lexical coverage | interpretable | weak on paraphrases/factuality | reference summaries with caveats |
+    | BLEU | corpus n-gram precision | reproducible historical baseline | weak sentence semantics | comparable translation experiments |
+    | Sentence-embedding cosine | whole-text vector similarity | handles some paraphrases | encoder/domain dependent | encoder validated for the task |
+    | BERTScore | contextual token similarity | softer token matching | model/download/version dependent | references exist and encoder is suitable |
+    | Human evaluation | rubric-based judgment | captures nuanced outcomes | costly and variable | automated metrics miss the decision |
+    | LLM-as-judge | scalable rubric proxy | flexible | bias, leakage, instability | validated against humans first |
 
-    | Metric | Task | Strength | Weakness |
-    |---|---|---|---|
-    | BLEU | Translation | Standard; fast | n-gram overlap only; no semantics |
-    | ROUGE-L | Summarisation | LCS captures order | Doesn't penalise repetition; no semantics |
-    | BERTScore | Any text generation | Semantic similarity | Model-dependent; slower |
-    | Perplexity | LM quality / data quality | Intrinsic; no references needed | Doesn't measure usefulness |
-    | Exact Match | QA (structured) | Binary, unambiguous | Requires exact string match |
-    | Token F1 | QA | Partial credit | Doesn't penalise fluency issues |
-    | pass@k | Code generation | Tests actual correctness | Requires unit tests; n must be large |
-
-    **When to use what:**
-    - Translation: BLEU (+ human BLEU critique for high-stakes)
-    - Summarisation: ROUGE-L + BERTScore + Faithfulness
-    - QA: Exact Match + Token F1 + answer correctness
-    - Code generation: pass@k (k=1 for deployment quality, k=10 for capability ceiling)
-    - General instruction following: BERTScore + LLM-as-judge
+    pass@k belongs in a code-generation extension after students understand sampling,
+    executable tests, and combination notation. Benchmark catalogs belong after this
+    lesson’s core decision process; a benchmark name is not an evaluation design.
     """),
-
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## 12 · Readiness Check
 
-    **Common questions**
-    - *"Explain BLEU score. What are its limitations?"* → BLEU computes modified n-gram
-      precision (clipped to reference count) with a brevity penalty to prevent trivially short
-      outputs. It's fast and reproducible. Limitations: (1) no semantic understanding — synonyms
-      score 0; (2) single reference is noisy; (3) BLEU optimisation creates pathological outputs
-      (repetitive, short); (4) different tasks have different BLEU scales — 0.30 is good for
-      translation, mediocre for abstractive summarisation.
-    - *"What is pass@k and how is the unbiased estimator computed?"* → pass@k = P(at least one
-      of k random samples passes unit tests). The unbiased estimator: $1 - \binom{n-c}{k}/\binom{n}{k}$
-      where n = total samples generated, c = passing samples. Unbiased because it doesn't require
-      actually drawing k samples — it estimates the expected probability over all possible k-subsets.
+    You are ready for NLP-04 Prompt Engineering when you can:
 
-    **Deep-dive questions**
-    - *"Why is BERTScore better than ROUGE for abstractive summarisation?"* → ROUGE is n-gram
-      based — it penalises any paraphrase. Abstractive summarisation correctly replaces long phrases
-      with shorter equivalents (e.g. "the head of state announced" → "the president said"). BERTScore
-      uses contextual embeddings to measure semantic similarity — "president" and "head of state" have
-      high cosine similarity in BERT space, so BERTScore rewards the paraphrase. ROUGE would score it low.
-    - *"How would you set up regression testing for an LLM update?"* → (1) Curate a golden dataset
-      of 200–500 representative queries with reference outputs; (2) run on every PR/deployment;
-      (3) compute BLEU, ROUGE-L, BERTScore per task category; (4) alert on > 5% regression in any
-      metric on any category; (5) block on > 10% regression; (6) human review for blocked
-      deployments; (7) track metric trends over time to detect slow regression.
+    1. write the evaluation contract before changing a prompt;
+    2. explain why the local DPO policy both improves and regresses;
+    3. calculate token F1 and ROUGE-L for a tiny example;
+    4. state why hash vectors cannot demonstrate BERTScore;
+    5. produce paired results with a coverage warning;
+    6. apply a predeclared regression gate and defend its guardrails.
 
-    **Common mistakes:** using BLEU alone (misses semantics); not using a baseline (raw numbers
-    meaningless); small n for pass@k (high variance); no statistical significance testing.
+    Running every cell is insufficient. Score at least 8/10 on the core mastery gate and
+    complete the independent exercise with a fresh held-out set.
     """),
-
     md(r"""
     ## 13 · Teach-Back — Answer Without Notes
 
-    1. **BLEU formula.** What is "modified n-gram precision"? Why is clipping necessary?
-    2. **ROUGE-L.** What is LCS? Give an example where ROUGE-L > BLEU for the same pair.
-    3. **BERTScore advantage.** Give a concrete example where BLEU = 0 but BERTScore = 0.9.
-    4. **Perplexity interpretation.** A model has perplexity 50 on in-domain text and 300 on
-       out-of-domain text. What does this tell you?
-    5. **pass@k formula.** n=10, c=4, k=5. Calculate pass@5 using the unbiased estimator.
-    6. **Metric for code.** Why is BLEU inappropriate for code generation? What should you use?
-    7. **Regression testing.** Your ROUGE-L drops from 0.42 to 0.37 after a model update.
-       Is this significant? How would you check?
-    8. **Reference quality.** Your BLEU score is 0.45 on a test set. A colleague's BLEU is
-       0.38 on a different test set. Can you conclude your model is better? Why/why not?
+    1. What decision does an evaluation contract make explicit?
+    2. Why can perplexity only be compared under the same tokenization and data contract?
+    3. Calculate precision, recall, and F1 when overlap is 2, prediction length 4, reference length 5.
+    4. How does ROUGE-L differ from token F1?
+    5. Why is a random hash embedding not a semantic metric?
+    6. Why must a model comparison be paired by prompt?
+    7. What can a bootstrap interval establish, and what can it never repair?
+    8. Why did the example gate reject the DPO policy despite improved preference accuracy?
     """),
-
     md(r"""
-    ## 14 · Exercises
+    ## 14 · Exercises, Self-Check, and Solutions
 
-    **Beginner (conceptual)**
-    1. Compute BLEU-2 by hand for: Candidate="the cat sat", Reference="the cat sat on the mat."
-       Show n-gram counts, clipped counts, precision, brevity penalty, and final score.
-    2. n=20 samples, c=12 pass. Calculate pass@1, pass@5, pass@10 using the unbiased estimator.
+    **Worked example (15 min).** Prediction `orbit around star`, reference
+    `planet orbit around star`: overlap `3`, precision `1`, recall `0.75`, F1 `0.857`.
+    Common mistake: counting duplicate tokens without clipping to reference counts.
 
-    **Beginner → Intermediate (coding)**
-    3. Extend `bleu_score` to support multiple references: take a list of references, compute
-       BLEU for each, return the maximum. Test: a candidate that matches reference B better than
-       reference A should score higher with multi-reference BLEU.
-    4. Implement `rouge_n` (ROUGE-N with recall, precision, F1). Verify ROUGE-1 and ROUGE-2
-       on 5 summarisation examples.
+    **Guided practice (25 min).** Compare `cat mat sat` with `the cat sat on mat` using
+    token F1 and ROUGE-L. Hint: token F1 ignores order; LCS does not. **Self-check:**
+    token F1 must exceed ROUGE-L. Solution: token overlap is 3, so F1 is `0.75`; LCS is
+    2, so ROUGE-L is `0.50`.
 
-    **Intermediate (analysis)**
-    5. **Metric correlation study**: generate 50 (candidate, reference) pairs at varying quality.
-       Compute BLEU, ROUGE-L, and BERTScore for each. Plot pairwise correlations. Which two
-       metrics agree most? Which diverge most? When do they diverge?
-    6. **pass@k sensitivity**: for a fixed n=20, vary c from 0 to 20. Plot pass@1, pass@5,
-       pass@10 as functions of c/n (success rate). At what success rate does pass@5 cross 0.90?
+    **Independent practice (45 min).** Create six untouched prompt/reference/prediction
+    rows. Compute exact match, token F1, and ROUGE-L per row, then report the worst row
+    and one slice. **Expected evidence:** assertions keep every score in `[0,1]`, and the
+    written decision explains why one metric is primary. Rubric: data separation 2,
+    correct metrics 3, row/slice diagnosis 3, limitation 2.
 
-    **Senior (design)**
-    7. *System design:* design an automated evaluation pipeline for a code generation assistant
-       (generates Python functions from natural language descriptions). 500 queries/day. Design:
-       metrics (BLEU, ROUGE, pass@k), golden dataset composition, CI/CD integration, alert
-       thresholds, human review workflow, evaluation cadence.
-    8. *Interview:* "We're considering switching from GPT-4 to Claude for our summarisation
-       product. How would you rigorously decide which model is better for our use case?"
-       (Expected: curate task-specific golden dataset; evaluate ROUGE-L + BERTScore + human
-       evaluation on same inputs; compute bootstrap CI for differences; A/B test on 5% of live
-       traffic; measure downstream business metrics like user edit rate and satisfaction.)
-    """),
+    **Intermediate exercise (45 min).** Add one regression and two unchanged rows to a
+    paired comparison. Recompute the bootstrap interval under three seeds. Explain why
+    the observed delta stays fixed while Monte Carlo percentiles can move slightly.
 
-    md(r"""
-    ---
-    ### Summary
-    LLM evaluation combines reference-based metrics (BLEU for translation, ROUGE-L for
-    summarisation, BERTScore for semantic tasks), intrinsic metrics (perplexity for LM
-    quality), and task-specific metrics (exact match + F1 for QA, pass@k for code).
-    In production: build a golden dataset, run evaluation on every model update, alert on
-    regression. Never use a single metric — build a dashboard with multiple metrics per
-    task category. Statistical significance testing before declaring model improvements.
+    **Challenge mini-project (90 min).** Evaluate two prompt versions without an API.
+    Use a deterministic local function or stored outputs, freeze a manifest, declare one
+    primary metric and two guardrails, inspect slices, apply a gate, and write a one-page
+    decision. Expected output: reproducible code, per-row results, uncertainty, rejected
+    examples, and a scoped conclusion—not “model B is universally better.”
 
-    **Related lesson:** `EVAL-04 · Human Evaluation` — when automated metrics are not enough: annotation
-    guidelines, inter-annotator agreement (Krippendorff's alpha, Cohen's kappa), Likert scales,
-    pairwise preference, and how to run a reliable human evaluation study.
+    **Summary:** evaluation connects a declared decision to untouched examples, suitable
+    metrics, paired evidence, uncertainty, failure analysis, and a predeclared gate.
+    **Memory aid:** *Define the decision, freeze the data, inspect pairs, then trust no
+    metric beyond the behavior it actually measures.*
     """),
 ]
+
 
 build("08_evaluation/02_llm_evaluation.ipynb", cells)

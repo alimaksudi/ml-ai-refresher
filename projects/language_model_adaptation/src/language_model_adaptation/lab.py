@@ -1,13 +1,12 @@
 """Executed continued-pretraining, SFT/LoRA, and DPO learning laboratory."""
+
 from __future__ import annotations
 
 import argparse
 import copy
 import hashlib
 import json
-import math
 import random
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -20,9 +19,16 @@ from tiny_language_model.model import CharacterTokenizer, ModelConfig, TinyLangu
 from tiny_language_model.training import make_next_token_windows
 
 
-BASE_TRAIN = ("the quick brown fox jumps over the lazy dog. models learn patterns from text. " * 30)
-BASE_VALIDATION = "the model learns patterns from text. the quick fox jumps over the dog. " * 8
-DOMAIN_VALIDATION = "a comet travels around a star. a telescope observes distant light. " * 8
+BASE_TRAIN = (
+    "the quick brown fox jumps over the lazy dog. models learn patterns from text. "
+    * 30
+)
+BASE_VALIDATION = (
+    "the model learns patterns from text. the quick fox jumps over the dog. " * 8
+)
+DOMAIN_VALIDATION = (
+    "a comet travels around a star. a telescope observes distant light. " * 8
+)
 
 RAW_DOMAIN_DOCUMENTS = [
     "a planet travels around a star. a moon travels around a planet.",
@@ -35,7 +41,10 @@ RAW_DOMAIN_DOCUMENTS = [
 
 SFT_TRAIN = [
     ("name the object that travels around a star", "a planet travels around a star."),
-    ("name the tool that observes distant light", "a telescope observes distant light."),
+    (
+        "name the tool that observes distant light",
+        "a telescope observes distant light.",
+    ),
     ("what guides an orbit", "gravity guides an orbit."),
     ("answer with a polite confirmation", "yes, please continue."),
 ]
@@ -66,11 +75,18 @@ def normalize_text(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def curate_documents(documents: list[str], evaluation_text: str) -> tuple[list[str], dict[str, int]]:
+def curate_documents(
+    documents: list[str], evaluation_text: str
+) -> tuple[list[str], dict[str, int]]:
     """Apply visible quality, duplicate, and exact contamination rules."""
     evaluation_normalized = normalize_text(evaluation_text)
     kept, seen = [], set()
-    counts = {"raw": len(documents), "duplicate_removed": 0, "low_quality_removed": 0, "contamination_removed": 0}
+    counts = {
+        "raw": len(documents),
+        "duplicate_removed": 0,
+        "low_quality_removed": 0,
+        "contamination_removed": 0,
+    }
     for document in documents:
         normalized = normalize_text(document)
         if len(normalized.split()) < 5:
@@ -86,13 +102,24 @@ def curate_documents(documents: list[str], evaluation_text: str) -> tuple[list[s
     return kept, counts
 
 
-def stream_loader(text: str, tokenizer: CharacterTokenizer, block_size: int, batch_size: int = 8) -> DataLoader:
-    dataset = make_next_token_windows(tokenizer.encode(text), block_size, stride=max(1, block_size // 2))
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, generator=torch.Generator().manual_seed(7))
+def stream_loader(
+    text: str, tokenizer: CharacterTokenizer, block_size: int, batch_size: int = 8
+) -> DataLoader:
+    dataset = make_next_token_windows(
+        tokenizer.encode(text), block_size, stride=max(1, block_size // 2)
+    )
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(7),
+    )
 
 
 @torch.no_grad()
-def language_model_loss(model: TinyLanguageModel, text: str, tokenizer: CharacterTokenizer) -> float:
+def language_model_loss(
+    model: TinyLanguageModel, text: str, tokenizer: CharacterTokenizer
+) -> float:
     loader = stream_loader(text, tokenizer, model.config.block_size)
     total, tokens = 0.0, 0
     model.eval()
@@ -104,9 +131,17 @@ def language_model_loss(model: TinyLanguageModel, text: str, tokenizer: Characte
     return total / tokens
 
 
-def optimize_language_model(model: TinyLanguageModel, text: str, tokenizer: CharacterTokenizer, steps: int, lr: float) -> None:
+def optimize_language_model(
+    model: TinyLanguageModel,
+    text: str,
+    tokenizer: CharacterTokenizer,
+    steps: int,
+    lr: float,
+) -> None:
     batches = list(stream_loader(text, tokenizer, model.config.block_size))
-    parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    parameters = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
     optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=1e-3)
     for step in range(steps):
         inputs, targets = batches[step % len(batches)]
@@ -124,13 +159,18 @@ def format_instruction(prompt: str, response: str) -> tuple[str, int]:
     return prefix + response + "\n", len(prefix)
 
 
-def sft_batch(examples: list[tuple[str, str]], tokenizer: CharacterTokenizer, block_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+def sft_batch(
+    examples: list[tuple[str, str]], tokenizer: CharacterTokenizer, block_size: int
+) -> tuple[torch.Tensor, torch.Tensor]:
     input_rows, target_rows = [], []
     for prompt, response in examples:
         sequence, response_start = format_instruction(prompt, response)
         ids = tokenizer.encode(sequence)[: block_size + 1]
         inputs, targets = ids[:-1], ids[1:]
-        labels = [target if position + 1 >= response_start else -100 for position, target in enumerate(targets)]
+        labels = [
+            target if position + 1 >= response_start else -100
+            for position, target in enumerate(targets)
+        ]
         padding = block_size - len(inputs)
         if padding < 0:
             raise ValueError("instruction exceeds block size")
@@ -141,16 +181,30 @@ def sft_batch(examples: list[tuple[str, str]], tokenizer: CharacterTokenizer, bl
     return torch.tensor(input_rows), torch.tensor(target_rows)
 
 
-def masked_cross_entropy(model: TinyLanguageModel, batch: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+def masked_cross_entropy(
+    model: TinyLanguageModel, batch: tuple[torch.Tensor, torch.Tensor]
+) -> torch.Tensor:
     inputs, targets = batch
     logits, _ = model(inputs)
-    return F.cross_entropy(logits.reshape(-1, model.config.vocab_size), targets.reshape(-1), ignore_index=-100)
+    return F.cross_entropy(
+        logits.reshape(-1, model.config.vocab_size),
+        targets.reshape(-1),
+        ignore_index=-100,
+    )
 
 
 @torch.no_grad()
-def sft_loss(model: TinyLanguageModel, examples: list[tuple[str, str]], tokenizer: CharacterTokenizer) -> float:
+def sft_loss(
+    model: TinyLanguageModel,
+    examples: list[tuple[str, str]],
+    tokenizer: CharacterTokenizer,
+) -> float:
     model.eval()
-    return float(masked_cross_entropy(model, sft_batch(examples, tokenizer, model.config.block_size)))
+    return float(
+        masked_cross_entropy(
+            model, sft_batch(examples, tokenizer, model.config.block_size)
+        )
+    )
 
 
 class LoRALinear(nn.Module):
@@ -175,14 +229,26 @@ def add_lora_to_attention(model: TinyLanguageModel, rank: int = 4) -> TinyLangua
     for parameter in model.parameters():
         parameter.requires_grad = False
     for block in model.blocks:
-        block.attention.query_key_value = LoRALinear(block.attention.query_key_value, rank=rank)
-        block.attention.output_projection = LoRALinear(block.attention.output_projection, rank=rank)
+        block.attention.query_key_value = LoRALinear(
+            block.attention.query_key_value, rank=rank
+        )
+        block.attention.output_projection = LoRALinear(
+            block.attention.output_projection, rank=rank
+        )
     return model
 
 
-def train_sft(model: TinyLanguageModel, examples: list[tuple[str, str]], tokenizer: CharacterTokenizer, steps: int, lr: float) -> None:
+def train_sft(
+    model: TinyLanguageModel,
+    examples: list[tuple[str, str]],
+    tokenizer: CharacterTokenizer,
+    steps: int,
+    lr: float,
+) -> None:
     batch = sft_batch(examples, tokenizer, model.config.block_size)
-    parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    parameters = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
     optimizer = torch.optim.AdamW(parameters, lr=lr, weight_decay=0.0)
     for _ in range(steps):
         model.train()
@@ -194,10 +260,14 @@ def train_sft(model: TinyLanguageModel, examples: list[tuple[str, str]], tokeniz
 
 
 def trainable_parameter_count(model: nn.Module) -> int:
-    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+    return sum(
+        parameter.numel() for parameter in model.parameters() if parameter.requires_grad
+    )
 
 
-def response_log_probability(model: TinyLanguageModel, tokenizer: CharacterTokenizer, prompt: str, response: str) -> torch.Tensor:
+def response_log_probability(
+    model: TinyLanguageModel, tokenizer: CharacterTokenizer, prompt: str, response: str
+) -> torch.Tensor:
     sequence, response_start = format_instruction(prompt, response)
     ids = tokenizer.encode(sequence)[: model.config.block_size + 1]
     inputs = torch.tensor([ids[:-1]])
@@ -210,24 +280,46 @@ def response_log_probability(model: TinyLanguageModel, tokenizer: CharacterToken
     return selected[response_mask].sum()
 
 
-def dpo_loss(policy: TinyLanguageModel, reference: TinyLanguageModel, tokenizer: CharacterTokenizer, examples: list[tuple[str, str, str]], beta: float = 0.1) -> torch.Tensor:
+def dpo_loss(
+    policy: TinyLanguageModel,
+    reference: TinyLanguageModel,
+    tokenizer: CharacterTokenizer,
+    examples: list[tuple[str, str, str]],
+    beta: float = 0.1,
+) -> torch.Tensor:
     losses = []
     for prompt, chosen, rejected in examples:
-        policy_margin = response_log_probability(policy, tokenizer, prompt, chosen) - response_log_probability(policy, tokenizer, prompt, rejected)
+        policy_margin = response_log_probability(
+            policy, tokenizer, prompt, chosen
+        ) - response_log_probability(policy, tokenizer, prompt, rejected)
         with torch.no_grad():
-            reference_margin = response_log_probability(reference, tokenizer, prompt, chosen) - response_log_probability(reference, tokenizer, prompt, rejected)
+            reference_margin = response_log_probability(
+                reference, tokenizer, prompt, chosen
+            ) - response_log_probability(reference, tokenizer, prompt, rejected)
         losses.append(-F.logsigmoid(beta * (policy_margin - reference_margin)))
     return torch.stack(losses).mean()
 
 
 @torch.no_grad()
-def preference_accuracy(model: TinyLanguageModel, tokenizer: CharacterTokenizer, examples: list[tuple[str, str, str]]) -> float:
-    wins = [response_log_probability(model, tokenizer, prompt, chosen) > response_log_probability(model, tokenizer, prompt, rejected) for prompt, chosen, rejected in examples]
+def preference_accuracy(
+    model: TinyLanguageModel,
+    tokenizer: CharacterTokenizer,
+    examples: list[tuple[str, str, str]],
+) -> float:
+    wins = [
+        response_log_probability(model, tokenizer, prompt, chosen)
+        > response_log_probability(model, tokenizer, prompt, rejected)
+        for prompt, chosen, rejected in examples
+    ]
     return float(torch.tensor(wins, dtype=torch.float32).mean())
 
 
 @torch.no_grad()
-def mean_preference_margin(model: TinyLanguageModel, tokenizer: CharacterTokenizer, examples: list[tuple[str, str, str]]) -> float:
+def mean_preference_margin(
+    model: TinyLanguageModel,
+    tokenizer: CharacterTokenizer,
+    examples: list[tuple[str, str, str]],
+) -> float:
     margins = [
         response_log_probability(model, tokenizer, prompt, chosen)
         - response_log_probability(model, tokenizer, prompt, rejected)
@@ -236,7 +328,37 @@ def mean_preference_margin(model: TinyLanguageModel, tokenizer: CharacterTokeniz
     return float(torch.stack(margins).mean())
 
 
-def train_dpo(policy: TinyLanguageModel, reference: TinyLanguageModel, tokenizer: CharacterTokenizer, steps: int = 120) -> tuple[float, float]:
+@torch.no_grad()
+def preference_details(
+    model: TinyLanguageModel,
+    tokenizer: CharacterTokenizer,
+    examples: list[tuple[str, str, str]],
+) -> list[dict[str, float | bool | str]]:
+    """Return per-example held-out evidence for paired evaluation."""
+    details = []
+    for prompt, chosen, rejected in examples:
+        margin = float(
+            response_log_probability(model, tokenizer, prompt, chosen)
+            - response_log_probability(model, tokenizer, prompt, rejected)
+        )
+        details.append(
+            {
+                "prompt": prompt,
+                "chosen": chosen,
+                "rejected": rejected,
+                "preference_margin": margin,
+                "chosen_wins": margin > 0,
+            }
+        )
+    return details
+
+
+def train_dpo(
+    policy: TinyLanguageModel,
+    reference: TinyLanguageModel,
+    tokenizer: CharacterTokenizer,
+    steps: int = 120,
+) -> tuple[float, float]:
     optimizer = torch.optim.AdamW(policy.parameters(), lr=5e-4, weight_decay=0.0)
     initial = float(dpo_loss(policy, reference, tokenizer, PREFERENCE_TRAIN).detach())
     for _ in range(steps):
@@ -246,7 +368,9 @@ def train_dpo(policy: TinyLanguageModel, reference: TinyLanguageModel, tokenizer
         loss.backward()
         torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
         optimizer.step()
-    return initial, float(dpo_loss(policy, reference, tokenizer, PREFERENCE_TRAIN).detach())
+    return initial, float(
+        dpo_loss(policy, reference, tokenizer, PREFERENCE_TRAIN).detach()
+    )
 
 
 def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dict:
@@ -257,7 +381,13 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
     # Base corpus deliberately contains every lowercase character and punctuation used later.
     vocabulary_corpus = BASE_TRAIN + "abcdefghijklmnopqrstuvwxyz,:;?\n"
     tokenizer = CharacterTokenizer(vocabulary_corpus)
-    config = ModelConfig(vocab_size=tokenizer.vocab_size, block_size=96, d_model=32, n_heads=4, n_layers=1)
+    config = ModelConfig(
+        vocab_size=tokenizer.vocab_size,
+        block_size=96,
+        d_model=32,
+        n_heads=4,
+        n_layers=1,
+    )
 
     base_model = TinyLanguageModel(config)
     optimize_language_model(base_model, BASE_TRAIN, tokenizer, steps=100, lr=2e-3)
@@ -265,7 +395,9 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
     domain_before = language_model_loss(base_model, DOMAIN_VALIDATION, tokenizer)
 
     continued_model = copy.deepcopy(base_model)
-    optimize_language_model(continued_model, domain_train, tokenizer, steps=100, lr=1e-3)
+    optimize_language_model(
+        continued_model, domain_train, tokenizer, steps=100, lr=1e-3
+    )
     base_after = language_model_loss(continued_model, BASE_VALIDATION, tokenizer)
     domain_after = language_model_loss(continued_model, DOMAIN_VALIDATION, tokenizer)
 
@@ -290,10 +422,32 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
         parameter.requires_grad = False
     policy = copy.deepcopy(full_sft)
     preference_before = preference_accuracy(policy, tokenizer, PREFERENCE_VALIDATION)
-    preference_margin_before = mean_preference_margin(policy, tokenizer, PREFERENCE_VALIDATION)
+    preference_margin_before = mean_preference_margin(
+        policy, tokenizer, PREFERENCE_VALIDATION
+    )
+    preference_details_before = preference_details(
+        policy, tokenizer, PREFERENCE_VALIDATION
+    )
     dpo_initial, dpo_final = train_dpo(policy, reference, tokenizer)
     preference_after = preference_accuracy(policy, tokenizer, PREFERENCE_VALIDATION)
-    preference_margin_after = mean_preference_margin(policy, tokenizer, PREFERENCE_VALIDATION)
+    preference_margin_after = mean_preference_margin(
+        policy, tokenizer, PREFERENCE_VALIDATION
+    )
+    preference_details_after = preference_details(
+        policy, tokenizer, PREFERENCE_VALIDATION
+    )
+    held_out_examples = [
+        {
+            "prompt": before["prompt"],
+            "chosen": before["chosen"],
+            "rejected": before["rejected"],
+            "margin_before": before["preference_margin"],
+            "margin_after": after["preference_margin"],
+            "correct_before": before["chosen_wins"],
+            "correct_after": after["chosen_wins"],
+        }
+        for before, after in zip(preference_details_before, preference_details_after)
+    ]
 
     report = {
         "schema_version": "1.0",
@@ -310,9 +464,22 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
             "base_retention_loss_after": base_after,
         },
         "instruction_tuning": {
-            "full": {"train_loss_before": full_initial, "train_loss_after": full_final, "held_out_loss": full_validation, "trainable_parameters": trainable_parameter_count(full_sft)},
-            "lora": {"train_loss_before": lora_initial, "train_loss_after": lora_final, "held_out_loss": lora_validation, "trainable_parameters": trainable_parameter_count(lora_sft), "zero_initial_logit_delta": lora_zero_delta},
-            "total_base_parameters": sum(parameter.numel() for parameter in continued_model.parameters()),
+            "full": {
+                "train_loss_before": full_initial,
+                "train_loss_after": full_final,
+                "held_out_loss": full_validation,
+                "trainable_parameters": trainable_parameter_count(full_sft),
+            },
+            "lora": {
+                "train_loss_before": lora_initial,
+                "train_loss_after": lora_final,
+                "held_out_loss": lora_validation,
+                "trainable_parameters": trainable_parameter_count(lora_sft),
+                "zero_initial_logit_delta": lora_zero_delta,
+            },
+            "total_base_parameters": sum(
+                parameter.numel() for parameter in continued_model.parameters()
+            ),
         },
         "preference_alignment": {
             "objective": "DPO on response-token sequence log probabilities",
@@ -322,6 +489,7 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
             "held_out_preference_accuracy_after": preference_after,
             "held_out_preference_margin_before": preference_margin_before,
             "held_out_preference_margin_after": preference_margin_after,
+            "held_out_examples": held_out_examples,
             "sft_retention_loss_before": sft_loss(reference, SFT_VALIDATION, tokenizer),
             "sft_retention_loss_after": sft_loss(policy, SFT_VALIDATION, tokenizer),
         },
@@ -337,7 +505,9 @@ def run_adaptation_lab(*, output_dir: Path | None = None, seed: int = 42) -> dic
         torch.save(continued_model.state_dict(), output_dir / "continued_model.pt")
         torch.save(full_sft.state_dict(), output_dir / "full_sft_model.pt")
         torch.save(policy.state_dict(), output_dir / "dpo_policy.pt")
-        (output_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        (output_dir / "report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
     return report
 
 
@@ -346,7 +516,11 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    print(json.dumps(run_adaptation_lab(output_dir=args.output_dir, seed=args.seed), indent=2))
+    print(
+        json.dumps(
+            run_adaptation_lab(output_dir=args.output_dir, seed=args.seed), indent=2
+        )
+    )
     return 0
 
 
