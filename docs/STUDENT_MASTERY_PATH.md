@@ -156,6 +156,14 @@ development-only challenger selection, one-time paired final testing, separate s
 and correctness metrics, robustness evidence, and an honest release decision. Complete
 this gate before NLP-05 threat modelling and guardrails.
 
+## Gate N — Guardrail and trust-boundary mastery
+
+Complete NLP-05 and `projects/guardrail_evaluation/MASTERY_CHECKPOINT.md`. Passing
+requires an explicit four-action policy, PII redaction trace, action confusion matrix,
+critical-escape and over-restriction analysis, independent schema/citation/support/truth
+checks, authorization outside the model, and a residual-risk decision. Complete this
+gate before treating retrieved evidence as model context.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

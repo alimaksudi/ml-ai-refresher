@@ -52,7 +52,7 @@ The Deep Learning spine is:
 
 Before RAG, pass `make tiny-lm-checkpoint`, `make transformer-families-checkpoint`,
 `make sentence-embeddings-checkpoint`, `make language-model-adaptation-checkpoint`,
-and `make prompt-evaluation-checkpoint`.
+`make prompt-evaluation-checkpoint`, and `make guardrail-evaluation-checkpoint`.
 The first project trains a decoder-only model
 end to end—without an API key—and tests shifted targets, causal masking, backprop,
 validation, checkpoint loading, generation, and character-versus-BPE tokenization.
@@ -125,6 +125,7 @@ ml-ai-refresher/
 │   ├── tiny_language_model/   # offline decoder training and pre-RAG gate
 │   ├── transformer_families/  # GPT, BERT, and T5 masks, objectives, and mastery gate
 │   ├── prompt_evaluation/      # controlled local prompt comparison and release gate
+│   ├── guardrail_evaluation/   # policy, privacy, evidence contracts, and escape analysis
 │   └── rag_foundations/       # measured retrieval and grounded-answer checkpoints
 └── tools/
     ├── nbbuild.py           # md()/code()/build() helpers

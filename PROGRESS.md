@@ -106,6 +106,10 @@ The implemented Deep Learning path is:
   decoding, actual outputs, schema/correctness separation, paired uncertainty,
   robustness paraphrases, and a release gate that rejects unsupported improvement.
 - [x] NLP-05 — Hallucination and Guardrails → `notebooks/05_nlp_and_llms/05_hallucination_and_guardrails.ipynb`
+  Rebuilt through `projects/guardrail_evaluation/`: explicit allow/redact/block/escalate
+  policy, privacy-safe redaction, action confusion, critical escapes, over-restriction,
+  structured claims, independent citation/support/correctness contracts, and a rejecting
+  release gate. Real retrieval grounding remains in RAG-04.
 
 ## Section 06 — Retrieval-Augmented Generation
 - [x] RAG-01 — Similarity Search → `notebooks/06_rag/01_similarity_search.ipynb`

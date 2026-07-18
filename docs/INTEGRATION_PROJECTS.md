@@ -130,6 +130,22 @@ The executable local baseline and prompt-version manifest live in
   on the final holdout and no unsupported “better” claim. Report correctness,
   grounding, citation validity, refusal, and safety separately when they apply.
 
+## F2. Guardrail evaluation lab — after NLP-05
+
+- **Goal:** compare explicit policy controls without collapsing safety, privacy,
+  evidence support, correctness, citations, and schema into one score.
+- **Dataset columns:** case ID, text/output, expected action, slice, claims, citations,
+  source authority, and authoritative value.
+- **Workflow:** establish a keyword baseline; apply allow/redact/block/escalate policy;
+  trace PII redaction; inspect action confusion; test structured output contracts;
+  identify critical escapes; and apply a predeclared release gate.
+- **Expected output:** data hash, policy version, redaction trace, action matrix,
+  critical-escape and over-restriction rates, independent output-contract results,
+  known escape, residual risk, and release decision.
+- **Evaluation:** use `projects/guardrail_evaluation/`; regex patterns are teaching
+  controls, not intent understanding or a security boundary. Real retrieved-evidence
+  grounding is assessed later in RAG-04 and EVAL-03.
+
 ## G. Measured RAG foundation — after RAG-01 through RAG-03
 
 - **Goal:** determine which chunking and retriever baseline is justified.
