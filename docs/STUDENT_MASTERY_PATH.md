@@ -148,6 +148,14 @@ correct manual lexical metrics, real local model evidence, uncertainty plus cove
 limits, slice inspection, and a regression gate that enforces retention guardrails.
 Complete this gate before changing prompts in NLP-04.
 
+## Gate M — Controlled prompt experimentation mastery
+
+Complete NLP-04 and `projects/prompt_evaluation/MASTERY_CHECKPOINT.md`. Passing
+requires prompt and data hashes, a frozen local model/tokenizer/decoding contract,
+development-only challenger selection, one-time paired final testing, separate schema
+and correctness metrics, robustness evidence, and an honest release decision. Complete
+this gate before NLP-05 threat modelling and guardrails.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

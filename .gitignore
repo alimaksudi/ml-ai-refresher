@@ -66,6 +66,7 @@ projects/tiny_language_model/artifacts/
 projects/transformer_families/artifacts/
 projects/sentence_embeddings/artifacts/
 projects/language_model_adaptation/artifacts/
+projects/prompt_evaluation/artifacts/
 
 # Logs, profiles, and temporary files
 *.log

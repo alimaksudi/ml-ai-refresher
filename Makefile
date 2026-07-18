@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-tokenizers tiny-lm-kv-cache tiny-lm-test tiny-lm-checkpoint transformer-families-train transformer-families-test transformer-families-checkpoint sentence-embeddings-train sentence-embeddings-test sentence-embeddings-checkpoint language-model-adaptation-train language-model-adaptation-test language-model-adaptation-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-tokenizers tiny-lm-kv-cache tiny-lm-test tiny-lm-checkpoint transformer-families-train transformer-families-test transformer-families-checkpoint sentence-embeddings-train sentence-embeddings-test sentence-embeddings-checkpoint language-model-adaptation-train language-model-adaptation-test language-model-adaptation-checkpoint prompt-evaluation-run prompt-evaluation-test prompt-evaluation-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -79,6 +79,15 @@ language-model-adaptation-test:
 
 language-model-adaptation-checkpoint: validate language-model-adaptation-test language-model-adaptation-train
 	@echo "Automated adaptation gates passed. Complete all four checkpoints in projects/language_model_adaptation."
+
+prompt-evaluation-run:
+	PYTHONPATH=projects/prompt_evaluation/src:projects/language_model_adaptation/src:projects/tiny_language_model/src python3 -m prompt_evaluation.lab --output-dir projects/prompt_evaluation/artifacts
+
+prompt-evaluation-test:
+	PYTHONPATH=projects/prompt_evaluation/src:projects/language_model_adaptation/src:projects/tiny_language_model/src python3 -m pytest projects/prompt_evaluation/tests -q
+
+prompt-evaluation-checkpoint: validate prompt-evaluation-test prompt-evaluation-run
+	@echo "Automated prompt experiment passed. Complete projects/prompt_evaluation/MASTERY_CHECKPOINT.md before NLP-05."
 
 rag-foundations-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/evaluation.json

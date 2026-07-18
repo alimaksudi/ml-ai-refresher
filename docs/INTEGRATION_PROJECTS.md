@@ -115,6 +115,8 @@ creating repetitive toy projects.
 Before starting, pass the LLM evaluation checkpoint in
 `projects/language_model_adaptation/EVALUATION_CHECKPOINT.md`; prompt variants must
 not be created before the evaluation contract and fixed comparison set exist.
+The executable local baseline and prompt-version manifest live in
+`projects/prompt_evaluation/`.
 
 - **Goal:** treat prompt changes as versioned experiments.
 - **Dataset columns:** case ID, input, expected schema, rubric/reference, safety slice,
@@ -123,10 +125,10 @@ not be created before the evaluation contract and fixed comparison set exist.
   stochastic variation, and classify failures.
 - **Expected output:** versioned prompt, eval set, validity/task/safety report, and
   regression examples.
-- **Evaluation:** use a declared local model or fixed versioned outputs; synthetic
-  accuracy may test the harness but cannot rank prompt methods. No selection on the
-  final holdout and no unsupported “better” claim. Report correctness, grounding,
-  citation validity, refusal, and safety separately when they apply.
+- **Evaluation:** the core uses one declared local model and actual generated outputs;
+  synthetic accuracy may test a harness but cannot rank prompt methods. No selection
+  on the final holdout and no unsupported “better” claim. Report correctness,
+  grounding, citation validity, refusal, and safety separately when they apply.
 
 ## G. Measured RAG foundation — after RAG-01 through RAG-03
 

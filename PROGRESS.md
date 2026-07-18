@@ -101,6 +101,10 @@ The implemented Deep Learning path is:
   Executed locally through `projects/language_model_adaptation/`: curation, continued
   pretraining, retention, response-masked SFT, LoRA, DPO, and preference/retention evidence.
 - [x] NLP-04 — Prompt Engineering → `notebooks/05_nlp_and_llms/04_prompt_engineering.ipynb`
+  Rebuilt as controlled prompt experimentation through `projects/prompt_evaluation/`:
+  one frozen local model, prompt/data hashes, development-only selection, greedy
+  decoding, actual outputs, schema/correctness separation, paired uncertainty,
+  robustness paraphrases, and a release gate that rejects unsupported improvement.
 - [x] NLP-05 — Hallucination and Guardrails → `notebooks/05_nlp_and_llms/05_hallucination_and_guardrails.ipynb`
 
 ## Section 06 — Retrieval-Augmented Generation
