@@ -29,6 +29,13 @@ import textwrap
 import nbformat
 from nbformat.v4 import new_code_cell, new_markdown_cell, new_notebook
 
+from foundation_mastery import (
+    ADVANCED_SECTION_NOTES,
+    CORE_CODE,
+    CORE_MASTERY,
+    TOPIC_GUIDES,
+)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Tests and validation can redirect generated notebooks to a temporary directory
 # without mutating the checked-in build artifacts.
@@ -137,8 +144,74 @@ def _lesson_title(cells) -> str:
     return "this lesson"
 
 
-def _student_lesson_companion_cell(title: str):
-    """Make the beginner reading contract explicit without duplicating core content."""
+def _student_lesson_companion_cell(title: str, module_id: str):
+    """State the actual beginner decision before asking reflection questions."""
+    guide = TOPIC_GUIDES.get(module_id)
+    if not guide:
+        return _legacy_student_lesson_companion_cell(title)
+    if guide:
+        topic_intro = f"""
+        ### Practical problem before history
+
+        **{guide['problem']}**
+
+        ### Concept, analogy, and analogy limit
+
+        {guide['analogy']}
+
+        ### Use / avoid / alternatives
+
+        | Decision | Topic-specific answer |
+        |---|---|
+        | Use it when | {guide['use']} |
+        | Avoid it when | {guide['avoid']} |
+        | Prefer instead | {guide['alternative']} |
+        """
+    return md(f"""
+    ## Student Lesson Companion · {title}
+
+    Use this companion during the **core pass**. The lesson first gives a concrete
+    answer; after studying it, restate that answer in your own words.
+
+    {topic_intro}
+
+    ### Questions to answer after the core pass
+
+    1. What is the smallest useful baseline?
+    2. What limitation of that baseline creates the need for this concept?
+    3. What evidence would support using the concept?
+    4. Which assumption could make the result misleading?
+    5. What simpler or safer alternative would you choose when that assumption fails?
+
+    ### Code walkthrough and expected-result contract
+
+    For the first implementation, annotate: inputs → shapes/units → initialization →
+    central computation → intermediate output → final output → verification. Before
+    execution, record the expected value, range, or shape and what it would mean.
+
+    Distinguish these outcomes:
+
+    | Outcome | Interpretation | Next action |
+    |---|---|---|
+    | Exception, non-finite value, impossible shape | Code or data-contract failure | Inspect the first violated boundary |
+    | Output has valid type/shape but weak metric | Experiment ran; method may be poor | Diagnose data, assumptions, and baseline comparison |
+    | Strong metric on training data only | Insufficient evidence | Evaluate with the declared validation design |
+    | Expected output on untouched data | Supports one scoped claim | Record limitations; do not generalize beyond evidence |
+
+    ### Debugging table
+
+    | Symptom | Likely cause | Inspect | Scoped fix |
+    |---|---|---|---|
+    | Shape/type error | Interface mismatch | Shapes, dtypes, feature names | Repair the boundary, not downstream symptoms |
+    | NaN/Inf or divergence | Invalid input or unstable update | Raw values, loss, gradients, learning rate | Clean/validate input or change one optimization control |
+    | Implausibly strong result | Leakage or invalid split | Fit boundaries, timestamps, duplicate entities | Rebuild the evaluation path before tuning |
+    | Different repeated result | Uncontrolled state | Seeds, data order, train/eval mode, versions | Record and control randomness intentionally |
+    | Plausible output but poor result | Wrong assumptions or representation | Baseline, slices, residuals/errors | Prefer a justified alternative; do not debug valid code as broken |
+    """)
+
+
+def _legacy_student_lesson_companion_cell(title: str):
+    """Keep unaffected modules byte-for-byte compatible with their builders."""
     return md(f"""
     ## Student Lesson Companion · {title}
 
@@ -200,7 +273,42 @@ def _student_lesson_companion_cell(title: str):
     """)
 
 
-def _lesson_close_cell(title: str):
+def _lesson_close_cell(title: str, module_id: str):
+    guide = TOPIC_GUIDES.get(module_id)
+    if not guide:
+        return _legacy_lesson_close_cell(title)
+    memory = guide["memory"] if guide else (
+        "Start from the problem, trace the mechanism, verify the evidence, and check the assumptions."
+    )
+    return md(f"""
+    ## Lesson Close · Summary, Student Check, and Memory Aid
+
+    ### Five short student checks
+
+    1. What practical problem does **{title}** solve?
+    2. What is its central mechanism in simple language?
+    3. Which assumption or limitation is easiest to forget?
+    4. What output or diagnostic tells you it worked as intended?
+    5. When would you choose a simpler or related alternative?
+
+    ### Plain-language summary
+
+    Complete four sentences without notes: **The problem is… The concept works by…
+    I would use it when… I would avoid it when…** Compare your answer with the
+    objectives, failure modes, tradeoff analysis, and teach-back section.
+
+    ### One-sentence memory aid
+
+    **{memory}**
+
+    Now write your own version in no more than 20 words without looking back.
+
+    The lesson is complete only after the Required Core Mastery Gate, not after the
+    final code cell runs.
+    """)
+
+
+def _legacy_lesson_close_cell(title: str):
     return md(f"""
     ## Lesson Close · Summary, Student Check, and Memory Aid
 
@@ -279,12 +387,13 @@ def build(rel_path: str, cells, kernel: str = "python3") -> str:
     """Assemble ``cells`` into a notebook and write it to ``notebooks/<rel_path>``."""
     cells = list(cells)
     title = _lesson_title(cells)
+    module_id = _curriculum_metadata(rel_path)["id"]
     cells.insert(1, _learner_navigation_cell(rel_path))
     objective_index = next(
         (index for index, cell in enumerate(cells) if cell.cell_type == "markdown" and "## 1" in cell.source),
         1,
     )
-    cells.insert(objective_index + 1, _student_lesson_companion_cell(title))
+    cells.insert(objective_index + 1, _student_lesson_companion_cell(title, module_id))
     if not rel_path.startswith(("00_prerequisites/", "01_ml_foundations/")):
         insert_at = 1
         for index, cell in enumerate(cells):
@@ -292,7 +401,31 @@ def build(rel_path: str, cells, kernel: str = "python3") -> str:
                 insert_at = index + 1
                 break
         cells.insert(insert_at, _notation_support_cell())
-    cells.append(_lesson_close_cell(title))
+    if module_id in CORE_MASTERY:
+        foundation_index = next(
+            (
+                index
+                for index, cell in enumerate(cells)
+                if cell.cell_type == "markdown"
+                and ("## 4 ·" in cell.source or "## 4." in cell.source)
+            ),
+            objective_index + 2,
+        )
+        beginner_cells = [md(CORE_MASTERY[module_id])]
+        if module_id in CORE_CODE:
+            beginner_cells.append(code(CORE_CODE[module_id]))
+        if module_id in ADVANCED_SECTION_NOTES:
+            beginner_cells.append(
+                md(
+                    f"""
+                    > **Advanced-path boundary.** {ADVANCED_SECTION_NOTES[module_id]}
+                    > You may read the remaining derivations now, but they are not
+                    > required for the first mastery attempt.
+                    """
+                )
+            )
+        cells[foundation_index:foundation_index] = beginner_cells
+    cells.append(_lesson_close_cell(title, module_id))
     cells.append(_required_mastery_gate_cell(rel_path))
     nb = new_notebook(cells=cells)
     nb.metadata.update(

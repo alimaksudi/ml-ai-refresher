@@ -267,6 +267,18 @@ def execute_notebooks(scope: str) -> list[Finding]:
             for path in NOTEBOOKS
             if path.relative_to(ROOT / "notebooks").as_posix().startswith("11_capstone/")
         ]
+    elif scope == "classical":
+        modules = json.loads(CURRICULUM_PATH.read_text(encoding="utf-8"))["modules"]
+        cutoff = next(index for index, item in enumerate(modules) if item["id"] == "CML-05")
+        classical_paths = {
+            module["path"]
+            for module in modules[: cutoff + 1]
+        }
+        selected = [
+            path
+            for path in NOTEBOOKS
+            if path.relative_to(ROOT / "notebooks").as_posix() in classical_paths
+        ]
 
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")
@@ -293,7 +305,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--execute",
-        choices=("none", "foundations", "capstone", "all"),
+        choices=("none", "foundations", "classical", "capstone", "all"),
         default="none",
     )
     parser.add_argument("--skip-generated-check", action="store_true")

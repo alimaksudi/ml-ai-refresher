@@ -33,9 +33,12 @@ increase the stated workload.
 After PRE-01 through PRE-05, without notes:
 
 - evaluate an expression while respecting operation order;
+- interpret inequalities, intervals, sets, approximation, and units;
 - rearrange a one-variable equation;
+- solve a tiny two-equation system;
 - read a graph as an input-output relationship;
-- explain derivative and probability intuition;
+- calculate a power-rule and chain-rule derivative;
+- calculate complement, conditional probability, and expected value;
 - trace NumPy matrix shapes;
 - write and test a small function;
 - load, validate, filter, group, and safely join a DataFrame;
@@ -49,8 +52,10 @@ repeat PRE-03 and PRE-05 using a new five-row dataset.
 After FND-01 and FND-02:
 
 - distinguish scalar, vector, matrix, and their shapes;
-- compute a dot product and explain its meaning;
-- distinguish probability, likelihood, expectation, and sample statistic;
+- compute dot products and matrix-vector products by hand and in NumPy;
+- explain transpose, independence, projection, and a non-invertible system;
+- distinguish population, sample, parameter, statistic, probability, and likelihood;
+- calculate population variance, sample variance, standard error, and a small interval;
 - explain sampling variation and why a point estimate is incomplete.
 
 Do not proceed if matrix multiplication is still memorized as a rule with no shape
@@ -73,9 +78,14 @@ and evaluation problems in MLE-01/MLE-02. Do not compensate with a more complex 
 
 ## Gate D — Classical ML mastery
 
-Complete the wine-classifier checkpoint. A passing score requires valid evidence,
-not merely accuracy. Then revisit optional derivations and senior extensions from
-CML-01 through MLE-05 and complete MLE-06.
+Before the wine-classifier checkpoint, complete basic experiment tracking in
+PROD-04, feature engineering in MLE-03, and CML-03 through CML-05. Without notes,
+calculate one tree split, one forest vote, and two residual-boosting updates. Explain
+why a pruned tree, random forest, or boosting model is preferable for three different
+data constraints. A passing project score requires valid evidence, not merely
+accuracy. Bayesian optimization and XGBoost's second-order derivation remain extension
+material until this gate passes. Then revisit optional derivations and senior
+extensions from CML-01 through MLE-05 and complete MLE-06.
 
 ## Gate E — Deep Learning mastery
 
