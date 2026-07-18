@@ -51,7 +51,9 @@ The Deep Learning spine is:
 
 Before RAG, run `make tiny-lm-checkpoint`. The project trains a decoder-only model
 end to end—without an API key—and tests shifted targets, causal masking, backprop,
-validation, checkpoint loading, and generation. Passing cells is not sufficient;
+validation, checkpoint loading, generation, and character-versus-BPE tokenization.
+Cross-tokenizer likelihood is compared with bits per character. Naive and KV-cached
+generation must produce equivalent logits before their latency is compared. Passing cells is not sufficient;
 complete `projects/tiny_language_model/MASTERY_CHECKPOINT.md`.
 
 Run `make validate` to reject unknown, missing, or forward-pointing prerequisites.

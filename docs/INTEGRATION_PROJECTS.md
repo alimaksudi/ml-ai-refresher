@@ -55,12 +55,18 @@ creating repetitive toy projects.
   key, then explain why every component exists.
 - **Dataset columns:** the bundled data is a raw character stream; generated training
   examples contain input token IDs, next-token targets, split, and window position.
-- **Workflow:** contiguous text split, tokenizer fit on training text, shifted windows,
-  bigram baseline, one-batch overfit test, causal Transformer training, validation
-  checkpoint selection, decoding comparison, and one controlled architecture ablation.
+- **Workflow:** contiguous text split, character and BPE tokenizers fit on training text,
+  shifted windows, bigram baseline, one-batch overfit test, controlled tokenizer
+  comparison using bits per character, causal Transformer training, validation
+  checkpoint selection, decoding comparison, cached-versus-naive inference equivalence,
+  KV-cache latency measurement, and one architecture ablation.
 - **Expected output:** learning curves, dataset hash, model configuration, parameter
-  count, baseline and model validation loss, perplexity, saved weights, tokenizer,
-  fixed-seed samples, and a limitation statement.
+  count, token compression, context coverage, baseline and model validation loss,
+  within-tokenizer perplexity, cross-tokenizer bits per character, saved weights,
+  tokenizer merges, fixed-seed samples, and a limitation statement.
+- **Inference evidence:** maximum cached-logit difference, identical greedy output,
+  per-layer cache shapes, estimated cache bytes, median latency, tokens per second, and
+  speedup across several prompt lengths.
 - **Evaluation:** no window may cross the split; future tokens must not affect earlier
   logits; the student must report a losing comparison honestly. Use
   `projects/tiny_language_model/MASTERY_CHECKPOINT.md`.

@@ -1,6 +1,12 @@
 import torch
 
-from tiny_language_model.model import CharacterTokenizer, ModelConfig, TinyLanguageModel
+from tiny_language_model.model import (
+    BPETokenizer,
+    CharacterTokenizer,
+    ModelConfig,
+    TinyLanguageModel,
+    tokenizer_from_dict,
+)
 from tiny_language_model.training import (
     load_checkpoint,
     make_next_token_windows,
@@ -69,3 +75,77 @@ def test_checkpoint_round_trip_preserves_logits(tmp_path):
     assert loaded_tokenizer.tokens == tokenizer.tokens
     assert loaded_metadata["test_artifact"] is True
     assert torch.equal(expected, actual)
+
+
+def test_bpe_training_is_deterministic_and_lossless_on_known_text():
+    text = "low lower lowest low lower"
+    first = BPETokenizer.train(text, target_vocab_size=18)
+    second = BPETokenizer.train(text, target_vocab_size=18)
+    assert first.merges == second.merges
+    assert first.tokens == second.tokens
+    assert first.decode(first.encode(text)) == text
+    assert first.vocab_size == 18
+    assert len(first.encode(text)) < len(text)
+
+
+def test_bpe_unknown_character_and_serialization():
+    tokenizer = BPETokenizer.train("banana bandana", target_vocab_size=12)
+    restored = tokenizer_from_dict(tokenizer.to_dict())
+    assert isinstance(restored, BPETokenizer)
+    assert restored.merges == tokenizer.merges
+    assert restored.decode(restored.encode("banana!")) == "banana?"
+
+
+def test_bpe_checkpoint_round_trip_preserves_logits(tmp_path):
+    torch.manual_seed(11)
+    tokenizer = BPETokenizer.train("a small model makes small tokens", target_vocab_size=20)
+    config = ModelConfig(vocab_size=tokenizer.vocab_size, block_size=6, d_model=16, n_heads=4, n_layers=1)
+    model = TinyLanguageModel(config).eval()
+    inputs = torch.tensor([tokenizer.encode("a small model")[:6]], dtype=torch.long)
+    expected, _ = model(inputs)
+    save_checkpoint(model, tokenizer, {"config": config.to_dict()}, tmp_path)
+    loaded, loaded_tokenizer, _ = load_checkpoint(tmp_path)
+    actual, _ = loaded(inputs)
+    assert isinstance(loaded_tokenizer, BPETokenizer)
+    assert torch.equal(expected, actual)
+
+
+def test_incremental_cache_matches_full_forward_logits():
+    torch.manual_seed(13)
+    config = ModelConfig(vocab_size=17, block_size=10, d_model=24, n_heads=4, n_layers=2)
+    model = TinyLanguageModel(config).eval()
+    token_ids = torch.randint(0, config.vocab_size, (2, 8))
+    full_logits, _ = model(token_ids)
+
+    cache = None
+    incremental_logits = []
+    for position in range(token_ids.shape[1]):
+        logits, cache = model.forward_with_cache(token_ids[:, position : position + 1], cache)
+        incremental_logits.append(logits)
+    cached_logits = torch.cat(incremental_logits, dim=1)
+
+    assert torch.allclose(full_logits, cached_logits, atol=1e-5, rtol=1e-5)
+    assert cache is not None and len(cache) == config.n_layers
+    for key, value in cache:
+        assert key.shape == (2, config.n_heads, 8, config.d_model // config.n_heads)
+        assert value.shape == key.shape
+
+
+def test_cached_greedy_generation_matches_naive_generation():
+    torch.manual_seed(15)
+    config = ModelConfig(vocab_size=19, block_size=12, d_model=24, n_heads=4, n_layers=2)
+    model = TinyLanguageModel(config).eval()
+    prompt = torch.randint(0, config.vocab_size, (1, 5))
+    naive = model.generate(prompt.clone(), 6, temperature=0)
+    cached = model.generate_with_cache(prompt.clone(), 6, temperature=0)
+    assert torch.equal(naive, cached)
+
+
+def test_cached_generation_resets_correctly_at_context_limit():
+    torch.manual_seed(17)
+    config = ModelConfig(vocab_size=13, block_size=6, d_model=16, n_heads=4, n_layers=1)
+    model = TinyLanguageModel(config).eval()
+    prompt = torch.randint(0, config.vocab_size, (1, 5))
+    naive = model.generate(prompt.clone(), 5, temperature=0)
+    cached = model.generate_with_cache(prompt.clone(), 5, temperature=0)
+    assert torch.equal(naive, cached)

@@ -318,6 +318,42 @@ cells = [
     """),
 
     md(r"""
+    ### 5a.2 From merge arithmetic to a trainable tokenizer comparison
+
+    The small word example above makes one merge visible. The pre-RAG project contains
+    a reusable BPE tokenizer that starts from characters in the training split, learns
+    deterministic adjacent-pair merges, serializes them, and replays them on new text.
+    It operates on the raw stream, including whitespace, so decoding is lossless.
+
+    Run `make tiny-lm-tokenizers` to train the same decoder with character and BPE
+    tokenization. Do **not** rank them by token-level perplexity: BPE tokens contain
+    different numbers of characters. Compare bits per original character, and report
+    that a fixed token context lets BPE cover more source text.
+    """),
+
+    code(r"""
+    import sys
+    from pathlib import Path
+
+    candidates = [Path.cwd(), *Path.cwd().parents]
+    repo_root = next(path for path in candidates if (path / "projects/tiny_language_model").exists())
+    project_root = repo_root / "projects" / "tiny_language_model"
+    sys.path.insert(0, str(project_root / "src"))
+
+    from tiny_language_model.model import BPETokenizer
+
+    training_text = (project_root / "data" / "learning_corpus.txt").read_text(encoding="utf-8")
+    project_bpe = BPETokenizer.train(training_text, target_vocab_size=60)
+    encoded = project_bpe.encode(training_text)
+    print("first 12 learned merges:")
+    for merge_number, pair in enumerate(project_bpe.merges[:12], start=1):
+        print(f"  {merge_number:2d}. {pair!r} -> {''.join(pair)!r}")
+    print("characters:", len(training_text), "BPE tokens:", len(encoded))
+    print("compression ratio:", round(len(training_text) / len(encoded), 2), "characters/token")
+    assert project_bpe.decode(encoded) == training_text
+    """),
+
+    md(r"""
     ### 5b Pre-training loss arithmetic (causal LM cross-entropy)
 
     This controlled calculation verifies the loss formula. The executed pre-training
@@ -934,6 +970,10 @@ cells = [
     direct preference pairs with a simpler offline loop). **LoRA** can reduce trainable
     state by updating low-rank adapter matrices while keeping base weights frozen; its
     quality and retention still require direct evaluation.
+
+    Before this lifecycle, the tiny-language-model project provides executed pretraining
+    and a controlled character-versus-BPE experiment. Cross-tokenizer comparisons use
+    bits per character, not token-level perplexity.
 
     **Related lesson:** `NLP-04 · Prompt Engineering` — the other side of the LLM interface: how
     to construct system prompts, few-shot examples, chain-of-thought, and structured

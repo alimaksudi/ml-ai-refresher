@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-test tiny-lm-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-tokenizers tiny-lm-kv-cache tiny-lm-test tiny-lm-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -40,6 +40,12 @@ deep-learning-checkpoint: validate deep-learning-test
 
 tiny-lm-train:
 	PYTHONPATH=projects/tiny_language_model/src python3 -m tiny_language_model.training --output-dir projects/tiny_language_model/artifacts
+
+tiny-lm-tokenizers:
+	PYTHONPATH=projects/tiny_language_model/src python3 -m tiny_language_model.tokenizer_comparison --output-dir projects/tiny_language_model/artifacts/tokenizer_comparison
+
+tiny-lm-kv-cache:
+	PYTHONPATH=projects/tiny_language_model/src python3 -m tiny_language_model.kv_cache_benchmark --output projects/tiny_language_model/artifacts/kv_cache_benchmark.json
 
 tiny-lm-test:
 	PYTHONPATH=projects/tiny_language_model/src python3 -m pytest projects/tiny_language_model/tests -q

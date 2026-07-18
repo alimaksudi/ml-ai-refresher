@@ -38,6 +38,7 @@ cells = [
     - A transparent single-head forward pass in NumPy followed by a real miniature
       multi-head GPT trained with backpropagation and AdamW.
     - Greedy, temperature, top-k, and top-p generation from learned weights.
+    - Naive autoregressive decoding versus an equivalent per-layer **KV cache**.
     - **Scaling laws**, **pre-training vs fine-tuning**, and the production landscape
       of LLMs that Section 05 builds on.
 
@@ -316,6 +317,54 @@ cells = [
     """),
 
     md(r"""
+    ### 5.8 KV caching: reuse past attention projections during decoding
+
+    Naive generation reruns every retained token after each new token. Cached generation
+    performs one prompt **prefill**, stores every layer's keys and values, and then sends
+    only the newest token through the decoder. A past query is not cached because it was
+    consumed once; past keys and values are reused by every later query.
+
+    For $L$ layers, batch $B$, heads $H$, cached tokens $T$, head width $D$, and $s$
+    bytes per number, cache memory is
+
+    $$M_{KV}=2LBHTDs.$$
+
+    **Read aloud:** two cached tensors—keys and values—times layers, batches, heads,
+    tokens, head dimensions, and bytes per value. With $L=2$, $B=1$, $H=4$, $T=48$,
+    $D=16$, and float32 $s=4$, the cache uses
+    $2(2)(1)(4)(48)(16)(4)=49{,}152$ bytes. This estimate excludes allocator and
+    framework overhead. Caching is useful for autoregressive inference; ordinary
+    teacher-forced training already processes all positions in parallel and needs full
+    activations for backpropagation.
+    """),
+
+    code(r"""
+    # Correctness comes before speed: compare full and token-by-token cached logits.
+    comparison_ids = greedy_ids[:, :24]
+    full_logits, _ = trained_model(comparison_ids)
+    cache = None
+    incremental_parts = []
+    for position in range(comparison_ids.shape[1]):
+        new_logits, cache = trained_model.forward_with_cache(
+            comparison_ids[:, position:position + 1], cache
+        )
+        incremental_parts.append(new_logits)
+    incremental_logits = torch.cat(incremental_parts, dim=1)
+    maximum_difference = (full_logits - incremental_logits).abs().max().item()
+
+    naive_greedy = trained_model.generate(prompt_ids.clone(), 20, temperature=0)
+    cached_greedy = trained_model.generate_with_cache(prompt_ids.clone(), 20, temperature=0)
+    first_key, first_value = cache[0]
+    print("first-layer K shape:", tuple(first_key.shape), "= (B,H,T,D)")
+    print("first-layer V shape:", tuple(first_value.shape), "= (B,H,T,D)")
+    print("maximum logit difference:", maximum_difference)
+    print("greedy generations identical:", torch.equal(naive_greedy, cached_greedy))
+    assert torch.allclose(full_logits, incremental_logits, atol=1e-5, rtol=1e-5)
+    assert torch.equal(naive_greedy, cached_greedy)
+    print("Run `make tiny-lm-kv-cache` for warmed median latency measurements.")
+    """),
+
+    md(r"""
     ## 6 · Visualization
 
     Three figures: the sinusoidal positional encoding pattern, scaling laws, and a
@@ -347,10 +396,10 @@ cells = [
     dark/light stripes oscillate faster at low dimensions, slower at high). Individual
     dimensions (right) show the progression from fast to slow oscillation. The model
     adds this to the token embedding, so the attention scores $QK^\top$ implicitly
-    depend on position. The smooth, deterministic pattern generalises to lengths unseen
-    in training; modern models replace this with **RoPE** (Rotary Position Embedding),
-    which encodes relative position directly into the Q/K dot product for better length
-    extrapolation.
+    depend on position. The smooth pattern can be evaluated beyond the trained length,
+    but useful extrapolation is not guaranteed. Many modern models use **RoPE** (Rotary
+    Position Embedding), which puts relative offsets into Q/K rotations; its behavior at
+    longer lengths must also be measured.
     """),
 
     code(r"""
@@ -549,8 +598,9 @@ cells = [
 
     - **Flash Attention** (IO-aware exact attention, Lesson DL-07) is the default for
       training efficiency — ~2–4× speedup and $O(T)$ memory.
-    - **KV caching** for inference: cache key/value projections of all past tokens so
-      each new token only computes $O(T)$ work rather than $O(T^2)$.
+    - **KV caching** for inference: cache past key/value projections after prompt
+      prefill, prove logit equivalence, then measure decoding latency. Memory grows with
+      layers, batch, context, hidden width, and precision.
     - **Quantization** (INT8/INT4): reduce model size and inference cost with minimal
       quality loss — essential for edge/cost-sensitive deployments.
     - **LoRA/PEFT fine-tuning**: update low-rank adapters rather than every base-model
@@ -676,21 +726,23 @@ cells = [
        inspect target shifting, the causal mask, gradients, and optimizer step in order.
     4. Compare greedy, temperature, top-k, and top-p under one fixed prompt and seed.
        Describe diversity without treating one sample as a quality evaluation.
+    5. Run `make tiny-lm-kv-cache`. Explain why the measured speedup changes with prompt
+       length and why a tiny model may not represent production GPU behavior.
 
     **Intermediate (analysis)**
-    5. Replace sinusoidal PE with **random absolute PE** (learned during training) in
+    6. Replace sinusoidal PE with **random absolute PE** (learned during training) in
        the mini-GPT and compare the attention patterns in Figure 3.
-    6. Implement a simple **LoRA adapter** on top of $W_q$: add two low-rank matrices
+    7. Implement a simple **LoRA adapter** on top of $W_q$: add two low-rank matrices
        $AB$ ($r=4$) instead of updating $W_q$ directly and show the parameter count
        reduction.
 
     **Senior (interview + production design)**
-    7. *Whiteboard:* derive the full forward pass of the GPT block from first principles,
+    8. *Whiteboard:* derive the full forward pass of the GPT block from first principles,
        counting FLOPs for the attention and FFN components.
-    8. *Design:* the fine-tuning pipeline for the customer support LLM of §9 — model
+    9. *Design:* the fine-tuning pipeline for the customer support LLM of §9 — model
        selection, LoRA vs full fine-tuning, data curation, evaluation (Lesson EVAL-02),
        alignment (Lesson NLP-05), and drift monitoring (Lesson PROD-05).
-    9. *Scaling:* you have a compute budget of $10^{23}$ FLOP. Using Chinchilla scaling
+    10. *Scaling:* you have a compute budget of $10^{23}$ FLOP. Using Chinchilla scaling
        laws, estimate the optimal model size and token count; compute the expected
        validation loss reduction vs a 1B-parameter over-trained baseline.
     """),

@@ -82,8 +82,10 @@ The implemented Deep Learning path is:
 - [x] DL-07 — Attention Mechanism → `notebooks/04_deep_learning/07_attention_mechanism.ipynb`
 - [x] DL-08 — Transformers → `notebooks/04_deep_learning/08_transformers.ipynb`
 - [x] Offline tiny language model — true causal training, validation, checkpointing,
-  decoding comparisons, automated tests, and human mastery assessment →
+  decoding comparisons, character-versus-BPE evaluation, automated tests, and human mastery assessment →
   `projects/tiny_language_model/`
+  Includes correct per-layer KV caching, context-limit reset behavior, and measured
+  cached-versus-naive inference.
 
 ## Section 05 — Modern NLP and LLMs
 - [x] NLP-01 — TF-IDF and Word Embeddings → `notebooks/05_nlp_and_llms/01_tfidf_and_word_embeddings.ipynb`

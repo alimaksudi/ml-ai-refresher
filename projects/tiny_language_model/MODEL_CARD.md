@@ -12,9 +12,14 @@ Default configuration:
 - hidden width: 64;
 - attention heads: 4;
 - Transformer blocks: 2;
-- tokenizer: deterministic character vocabulary;
+- tokenizer: deterministic character vocabulary or learned educational BPE;
 - objective: next-token cross-entropy;
 - optimizer: AdamW with gradient clipping.
+
+Inference supports both full-context recomputation and per-layer key/value caching.
+The cache is an exact inference optimization within floating-point tolerance, not a new
+model or decoding strategy. It is reset and rebuilt when the learned-position context
+window slides.
 
 ## Intended use
 
@@ -29,6 +34,13 @@ from this model is not evidence of truth or understanding.
 
 ## Evaluation
 
-The artifact reports initial and best validation loss, perplexity, a smoothed bigram
-baseline, parameter count, full learning history, configuration, seed, and corpus hash.
-Human assessment is defined in `MASTERY_CHECKPOINT.md`.
+The artifact reports initial and best validation loss, token-level perplexity, bits per
+character, a smoothed bigram baseline, token compression, context coverage, parameter
+count, full learning history, configuration, seed, and corpus hash. Token-level
+perplexity is not compared across tokenizers. Human assessment is defined in
+`MASTERY_CHECKPOINT.md`.
+
+The KV-cache benchmark separately records maximum logit difference, greedy-token
+equality, cache shapes, median latency, tokens per second, speedup, and estimated cache
+bytes. Timing results apply only to the recorded hardware, thread count, model, prompt
+lengths, and software environment.

@@ -13,6 +13,15 @@ teach-back before starting RAG.
 4. Change exactly one design choice: remove positional embeddings, use one head, use
    one block, or shorten context. Keep all other controls fixed.
 5. Explain whether the added Transformer complexity is justified by measured evidence.
+6. Run the character-versus-BPE comparison. Explain each learned BPE merge using at
+   least one concrete corpus example.
+7. Report vocabulary size, token compression, characters covered by one context,
+   parameter count, bits per character, and token-level perplexity. Clearly mark why
+   the last metric cannot rank different tokenizers.
+8. Run the KV-cache benchmark. Treat equivalence as a prerequisite: do not discuss
+   speed until logits match within tolerance and greedy tokens are identical.
+9. Report cache shapes, cache bytes, median latency, tokens per second, and speedup at
+   every prompt length. Explain why results may differ on another device or model.
 
 ## Required tensor trace
 
@@ -42,7 +51,12 @@ Score each answer from 0–2.
 9. Compare decoder-only GPT, encoder-only BERT, and encoder-decoder T5 by masking,
    training objective, and suitable task.
 10. Explain what retrieval adds to a language model and what it does not guarantee.
+11. Explain why BPE reduces sequence length, why it enlarges the embedding table, and
+    why a fixed token context makes the architecture comparison imperfect.
+12. Explain prompt prefill, why keys and values are cached but queries are not, why the
+    cache accelerates autoregressive inference rather than teacher-forced training, and
+    why learned absolute positions require a reset when the window slides.
 
-Pass requires automated tests, the controlled ablation, at least **17/20**, and no zero
-on questions 1, 2, 3, 5, or 8. If the model fails to beat the bigram baseline, that does
+Pass requires automated tests, the tokenizer comparison, the controlled ablation, at
+least **21/24**, and no zero on questions 1, 2, 3, 5, 8, 11, or 12. If the model fails to beat the bigram baseline, that does
 not automatically fail the student; hiding or misrepresenting the result does.

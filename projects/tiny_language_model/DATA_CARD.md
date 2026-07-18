@@ -24,5 +24,6 @@ overlapping random windows would leak nearly identical contexts across both part
 - Character tokenization produces longer sequences than subword tokenization.
 - Validation measures continuation on the same narrow domain, not general language skill.
 
-The next tokenizer experiment should replace the character vocabulary with a learned
-BPE vocabulary while keeping the split, model, seed, and evaluation rules fixed.
+The tokenizer experiment fits both character and BPE vocabularies on training text
+only. Validation text never influences base characters, merge selection, or token IDs.
+Unknown validation characters map to an explicit unknown token.

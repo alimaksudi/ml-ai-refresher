@@ -92,8 +92,10 @@ attention, next-token logits, cross-entropy, backpropagation, validation, checkp
 and generation without using a hosted API.
 
 Passing requires a one-batch overfit diagnostic, a controlled architecture ablation,
-comparison with a bigram baseline, and teach-back of why next-token likelihood is not
-the same as factual truth. Complete this gate before NLP-02, NLP-03, prompting,
+comparison with a bigram baseline, a character-versus-BPE experiment using bits per
+character, cached-versus-naive inference equivalence, a measured KV-cache benchmark,
+and teach-back of why next-token likelihood is not the same as factual truth. Complete
+this gate before NLP-02, NLP-03, prompting,
 hallucination mitigation, or RAG. If it does not pass, remediate the smallest failed
 dependency: tensor shapes in DL-01, optimization in DL-04, sequence targets in DL-06,
 attention and masking in DL-07, or the complete decoder in DL-08.
