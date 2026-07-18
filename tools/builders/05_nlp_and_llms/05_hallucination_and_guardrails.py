@@ -670,7 +670,7 @@ cells = [
     - **Constitutional AI / RLAIF.** At training time, fine-tune the model to output
       "I don't know" or "I'm not certain" on low-confidence claims. This requires:
       collecting examples where the model should express uncertainty (hard) and
-      including them in RLHF/DPO training (Lesson NLP-03).
+      including them in preference training (Lesson NLP-08).
     - **Adversarial red-teaming.** Regularly attack your own guardrail pipeline with
       adversarial prompts (prompt injection, adversarial rewrites, jailbreaks). Fix
       gaps before attackers find them.

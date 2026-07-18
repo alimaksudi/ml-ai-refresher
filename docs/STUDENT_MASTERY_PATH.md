@@ -122,6 +122,24 @@ loss reduction, better held-out MRR than the untrained encoder, comparison with 
 an inspected hard-negative/false-negative example, and at least 17/20 on the teach-back.
 Complete this gate before similarity search, chunking, vector databases, or RAG.
 
+## Gate I — Pretraining and data-pipeline mastery
+
+Complete NLP-03 and the pretraining checkpoint in `projects/language_model_adaptation`.
+Passing requires curation counts, zero known exact contamination, real domain-loss
+improvement, an honestly reported retention regression, and at least 17/20 teach-back.
+
+## Gate J — Instruction tuning and LoRA mastery
+
+Complete NLP-07 and the SFT/LoRA checkpoint. Passing requires shifted response labels,
+prompt/padding masking, zero initial LoRA delta, real loss reduction, parameter-state
+comparison, held-out evidence, and at least 17/20 teach-back.
+
+## Gate K — Preference alignment mastery
+
+Complete NLP-08 and the alignment checkpoint. Passing requires response-only sequence
+log probabilities, a frozen reference, real DPO loss reduction, held-out preference
+improvement, retention evidence, correct PPO/DPO distinction, and at least 17/20.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

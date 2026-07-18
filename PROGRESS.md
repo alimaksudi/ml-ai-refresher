@@ -95,7 +95,11 @@ The implemented Deep Learning path is:
   Includes a local BERT-style bi-encoder, masked pooling, MNR loss, hard negatives,
   TF-IDF/untrained baselines, held-out retrieval metrics, behavioral tests, and a
   human mastery checkpoint → `projects/sentence_embeddings/`
-- [x] NLP-03 — LLM Training Pipeline → `notebooks/05_nlp_and_llms/03_llm_training_pipeline.ipynb`
+- [x] NLP-03 — LLM Pretraining and Data Pipeline → `notebooks/05_nlp_and_llms/03_llm_pretraining_and_data_pipeline.ipynb`
+- [x] NLP-07 — Instruction Tuning and LoRA → `notebooks/05_nlp_and_llms/07_instruction_tuning_and_lora.ipynb`
+- [x] NLP-08 — Preference Learning and Alignment → `notebooks/05_nlp_and_llms/08_preference_learning_and_alignment.ipynb`
+  Executed locally through `projects/language_model_adaptation/`: curation, continued
+  pretraining, retention, response-masked SFT, LoRA, DPO, and preference/retention evidence.
 - [x] NLP-04 — Prompt Engineering → `notebooks/05_nlp_and_llms/04_prompt_engineering.ipynb`
 - [x] NLP-05 — Hallucination and Guardrails → `notebooks/05_nlp_and_llms/05_hallucination_and_guardrails.ipynb`
 

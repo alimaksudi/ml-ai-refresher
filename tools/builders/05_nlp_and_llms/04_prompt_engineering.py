@@ -15,7 +15,7 @@ cells = [
     > **without modifying the model**. This notebook covers every major technique from
     > zero-shot to chain-of-thought to ReAct, implements a template engine from
     > scratch, and gives you the production judgment to decide when prompting is enough
-    > and when fine-tuning (Lesson NLP-03) is required.
+    > and when fine-tuning (Lesson NLP-07) is required.
     """),
 
     md(r"""
@@ -834,7 +834,7 @@ cells = [
     adds a further accuracy layer at $N\times$ cost. **ReAct** enables tool use and
     is the foundation of AI agents (Lesson AGT-01). **Prompt injection** is the primary
     security failure mode — defend at input, model, and output layers. For high-volume,
-    consistent tasks, **fine-tuning** (Lesson NLP-03) is more cost-effective than large
+    consistent tasks, **fine-tuning** (Lesson NLP-07) is more cost-effective than large
     prompts.
 
     **Related lesson:** `NLP-05 · Hallucination and Guardrails` — how LLMs generate confidently

@@ -1,6 +1,6 @@
 # ML / AI Refresher — Zero-Math Foundations to Senior Engineering
 
-A 63-notebook curriculum that starts with mathematical and Python prerequisites,
+A 65-notebook curriculum that starts with mathematical and Python prerequisites,
 then teaches Machine Learning and AI from first principles through production
 system design. Later sections remain useful as a refresher for experienced engineers.
 
@@ -46,12 +46,13 @@ The Deep Learning spine is:
 > backpropagation (DL-03) → stable neural training (DL-04) → convolutional networks
 > (DL-05) and text representations (NLP-01) → RNN/LSTM (DL-06) → attention (DL-07)
 > → transformers (DL-08) → offline tiny-language-model mastery gate → GPT/BERT/T5
-> model families (NLP-06) → sentence embeddings (NLP-02) → training and adaptation
-> lifecycle (NLP-03) → evaluation,
+> model families (NLP-06) → sentence embeddings (NLP-02) → pretraining/data (NLP-03)
+> → instruction tuning/LoRA (NLP-07) → preference alignment (NLP-08) → evaluation,
 > prompting, and guardrails → RAG
 
 Before RAG, pass `make tiny-lm-checkpoint`, `make transformer-families-checkpoint`,
-and `make sentence-embeddings-checkpoint`. The first project trains a decoder-only model
+`make sentence-embeddings-checkpoint`, and `make language-model-adaptation-checkpoint`.
+The first project trains a decoder-only model
 end to end—without an API key—and tests shifted targets, causal masking, backprop,
 validation, checkpoint loading, generation, and character-versus-BPE tokenization.
 Cross-tokenizer likelihood is compared with bits per character. Naive and KV-cached

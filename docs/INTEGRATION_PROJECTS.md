@@ -98,16 +98,17 @@ creating repetitive toy projects.
 - **Evaluation:** padding/normalization invariants, no exact leakage, honest baseline
   comparison, held-out improvement, and sentence-embedding mastery checkpoint.
 
-## E4. Text representation study — after DL-06 through NLP-03
+## E4. Language-model adaptation study — after NLP-03, NLP-07, and NLP-08
 
-- **Goal:** compare TF-IDF, static embeddings, recurrence, and a small Transformer
-  representation on one classification or similarity task.
-- **Dataset columns:** text ID, raw text, label or pair relevance, and split.
-- **Workflow:** tokenize, establish lexical baseline, train/evaluate under equal
-  splits, inspect OOV/length slices, and document compute.
-- **Expected output:** baseline table, slice analysis, embedding visualization, and
-  recommendation tied to quality and latency.
-- **Evaluation:** no vocabulary leakage, correct padding/masking, measured benefit.
+- **Goal:** adapt one real local decoder while preserving evidence at each stage.
+- **Dataset columns:** document/provenance/split, prompt/response/mask, and
+  prompt/chosen/rejected/preference source.
+- **Workflow:** curate and continue pretraining; compare full SFT with LoRA; optimize
+  DPO; measure domain, instruction, preference, and retention outcomes separately.
+- **Expected output:** versioned checkpoints, data/model cards, stage report, failed
+  examples, parameter/compute table, and simplest-supported adaptation choice.
+- **Evaluation:** three human checkpoints plus automated behavioral invariants; no
+  preference, reward, or training-loss proxy may be called alignment or safety.
 
 ## F. Prompt evaluation lab — after EVAL-02 and NLP-04 through NLP-05
 

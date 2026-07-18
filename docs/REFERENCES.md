@@ -36,6 +36,12 @@ or named methods.
   https://arxiv.org/abs/2106.09685
 - Rafailov et al., “Direct Preference Optimization,” 2023.
   https://arxiv.org/abs/2305.18290
+- Hoffmann et al., “Training Compute-Optimal Large Language Models,” 2022.
+  https://arxiv.org/abs/2203.15556
+- Ouyang et al., “Training Language Models to Follow Instructions with Human
+  Feedback,” 2022. https://arxiv.org/abs/2203.02155
+- Schulman et al., “Proximal Policy Optimization Algorithms,” 2017.
+  https://arxiv.org/abs/1707.06347
 
 ## Retrieval and agents
 
