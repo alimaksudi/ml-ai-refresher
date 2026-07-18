@@ -177,7 +177,9 @@ cells = [
 
     ### 4.3 The "random" in Random Forest
     At **every split**, restrict the candidate features to a random subset of size
-    $m_{\text{try}}$ (defaults: $\sqrt{d}$ for classification, $d/3$ for regression).
+    $m_{\text{try}}$. Common defaults vary by library and task; $\sqrt d$ is a
+    traditional classification starting point, while modern regression-library
+    defaults may consider all features.
     Lower $m_{\text{try}}$ → more decorrelation (lower $\rho$, lower variance floor)
     but each tree is individually weaker (higher bias). $m_{\text{try}}$ is therefore
     the **main tuning knob**, trading the two terms in §4.1.
@@ -342,7 +344,7 @@ cells = [
     """),
 
     code(r"""
-    # Figure 2 — test error falls and PLATEAUS as trees are added (it does not overfit).
+    # Figure 2 — in this measured example, test error falls and then plateaus.
     stage_probs = rf.predict_proba_stagewise(Xte)
     test_err = [np.mean((p >= 0.5).astype(int) != yte) for p in stage_probs]
 

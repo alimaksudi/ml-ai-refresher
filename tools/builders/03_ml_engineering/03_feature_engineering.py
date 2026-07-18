@@ -207,8 +207,9 @@ cells = [
       **dimensionality explodes** with cardinality and creates sparse, correlated
       columns. Drop-one to avoid the dummy-variable trap in linear models.
     - **Ordinal/label**: map categories to integers. Valid only when there's a true
-      order (low/med/high); otherwise it invents a false ordering that misleads linear
-      models (trees tolerate it better).
+      order (low/med/high); otherwise it invents a false ordering. Linear models treat
+      the codes as distances, while ordinary trees can only separate them with ordered
+      thresholds; neither behavior represents an arbitrary unordered category safely.
     - **Target (mean) encoding**: replace category $c$ with the average target among
       rows of that category,
       $$\text{enc}(c)=\frac{n_c\,\bar y_c+\alpha\,\bar y}{n_c+\alpha}\quad(\text{smoothed toward the global mean }\bar y).$$

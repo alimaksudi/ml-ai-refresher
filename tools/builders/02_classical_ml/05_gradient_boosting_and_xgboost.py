@@ -189,7 +189,7 @@ cells = [
     overfits** (you begin fitting noise), so $M$ is chosen by **early stopping** on a
     validation set.
 
-    ### 4.5 XGBoost: the second-order view (interview gold)
+    ### 4.5 Advanced extension — XGBoost's second-order view
     XGBoost expands the loss to **second order** (Taylor) around $F_{m-1}$, using the
     gradient $g_i=\partial_F L$ and Hessian $h_i=\partial_F^2 L$:
     $$\mathcal L^{(m)}\approx\sum_i\Big[g_i\,h_m(\mathbf x_i)+\tfrac12 h_i\,h_m(\mathbf x_i)^2\Big]+\Omega(h_m),\quad

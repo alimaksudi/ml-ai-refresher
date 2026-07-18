@@ -244,7 +244,7 @@ cells = [
     """),
 
     code(r"""
-    # 5.1 A minimal OLS / Ridge / GD toolkit.
+    # 5.1 A minimal OLS / Ridge toolkit. Gradient fitting follows in FND-04.
     def add_bias(X):
         return np.c_[np.ones(len(X)), X]
 
@@ -255,12 +255,6 @@ cells = [
         A = add_bias(X)
         I = np.eye(A.shape[1]); I[0, 0] = 0.0   # don't penalize the intercept
         return np.linalg.solve(A.T @ A + lam * I, A.T @ y)
-
-    def fit_gd(X, y, lr=0.05, steps=5000):   # gradient descent (Lesson FND-04)
-        A = add_bias(X); w = np.zeros(A.shape[1]); n = len(y)
-        for _ in range(steps):
-            w -= lr * (2 / n) * A.T @ (A @ w - y)
-        return w
 
     def predict(X, w):
         return add_bias(X) @ w
@@ -277,12 +271,9 @@ cells = [
     yd = add_bias(Xd) @ true_w + rng.normal(0, 0.5, n)
 
     w_ols = fit_ols(Xd, yd)
-    w_gd = fit_gd(Xd, yd)
     print("OLS (lstsq) :", w_ols.round(3))
-    print("GD          :", w_gd.round(3))
     print("true        :", true_w)
-    print("GD ~ OLS:", np.allclose(w_ols, w_gd, atol=1e-2), "| train R^2:",
-          round(r2(yd, predict(Xd, w_ols)), 4))
+    print("train R^2   :", round(r2(yd, predict(Xd, w_ols)), 4))
     """),
 
     code(r"""

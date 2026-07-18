@@ -312,8 +312,8 @@ cells = [
 
     ### Independent practice
 
-    5. Write `standardize(values)` that subtracts the mean and divides by the
-       standard deviation using NumPy.
+    5. Write `center(values)` that subtracts the mean using NumPy. Standard
+       deviation and standardization are taught after probability in PRE-04.
     6. Create a seeded generator, draw 100 values, and assert that the shape is
        `(100,)`.
     7. Explain why this fails: `np.ones((2, 3)) @ np.ones((4, 2))`.
@@ -334,9 +334,9 @@ cells = [
     assert np.array_equal(array[:, 1], [2, 5])
 
     # (4, 3) @ (3, 2) -> (4, 2)
-    def standardize(values):
+    def center(values):
         values = np.asarray(values, dtype=float)
-        return (values - values.mean()) / values.std()
+        return values - values.mean()
 
     rng = np.random.default_rng(7)
     sample = rng.normal(size=100)

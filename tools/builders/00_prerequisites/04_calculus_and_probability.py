@@ -327,7 +327,7 @@ cells = [
     md(r"""
     ## 12 · Readiness Check
 
-    You are ready for Lesson PRE-03 when you can:
+    You are ready for Lesson PRE-05 when you can:
 
     1. describe a derivative as a local rate of change;
     2. explain each symbol in a two-variable gradient;

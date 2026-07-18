@@ -735,12 +735,11 @@ cells = [
     scale; momentum and Adam tame ill-conditioned ravines; and schedules, clipping,
     and scaling are what keep big training runs alive.
 
-    **Section 01 is complete** — you now hold the three pillars: the *geometry* of data
-    (FND-01), *reasoning under uncertainty* (FND-02), and the *optimization* that turns a
-    loss into a trained model (FND-04).
+    **The optimization bridge is complete.** You can now connect the loss introduced
+    in CML-01 with the iterative fitting used by classifiers and later neural models.
 
-    **Related lesson:** `CML-01 · Linear Regression` — Section 02 begins. We assemble all three
-    pillars into the first complete learning algorithm, end to end.
+    **Next lesson:** `CML-02 · Logistic Regression` — we reuse gradients to fit a
+    probability model for binary outcomes.
     """),
 ]
 

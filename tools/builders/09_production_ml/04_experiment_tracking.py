@@ -18,42 +18,35 @@ revisited in Section 09.
 cells.append(md(r"""## 1. Learning Objectives
 
 By the end of this notebook you will be able to:
-- Identify the 6 categories of information every experiment must log
-- Implement an ExperimentTracker with log_param, log_metric, compare_runs, best_run
-- Implement grid search, random search, and Bayesian optimisation from scratch
-- Implement early stopping with patience from scratch
-- Apply a t-test to determine whether one run statistically beats another
+- Identify the information every reproducible experiment must log
+- Implement a small tracker with parameters, metrics, artifacts, and conclusions
+- Compare only runs that share a valid data split and metric definition
 - Explain how to seed everything for reproducibility
-- Track 50 hyperparameter search runs and select the statistically best configuration
 - Design the experiment tracking workflow for a production churn model
+
+**Advanced extension:** grid/random/Bayesian search, early stopping, and paired
+uncertainty analysis are included for later review. They are not prerequisites
+for using a trustworthy experiment record.
 """))
 
 cells.append(md(r"""## 2. Historical Motivation
 
-### From Notebooks to Systematic Experiments (2016–2022)
+### From informal notes to systematic experiments
 
 Before experiment tracking tools, ML practitioners kept results in:
 - Spreadsheets (no code linkage)
 - Notebook filenames: `model_v3_final_FINAL2.ipynb`
 - Memory ("I think the best LR was 0.01 but I'm not sure")
 
-**The reproducibility crisis:**
-- 2016: A Nature survey found 70% of researchers could not reproduce another scientist's results
-- In ML specifically: the inability to reproduce experiments meant teams could not:
+When data, code, configuration, and environment are not recorded, teams cannot:
   1. Audit which hyperparameters produced a production model
   2. Understand why a model that performed well on one dataset failed on another
   3. Return to a 6-month-old "best" model after the production model degraded
 
-**MLflow (2018):** First open-source experiment tracking tool. Databricks released it;
-solved logging + comparison. Now used by hundreds of thousands of ML practitioners.
-
-**Weights & Biases (2018):** SaaS experiment tracking; added rich visualisation,
-team collaboration, model registry. Became the standard for deep learning research.
-
-**The statistical comparison problem (2021):**
-Teams routinely promoted the model with the highest val-AUC from a hyperparameter sweep —
-even when the difference was within noise. A 2021 survey of 43 ML papers found that 73% of
-reported improvements were not statistically significant at α=0.05.
+Modern tracking tools automate storage and comparison, but a tool cannot repair an
+invalid split or an undefined metric. Teams also risk promoting the highest noisy
+validation score from a large search. Reproducible records and honest validation
+must therefore be designed together.
 """))
 
 cells.append(md(r"""## 3. Intuition and Visual Understanding
@@ -82,7 +75,7 @@ CATEGORY 6: DATA VERSION     (which data was used)
   dataset_hash=sha256:def456, n_train=45000, n_val=5000
 ```
 
-### Hyperparameter Search Strategies
+### Advanced preview — hyperparameter search strategies
 
 ```
 GRID SEARCH:   Exhaustive, expensive, guaranteed to find best in grid
@@ -111,7 +104,7 @@ Best model was at epoch 3. Restore weights from epoch 3.
 ```
 """))
 
-cells.append(md(r"""## 4. Mathematical Foundations
+cells.append(md(r"""## 4. Advanced Mathematical Extension — Bayesian Search and Comparison
 
 ### 4.1 Gaussian Process Surrogate for Bayesian Optimisation
 
