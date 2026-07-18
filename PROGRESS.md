@@ -41,6 +41,7 @@ The implemented Deep Learning path is:
 7. DL-06 RNN/LSTM → DL-07 Attention → DL-08 Transformers
 8. Pre-RAG language-model gate → `projects/tiny_language_model`
 9. Digit-classifier mastery checkpoint with baseline, ablation, and teach-back
+10. NLP-06 GPT/BERT/T5 model-family gate → `projects/transformer_families`
 
 ---
 
@@ -89,6 +90,7 @@ The implemented Deep Learning path is:
 
 ## Section 05 — Modern NLP and LLMs
 - [x] NLP-01 — TF-IDF and Word Embeddings → `notebooks/05_nlp_and_llms/01_tfidf_and_word_embeddings.ipynb`
+- [x] NLP-06 — Transformer Model Families → `notebooks/05_nlp_and_llms/06_transformer_model_families.ipynb`
 - [x] NLP-02 — Sentence Embeddings → `notebooks/05_nlp_and_llms/02_sentence_embeddings.ipynb`
 - [x] NLP-03 — LLM Training Pipeline → `notebooks/05_nlp_and_llms/03_llm_training_pipeline.ipynb`
 - [x] NLP-04 — Prompt Engineering → `notebooks/05_nlp_and_llms/04_prompt_engineering.ipynb`

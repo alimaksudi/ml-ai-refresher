@@ -95,10 +95,21 @@ Passing requires a one-batch overfit diagnostic, a controlled architecture ablat
 comparison with a bigram baseline, a character-versus-BPE experiment using bits per
 character, cached-versus-naive inference equivalence, a measured KV-cache benchmark,
 and teach-back of why next-token likelihood is not the same as factual truth. Complete
-this gate before NLP-02, NLP-03, prompting,
+this gate before NLP-06, NLP-02, NLP-03, prompting,
 hallucination mitigation, or RAG. If it does not pass, remediate the smallest failed
 dependency: tensor shapes in DL-01, optimization in DL-04, sequence targets in DL-06,
 attention and masking in DL-07, or the complete decoder in DL-08.
+
+## Gate G — Transformer model-family mastery
+
+Complete NLP-06 and `projects/transformer_families`. You must prove the behavioral
+difference between causal, bidirectional, padding, and cross-attention masks; train the
+GPT, BERT, and T5 diagnostic objectives; and trace every attention score as
+`B × H × T_query × T_key`.
+
+Passing requires all mask-invariant tests, real loss reduction, an intentionally broken
+mask and repair, and at least 17/20 on the teach-back. Complete this gate before sentence
+embeddings, the LLM adaptation pipeline, prompting, hallucination mitigation, or RAG.
 
 ## Retention schedule
 

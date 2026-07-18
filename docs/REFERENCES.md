@@ -22,6 +22,12 @@ or named methods.
 
 - Vaswani et al., “Attention Is All You Need,” 2017.
   https://arxiv.org/abs/1706.03762
+- Radford et al., “Improving Language Understanding by Generative Pre-Training,” 2018.
+  https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf
+- Devlin et al., “BERT: Pre-training of Deep Bidirectional Transformers for Language
+  Understanding,” 2018. https://arxiv.org/abs/1810.04805
+- Raffel et al., “Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+  Transformer,” 2019. https://arxiv.org/abs/1910.10683
 - Hu et al., “LoRA: Low-Rank Adaptation of Large Language Models,” 2021.
   https://arxiv.org/abs/2106.09685
 - Rafailov et al., “Direct Preference Optimization,” 2023.

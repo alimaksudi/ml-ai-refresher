@@ -1,6 +1,6 @@
 # ML / AI Refresher — Zero-Math Foundations to Senior Engineering
 
-A 62-notebook curriculum that starts with mathematical and Python prerequisites,
+A 63-notebook curriculum that starts with mathematical and Python prerequisites,
 then teaches Machine Learning and AI from first principles through production
 system design. Later sections remain useful as a refresher for experienced engineers.
 
@@ -45,8 +45,9 @@ The Deep Learning spine is:
 > PyTorch foundations (DL-01) → neural networks from scratch (DL-02) →
 > backpropagation (DL-03) → stable neural training (DL-04) → convolutional networks
 > (DL-05) and text representations (NLP-01) → RNN/LSTM (DL-06) → attention (DL-07)
-> → transformers (DL-08) → offline tiny-language-model mastery gate → sentence
-> embeddings (NLP-02) → training and adaptation lifecycle (NLP-03) → evaluation,
+> → transformers (DL-08) → offline tiny-language-model mastery gate → GPT/BERT/T5
+> model families (NLP-06) → sentence embeddings (NLP-02) → training and adaptation
+> lifecycle (NLP-03) → evaluation,
 > prompting, and guardrails → RAG
 
 Before RAG, run `make tiny-lm-checkpoint`. The project trains a decoder-only model
@@ -117,6 +118,7 @@ ml-ai-refresher/
 │   ├── wine_classifier/       # real-data training, API, tests, monitoring, Docker
 │   ├── digit_classifier/      # deep-learning experiment and mastery checkpoint
 │   ├── tiny_language_model/   # offline decoder training and pre-RAG gate
+│   ├── transformer_families/  # GPT, BERT, and T5 masks, objectives, and mastery gate
 │   └── rag_foundations/       # measured retrieval and grounded-answer checkpoints
 └── tools/
     ├── nbbuild.py           # md()/code()/build() helpers

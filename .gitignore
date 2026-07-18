@@ -63,6 +63,7 @@ checkpoints/
 projects/*/artifacts/local/
 projects/*/artifacts/tmp/
 projects/tiny_language_model/artifacts/
+projects/transformer_families/artifacts/
 
 # Logs, profiles, and temporary files
 *.log

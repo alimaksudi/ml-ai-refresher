@@ -71,7 +71,21 @@ creating repetitive toy projects.
   logits; the student must report a losing comparison honestly. Use
   `projects/tiny_language_model/MASTERY_CHECKPOINT.md`.
 
-## E2. Text representation study — after DL-06 through NLP-03
+## E2. Transformer model families — after DL-08 and NLP-06
+
+- **Goal:** prove how attention visibility and training objectives distinguish a
+  causal decoder, bidirectional encoder, and encoder-decoder.
+- **Dataset columns:** sequence ID, source tokens, corrupted/masked tokens, target
+  tokens, padding mask, objective, and split or diagnostic role.
+- **Workflow:** shared components, mask-invariant tests, next-token training,
+  masked-token training, classification, source-to-target training, parameter
+  comparison, one broken-mask diagnosis, and architecture selection.
+- **Expected output:** initial/final losses, diagnostic accuracies, attention shapes,
+  parameter counts, saved weights, limitation statement, and task-choice rationale.
+- **Evaluation:** synthetic accuracy is learnability evidence only; passing requires
+  behavioral invariants and the human mastery checkpoint.
+
+## E3. Text representation study — after DL-06 through NLP-03
 
 - **Goal:** compare TF-IDF, static embeddings, recurrence, and a small Transformer
   representation on one classification or similarity task.
