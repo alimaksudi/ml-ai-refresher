@@ -91,7 +91,10 @@ The implemented Deep Learning path is:
 ## Section 05 — Modern NLP and LLMs
 - [x] NLP-01 — TF-IDF and Word Embeddings → `notebooks/05_nlp_and_llms/01_tfidf_and_word_embeddings.ipynb`
 - [x] NLP-06 — Transformer Model Families → `notebooks/05_nlp_and_llms/06_transformer_model_families.ipynb`
-- [x] NLP-02 — Sentence Embeddings → `notebooks/05_nlp_and_llms/02_sentence_embeddings.ipynb`
+- [x] NLP-02 — Sentence Embeddings from Scratch → `notebooks/05_nlp_and_llms/02_sentence_embeddings.ipynb`
+  Includes a local BERT-style bi-encoder, masked pooling, MNR loss, hard negatives,
+  TF-IDF/untrained baselines, held-out retrieval metrics, behavioral tests, and a
+  human mastery checkpoint → `projects/sentence_embeddings/`
 - [x] NLP-03 — LLM Training Pipeline → `notebooks/05_nlp_and_llms/03_llm_training_pipeline.ipynb`
 - [x] NLP-04 — Prompt Engineering → `notebooks/05_nlp_and_llms/04_prompt_engineering.ipynb`
 - [x] NLP-05 — Hallucination and Guardrails → `notebooks/05_nlp_and_llms/05_hallucination_and_guardrails.ipynb`

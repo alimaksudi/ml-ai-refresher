@@ -85,7 +85,20 @@ creating repetitive toy projects.
 - **Evaluation:** synthetic accuracy is learnability evidence only; passing requires
   behavioral invariants and the human mastery checkpoint.
 
-## E3. Text representation study — after DL-06 through NLP-03
+## E3. Sentence embedding retriever — after NLP-02
+
+- **Goal:** turn the NLP-06 encoder into a measured local semantic retriever.
+- **Dataset columns:** query ID/text, document ID/text, intent, relevance, split, and
+  negative source.
+- **Workflow:** audit overlap, establish TF-IDF and untrained baselines, train masked
+  mean-pooled normalized embeddings with MNR, review hard negatives, and evaluate
+  overall plus per-intent retrieval.
+- **Expected output:** saved weights, vocabulary, data/model cards, Recall@k/MRR/margin
+  report, ranked errors, latency, and limitations.
+- **Evaluation:** padding/normalization invariants, no exact leakage, honest baseline
+  comparison, held-out improvement, and sentence-embedding mastery checkpoint.
+
+## E4. Text representation study — after DL-06 through NLP-03
 
 - **Goal:** compare TF-IDF, static embeddings, recurrence, and a small Transformer
   representation on one classification or similarity task.

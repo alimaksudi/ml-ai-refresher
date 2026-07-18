@@ -64,6 +64,7 @@ projects/*/artifacts/local/
 projects/*/artifacts/tmp/
 projects/tiny_language_model/artifacts/
 projects/transformer_families/artifacts/
+projects/sentence_embeddings/artifacts/
 
 # Logs, profiles, and temporary files
 *.log

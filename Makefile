@@ -1,4 +1,4 @@
-.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-tokenizers tiny-lm-kv-cache tiny-lm-test tiny-lm-checkpoint transformer-families-train transformer-families-test transformer-families-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
+.PHONY: build validate test execute-foundations execute-capstone execute-all capstone-train capstone-test capstone-serve mastery-checkpoint deep-learning-train deep-learning-test deep-learning-checkpoint tiny-lm-train tiny-lm-tokenizers tiny-lm-kv-cache tiny-lm-test tiny-lm-checkpoint transformer-families-train transformer-families-test transformer-families-checkpoint sentence-embeddings-train sentence-embeddings-test sentence-embeddings-checkpoint foundation-gate rag-foundations-evaluate grounded-rag-evaluate vector-store-evaluate hybrid-rag-evaluate rag-system-evaluate reranking-evaluate neural-reranking-evaluate rag-foundations-test rag-foundations-checkpoint grounded-rag-checkpoint vector-store-checkpoint hybrid-rag-checkpoint rag-system-checkpoint reranking-checkpoint
 
 build:
 	python3 tools/build_all.py
@@ -61,6 +61,15 @@ transformer-families-test:
 
 transformer-families-checkpoint: validate transformer-families-test transformer-families-train
 	@echo "Automated family gate passed. Complete projects/transformer_families/MASTERY_CHECKPOINT.md."
+
+sentence-embeddings-train:
+	PYTHONPATH=projects/sentence_embeddings/src:projects/transformer_families/src python3 -m sentence_embeddings.training --output-dir projects/sentence_embeddings/artifacts
+
+sentence-embeddings-test:
+	PYTHONPATH=projects/sentence_embeddings/src:projects/transformer_families/src python3 -m pytest projects/sentence_embeddings/tests -q
+
+sentence-embeddings-checkpoint: validate sentence-embeddings-test sentence-embeddings-train
+	@echo "Automated embedding gate passed. Complete projects/sentence_embeddings/MASTERY_CHECKPOINT.md before RAG."
 
 rag-foundations-evaluate:
 	PYTHONPATH=projects/rag_foundations/src python3 -m rag_foundations.cli --data-dir projects/rag_foundations/data --output projects/rag_foundations/artifacts/evaluation.json

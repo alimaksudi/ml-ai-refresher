@@ -111,6 +111,17 @@ Passing requires all mask-invariant tests, real loss reduction, an intentionally
 mask and repair, and at least 17/20 on the teach-back. Complete this gate before sentence
 embeddings, the LLM adaptation pipeline, prompting, hallucination mitigation, or RAG.
 
+## Gate H — Sentence embedding mastery
+
+Complete NLP-02 and `projects/sentence_embeddings`. You must trace raw text through
+tokenization, bidirectional encoding, padding-aware pooling, L2 normalization, the
+`B × B` similarity matrix, MNR loss, and held-out retrieval without a hosted API.
+
+Passing requires padding and normalization invariants, zero exact split overlap, real
+loss reduction, better held-out MRR than the untrained encoder, comparison with TF-IDF,
+an inspected hard-negative/false-negative example, and at least 17/20 on the teach-back.
+Complete this gate before similarity search, chunking, vector databases, or RAG.
+
 ## Retention schedule
 
 - Next day: repeat teach-back without notes.

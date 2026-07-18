@@ -50,12 +50,15 @@ The Deep Learning spine is:
 > lifecycle (NLP-03) → evaluation,
 > prompting, and guardrails → RAG
 
-Before RAG, run `make tiny-lm-checkpoint`. The project trains a decoder-only model
+Before RAG, pass `make tiny-lm-checkpoint`, `make transformer-families-checkpoint`,
+and `make sentence-embeddings-checkpoint`. The first project trains a decoder-only model
 end to end—without an API key—and tests shifted targets, causal masking, backprop,
 validation, checkpoint loading, generation, and character-versus-BPE tokenization.
 Cross-tokenizer likelihood is compared with bits per character. Naive and KV-cached
 generation must produce equivalent logits before their latency is compared. Passing cells is not sufficient;
-complete `projects/tiny_language_model/MASTERY_CHECKPOINT.md`.
+complete each project's human mastery checkpoint. The later gates prove attention-mask
+behavior across GPT/BERT/T5 and train a local semantic retriever against TF-IDF and
+untrained baselines.
 
 Run `make validate` to reject unknown, missing, or forward-pointing prerequisites.
 New learners should use the two-pass study process and cumulative gates in

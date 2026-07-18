@@ -28,6 +28,10 @@ or named methods.
   Understanding,” 2018. https://arxiv.org/abs/1810.04805
 - Raffel et al., “Exploring the Limits of Transfer Learning with a Unified Text-to-Text
   Transformer,” 2019. https://arxiv.org/abs/1910.10683
+- Reimers and Gurevych, “Sentence-BERT: Sentence Embeddings using Siamese
+  BERT-Networks,” EMNLP-IJCNLP 2019. https://arxiv.org/abs/1908.10084
+- Gao, Yao, and Chen, “SimCSE: Simple Contrastive Learning of Sentence Embeddings,”
+  EMNLP 2021. https://arxiv.org/abs/2104.08821
 - Hu et al., “LoRA: Low-Rank Adaptation of Large Language Models,” 2021.
   https://arxiv.org/abs/2106.09685
 - Rafailov et al., “Direct Preference Optimization,” 2023.
