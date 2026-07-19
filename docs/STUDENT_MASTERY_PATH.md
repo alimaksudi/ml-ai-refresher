@@ -30,16 +30,15 @@ increase the stated workload.
 
 ## Gate A — Mathematical language and coding readiness
 
-After PRE-01 through PRE-05, without notes:
+After completing the canonical prerequisite route, without notes:
 
 - evaluate an expression while respecting operation order;
 - interpret inequalities, intervals, sets, approximation, and units;
 - rearrange a one-variable equation;
-- solve a tiny two-equation system;
 - read a graph as an input-output relationship;
 - calculate a power-rule and chain-rule derivative;
 - calculate complement, conditional probability, and expected value;
-- trace NumPy matrix shapes;
+- trace two-dimensional NumPy array shapes;
 - write and test a small function;
 - load, validate, filter, group, and safely join a DataFrame;
 - use a traceback to locate an error.
@@ -79,13 +78,13 @@ and evaluation problems in MLE-01/MLE-02. Do not compensate with a more complex 
 ## Gate D — Classical ML mastery
 
 Before the wine-classifier checkpoint, complete basic experiment tracking in
-PROD-04, feature engineering in MLE-03, and CML-03 through CML-05. Without notes,
-calculate one tree split, one forest vote, and two residual-boosting updates. Explain
-why a pruned tree, random forest, or boosting model is preferable for three different
-data constraints. A passing project score requires valid evidence, not merely
-accuracy. Bayesian optimization and XGBoost's second-order derivation remain extension
-material until this gate passes. Then revisit optional derivations and senior
-extensions from CML-01 through MLE-05 and complete MLE-06.
+PROD-04, feature engineering in MLE-03, and CML-03 through CML-06. Without notes,
+calculate one tree split, one forest vote, two residual-boosting updates, and one
+regularized XGBoost leaf weight. Explain why a pruned tree, random forest, first-order
+booster, or second-order booster is preferable for different data constraints. A
+passing project score requires valid evidence, not merely accuracy. Then revisit
+optional derivations and senior extensions from CML-01 through MLE-05 and complete
+MLE-06.
 
 ## Gate E — Deep Learning mastery
 

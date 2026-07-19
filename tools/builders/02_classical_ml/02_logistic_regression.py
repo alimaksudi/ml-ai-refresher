@@ -1,602 +1,1020 @@
-"""Builder for Lesson CML-02 — Logistic Regression.
+"""Build CML-02: Logistic Regression."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # CML-02 · Logistic Regression
-    ### Section 02 — Classical Machine Learning · *ML/AI Senior Mastery Curriculum*
 
-    **Prerequisites:** FND-02 through FND-04 and CML-01. You should understand
-    probability, a leakage-safe split, a linear score, loss, and gradient descent.
+    **Prerequisites:** FND-02, CML-01, and FND-04  
+    **Estimated study time:** 8–10 hours, including practice  
+    **Next lesson:** CML-03 · Decision Trees
 
-    > Keep linear regression's machinery — a linear score $\mathbf w^\top\mathbf x$ —
-    > but change the *question* from "what number?" to "what's the **probability** of
-    > the positive class?" The recipe from Lesson FND-02 tells us exactly how: swap the
-    > **Gaussian** likelihood for a **Bernoulli** one. Out falls the **sigmoid**, the
-    > **cross-entropy** loss, and a **linear decision boundary**. Logistic regression
-    > is the workhorse classifier of industry — credit scoring, fraud, churn, ad
-    > click-through — *and* it is literally the final layer of most neural-network
-    > classifiers (Lesson DL-02). Master it and you understand classification.
+    Linear regression predicts a numerical quantity. Logistic regression predicts the
+    probability of one class in a binary classification task.
+
+    The name is historically confusing: logistic regression is a **classifier**. It
+    builds a linear score, passes that score through the sigmoid function, and fits
+    the coefficients using binary cross-entropy.
+
+    ### Scope boundary
+
+    This lesson teaches one binary classifier deeply. It deliberately defers:
+
+    - accuracy, precision, recall, F1, ROC-AUC, PR-AUC, and calibration to MLE-01;
+    - imbalance strategies and cost-sensitive evaluation to MLE-04;
+    - cross-validation and threshold selection protocols to MLE-02;
+    - Ridge/Lasso-style regularization to the later regularization extension;
+    - softmax and multiclass cross-entropy to the neural-classification path.
+
+    We will count decision errors here, but we will not compress them into unexplained
+    evaluation metrics.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - Why we model **log-odds** linearly and squash with the **sigmoid** to get a
-      calibrated probability in $[0,1]$.
-    - The full derivation: linear score → odds → log-odds → sigmoid → Bernoulli
-      likelihood → **cross-entropy** → gradient → gradient descent (no closed form).
-    - Why **cross-entropy beats squared error** for classification (it doesn't
-      saturate — strong gradients even when confidently wrong).
-    - That the decision boundary is **linear**, and how to read coefficients as
-      **odds ratios**.
-    - **Regularization**, **class imbalance**, **threshold selection**, and
-      **calibration** — the things that actually determine whether it works in prod.
-    - **Softmax** as the multiclass generalization.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - The default interpretable classifier and the baseline every fraud/credit/churn
-      project starts with — often the model that ships in regulated settings.
-    - Outputs **probabilities**, which let you make **cost-sensitive decisions**
-      (different thresholds for different error costs) rather than just labels.
-    - It is the read-out layer of deep classifiers — the concept transfers directly.
+    - distinguish regression from binary classification;
+    - define a positive class and encode labels as 0 and 1;
+    - create a training class-rate probability baseline;
+    - keep a linear score, probability, and class decision separate;
+    - explain odds and log-odds with small numbers;
+    - calculate sigmoid probabilities manually;
+    - derive binary cross-entropy from a Bernoulli likelihood;
+    - explain why confidently wrong probabilities receive a large loss;
+    - derive the logistic-regression gradient;
+    - fit a one-feature classifier with gradient descent;
+    - use stable sigmoid and logarithm calculations;
+    - apply a threshold only after probability prediction;
+    - count true/false positive and negative decisions;
+    - fit sklearn `LogisticRegression` after the manual implementation;
+    - interpret coefficients as changes in log-odds and odds;
+    - explain linear-boundary, extrapolation, separation, and causal limitations;
+    - complete a split-safe binary-classification mini-project.
 
-    **Typical interview questions**
-    - "Derive logistic regression from the Bernoulli likelihood."
-    - "Why cross-entropy and not MSE for classification?"
-    - "What does a coefficient mean? (odds ratio)"
-    - "Your model has 99% accuracy on a 1%-fraud dataset — is it good?"
-    - "What is perfect separation and why does it break the fit?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The problem with using linear regression for classification.** If you code the
-    classes as 0/1 and fit a line, three things go wrong: (1) predictions escape
-    $[0,1]$ (you get "probabilities" of 1.4 or $-0.3$), (2) squared error is the
-    wrong loss for a yes/no outcome, and (3) the fit is dragged around by points far
-    from the boundary. We need a model whose output is *always* a valid probability.
-
-    **The logistic function (Verhulst, 1830s; Berkson, 1944).** The sigmoid
-    $\sigma(z)=1/(1+e^{-z})$ originally modeled population growth, then Berkson
-    proposed the "logit" model for bioassay (dose → probability of response),
-    explicitly as an alternative to the older "probit". Modeling the **log-odds** as
-    linear was the key move: odds live in $(0,\infty)$, log-odds in
-    $(-\infty,\infty)$ — the natural range for a linear score.
-
-    **Generalized Linear Models (Nelder & Wedderburn, 1972).** Logistic regression
-    is the GLM with a Bernoulli response and a logit link. This unifies it with
-    linear regression (Gaussian + identity link) and Poisson regression (counts) —
-    same skeleton, different likelihood. That's the lens we adopt: CML-01 and CML-02
-    are the *same algorithm* with a different noise model, exactly as Lesson FND-02
-    foreshadowed.
-
-    **Why it endures.** Like linear regression: interpretable (coefficients are
-    log-odds), fast, well-calibrated, regulation-friendly, and the foundation for
-    everything from GLMs to the softmax head of an LLM classifier.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **From score to probability.** Compute a linear score $z=\mathbf w^\top\mathbf
-    x+b$ (high = looks positive, low = looks negative). Then *squash* it through the
-    **sigmoid** into a probability: very positive $z\to1$, very negative $z\to0$,
-    $z=0\to0.5$. The 0.5 contour — where $z=0$ — is a **straight line** (hyperplane):
-    the **decision boundary**.
-
-    **Log-odds is the natural scale.** The model says the **log-odds** of the
-    positive class is linear in the features: $\log\frac{p}{1-p}=\mathbf
-    w^\top\mathbf x$. Each coefficient is "how much the log-odds change per unit of
-    this feature" — and $e^{w_j}$ is the **odds ratio**, a quantity domain experts
-    and regulators actually understand ("each extra late payment multiplies the odds
-    of default by 1.4×").
-
-    **Probabilities, not just labels.** The output is a *probability*, so you choose
-    the **threshold** to match business costs: flag fraud at $p>0.3$ if missing fraud
-    is far costlier than a false alarm. Decoupling the *model* from the *decision* is
-    a senior habit.
+    ### Dependency map
 
     ```mermaid
     flowchart LR
-        X["Features x"] --> Z["Linear score<br/>z = w·x + b"]
-        Z --> S["Sigmoid<br/>p = 1/(1+e^-z)"]
-        S --> P["Probability p in (0,1)"]
-        P -->|"threshold t (set by cost)"| D["Decision: positive / negative"]
-        S -.->|"train: maximize Bernoulli likelihood<br/>= minimize cross-entropy"| W["Weights w"]
+        A[Linear feature score] --> B[Sigmoid probability]
+        B --> C[Bernoulli cross-entropy]
+        C --> D[Gradient descent fitting]
+        B --> E[Decision threshold]
+        E --> F[Positive or negative decision]
     ```
 
-    Run the cells: first see *why linear regression fails*, then meet the sigmoid.
+    The loss fits probabilities. The threshold creates decisions. Changing a threshold
+    does not refit the probability model.
+    """),
+
+    md(r"""
+    ## 2 · The practical problem: estimate late-delivery probability
+
+    A dispatcher wants an early warning that a route may arrive late. We begin with
+    one feature: route distance.
+
+    | Route | Distance (km) | Late label |
+    | --- | ---: | ---: |
+    | A | 1.0 | 0 |
+    | B | 1.5 | 0 |
+    | C | 2.0 | 0 |
+    | D | 2.5 | 0 |
+    | E | 3.0 | 1 |
+    | F | 3.5 | 0 |
+    | G | 4.0 | 1 |
+    | H | 4.5 | 1 |
+
+    Here:
+
+    - 1 is the **positive class**: late;
+    - 0 is the **negative class**: not late;
+    - the label is known only after delivery;
+    - the prediction is requested before departure;
+    - the output should be a probability, not a guarantee.
+
+    A probability allows the dispatcher to choose a later action threshold based on
+    staffing and error costs. The model does not decide those costs.
     """),
 
     code(r"""
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    route_distance_km = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5])
+    late_label = np.array([0, 0, 0, 0, 1, 0, 1, 1], dtype=float)
+
+    training_positive_rate = late_label.mean()
+    baseline_probabilities = np.full(late_label.shape, training_positive_rate)
+
+    print("labels:", late_label.astype(int))
+    print("positive labels:", int(late_label.sum()))
+    print("training positive rate:", training_positive_rate)
+    print("constant baseline probabilities:", baseline_probabilities)
+
+    assert np.isclose(training_positive_rate, 3 / 8)
+    """),
+
+    md(r"""
+    ## 3 · Begin with a probability baseline
+
+    Before using features, predict the training positive-class proportion for every
+    row:
+
+    $$
+    \hat p_{base}=\frac{1}{n}\sum_{i=1}^{n}y_i
+    $$
+
+    **Symbols:** $y_i$ is a binary training label; $n$ is the number of training rows;
+    $\hat p_{base}$ is the estimated positive rate.
+
+    Here:
+
+    $$
+    \hat p_{base}=\frac{3}{8}=0.375
+    $$
+
+    The baseline predicts 37.5% late probability for every route. It ignores distance.
+    A fitted classifier must produce better validation evidence than this frozen
+    training estimate.
+
+    This is a probability baseline, not an “always negative” decision baseline. A
+    probability and a thresholded class are different objects.
+    """),
+
+    md(r"""
+    ## 4 · Score, probability, and decision are three separate objects
+
+    Logistic regression first creates an unrestricted linear score:
+
+    $$
+    z=b+wx
+    $$
+
+    The score $z$ can be any real number, so it is not yet a probability. The sigmoid
+    converts it to a value strictly between 0 and 1:
+
+    $$
+    p=\sigma(z)=\frac{1}{1+e^{-z}}
+    $$
+
+    A threshold $t$ then creates a decision:
+
+    $$
+    \hat y=
+    \begin{cases}
+    1,&p\ge t\\
+    0,&p<t
+    \end{cases}
+    $$
+
+    **Symbols:** $b$ is an intercept; $w$ is a coefficient; $x$ is a feature; $z$ is
+    a score; $e$ is the exponential constant; $p$ is predicted probability; $t$ is a
+    chosen threshold; $\hat y$ is a class decision.
+
+    | Score $z$ | Sigmoid probability | Decision at $t=0.5$ |
+    | ---: | ---: | ---: |
+    | -2 | about 0.119 | 0 |
+    | 0 | 0.500 | 1 |
+    | 2 | about 0.881 | 1 |
+
+    A different threshold changes decisions but leaves scores and probabilities
+    unchanged.
     """),
 
     code(r"""
-    # Figure 1 — why a straight line is the wrong model for a 0/1 target.
-    x = np.concatenate([rng.normal(-2, 1, 30), rng.normal(2, 1, 30)])
-    y = (x > 0).astype(float)
+    def stable_sigmoid(scores):
+        '''Convert real-valued scores to probabilities without avoidable overflow.'''
+        score_array = np.asarray(scores, dtype=float)
+        probabilities = np.empty_like(score_array)
+        nonnegative = score_array >= 0
+        probabilities[nonnegative] = 1 / (1 + np.exp(-score_array[nonnegative]))
+        negative_exponential = np.exp(score_array[~nonnegative])
+        probabilities[~nonnegative] = negative_exponential / (1 + negative_exponential)
+        return probabilities
 
-    w_lin = np.linalg.lstsq(np.c_[np.ones_like(x), x], y, rcond=None)[0]
-    grid = np.linspace(-6, 6, 200)
-    lin_pred = w_lin[0] + w_lin[1] * grid
 
-    def sigmoid(z):
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
+    example_scores = np.array([-2.0, 0.0, 2.0, -1_000.0, 1_000.0])
+    example_probabilities = stable_sigmoid(example_scores)
+    example_decisions = (example_probabilities >= 0.5).astype(int)
 
-    fig, ax = plt.subplots()
-    ax.scatter(x, y, color="tab:blue", alpha=0.6, label="data (0/1)")
-    ax.plot(grid, lin_pred, "r--", label="linear regression fit")
-    ax.plot(grid, sigmoid(2.5 * grid), "g-", lw=2, label="logistic (sigmoid) fit")
-    ax.axhline(0, color="k", lw=0.5); ax.axhline(1, color="k", lw=0.5)
-    ax.set_ylim(-0.4, 1.4); ax.legend()
-    ax.set_title("Figure 1 — Linear reg leaves [0,1]; the sigmoid stays a valid probability")
+    print("scores:", example_scores)
+    print("probabilities:", example_probabilities)
+    print("decisions at threshold 0.5:", example_decisions)
+
+    assert np.all((example_probabilities >= 0) & (example_probabilities <= 1))
+    assert np.isclose(example_probabilities[1], 0.5)
+    assert np.array_equal(example_decisions[:3], [0, 1, 1])
+    """),
+
+    md(r"""
+    ## 5 · Odds and log-odds explain the sigmoid
+
+    Probability $p$ can be rewritten as **odds**:
+
+    $$
+    \operatorname{odds}=\frac{p}{1-p}
+    $$
+
+    If $p=0.75$, odds are:
+
+    $$
+    \frac{0.75}{0.25}=3
+    $$
+
+    Read this as three-to-one odds for the positive class—not as 300% probability.
+
+    Taking a logarithm creates log-odds:
+
+    $$
+    \operatorname{logit}(p)=\log\left(\frac{p}{1-p}\right)
+    $$
+
+    Logistic regression assumes log-odds are linear:
+
+    $$
+    \log\left(\frac{p}{1-p}\right)=b+wx
+    $$
+
+    Solving this equation for $p$ produces the sigmoid. The sigmoid is not an arbitrary
+    curve attached to a linear model; it is the inverse transformation from log-odds
+    back to probability.
+
+    Probability 0.5 has odds 1 and log-odds 0. Probabilities below 0.5 have negative
+    log-odds; probabilities above 0.5 have positive log-odds.
+    """),
+
+    code(r"""
+    probability_examples = np.array([0.25, 0.50, 0.75])
+    odds_examples = probability_examples / (1 - probability_examples)
+    log_odds_examples = np.log(odds_examples)
+    recovered_probabilities = stable_sigmoid(log_odds_examples)
+
+    odds_table = pd.DataFrame(
+        {
+            "probability": probability_examples,
+            "odds": odds_examples,
+            "log_odds": log_odds_examples,
+            "recovered_probability": recovered_probabilities,
+        }
+    )
+
+    print(odds_table)
+
+    assert np.allclose(recovered_probabilities, probability_examples)
+    assert np.isclose(odds_examples[-1], 3.0)
+    """),
+
+    md(r"""
+    ## 6 · Bernoulli likelihood leads to binary cross-entropy
+
+    A binary label follows a Bernoulli data story. For one label $y\in\{0,1\}$ and
+    predicted probability $p$:
+
+    $$
+    P(y\mid p)=p^y(1-p)^{1-y}
+    $$
+
+    If $y=1$, this becomes $p$. If $y=0$, it becomes $1-p$.
+
+    The negative log-likelihood for one row is binary cross-entropy:
+
+    $$
+    \ell(y,p)=-\left[y\log(p)+(1-y)\log(1-p)\right]
+    $$
+
+    Across $n$ rows:
+
+    $$
+    L=-\frac{1}{n}\sum_{i=1}^{n}
+    \left[y_i\log(p_i)+(1-y_i)\log(1-p_i)\right]
+    $$
+
+    **Symbols:** $\ell$ is one-row loss; $L$ is mean training loss; $y_i$ is the
+    actual binary label; $p_i$ is predicted positive probability.
+
+    For a positive label $y=1$:
+
+    - $p=0.8$ gives $-\log(0.8)\approx0.223$;
+    - $p=0.1$ gives $-\log(0.1)\approx2.303$.
+
+    The confidently wrong prediction receives much more loss. We clip probabilities
+    away from exactly 0 and 1 before taking logs because $\log(0)$ is undefined.
+    """),
+
+    code(r"""
+    def binary_cross_entropy(labels, probabilities, epsilon=1e-12):
+        '''Return mean binary cross-entropy after validating labels and shapes.'''
+        label_array = np.asarray(labels, dtype=float)
+        probability_array = np.asarray(probabilities, dtype=float)
+        if label_array.shape != probability_array.shape:
+            raise ValueError("labels and probabilities must have matching shapes")
+        if not np.all(np.isin(label_array, [0.0, 1.0])):
+            raise ValueError("labels must contain only 0 and 1")
+
+        clipped = np.clip(probability_array, epsilon, 1 - epsilon)
+        row_losses = -(
+            label_array * np.log(clipped)
+            + (1 - label_array) * np.log(1 - clipped)
+        )
+        return float(row_losses.mean())
+
+
+    positive_good_loss = binary_cross_entropy([1], [0.8])
+    positive_bad_loss = binary_cross_entropy([1], [0.1])
+    negative_good_loss = binary_cross_entropy([0], [0.1])
+
+    print("positive label, p=0.8:", positive_good_loss)
+    print("positive label, p=0.1:", positive_bad_loss)
+    print("negative label, p=0.1:", negative_good_loss)
+
+    assert positive_bad_loss > positive_good_loss
+    assert np.isclose(positive_good_loss, -np.log(0.8))
+    assert np.isfinite(binary_cross_entropy([1, 0], [1.0, 0.0]))
+    """),
+
+    md(r"""
+    ## 7 · Derive the logistic-regression gradient
+
+    For one feature:
+
+    $$
+    z_i=b+wx_i,
+    \qquad
+    p_i=\sigma(z_i)
+    $$
+
+    The sigmoid derivative is:
+
+    $$
+    \frac{dp_i}{dz_i}=p_i(1-p_i)
+    $$
+
+    After applying the chain rule to binary cross-entropy, the score derivative
+    simplifies to:
+
+    $$
+    \frac{\partial\ell_i}{\partial z_i}=p_i-y_i
+    $$
+
+    Therefore:
+
+    $$
+    \frac{\partial L}{\partial b}=\frac{1}{n}\sum_{i=1}^{n}(p_i-y_i)
+    $$
+
+    $$
+    \frac{\partial L}{\partial w}=\frac{1}{n}\sum_{i=1}^{n}(p_i-y_i)x_i
+    $$
+
+    At $b=0,w=0$, every score is 0 and every probability is 0.5. For two rows
+    $(x,y)=(1,0),(2,1)$:
+
+    $$
+    \frac{\partial L}{\partial b}
+    =\frac{(0.5-0)+(0.5-1)}{2}=0
+    $$
+
+    $$
+    \frac{\partial L}{\partial w}
+    =\frac{(0.5)(1)+(-0.5)(2)}{2}=-0.25
+    $$
+
+    A positive learning rate increases $w$, making the larger feature more likely to
+    receive a larger positive-class probability.
+    """),
+
+    code(r"""
+    def logistic_loss_and_gradient(features, labels, intercept, coefficient):
+        '''Calculate binary cross-entropy and gradients for one-feature logistic regression.'''
+        feature_array = np.asarray(features, dtype=float)
+        label_array = np.asarray(labels, dtype=float)
+        if feature_array.ndim != 1 or label_array.ndim != 1:
+            raise ValueError("features and labels must be one-dimensional")
+        if feature_array.shape != label_array.shape:
+            raise ValueError("features and labels must have matching shapes")
+        if not np.all(np.isin(label_array, [0.0, 1.0])):
+            raise ValueError("labels must contain only 0 and 1")
+
+        scores = intercept + coefficient * feature_array
+        probabilities = stable_sigmoid(scores)
+        loss = binary_cross_entropy(label_array, probabilities)
+        probability_errors = probabilities - label_array
+        intercept_gradient = probability_errors.mean()
+        coefficient_gradient = np.mean(probability_errors * feature_array)
+        gradient = np.array([intercept_gradient, coefficient_gradient])
+        return loss, gradient, probabilities
+
+
+    manual_loss, manual_gradient, manual_probabilities = logistic_loss_and_gradient(
+        [1.0, 2.0],
+        [0.0, 1.0],
+        intercept=0.0,
+        coefficient=0.0,
+    )
+
+    print("probabilities:", manual_probabilities)
+    print("loss:", manual_loss)
+    print("gradient [intercept, coefficient]:", manual_gradient)
+
+    assert np.allclose(manual_probabilities, [0.5, 0.5])
+    assert np.allclose(manual_gradient, [0.0, -0.25])
+    assert np.isclose(manual_loss, np.log(2))
+    """),
+
+    md(r"""
+    ## 8 · Fit logistic regression from scratch
+
+    The FND-04 update rule does not change:
+
+    $$
+    \boldsymbol\theta_{t+1}
+    =\boldsymbol\theta_t-\eta\nabla L(\boldsymbol\theta_t)
+    $$
+
+    Here $\boldsymbol\theta=[b,w]$. What changed is the prediction rule and loss.
+
+    We standardize distance using training values before fitting. This makes the
+    learning-rate behavior easier to control. The final coefficient will therefore
+    describe one training standard deviation of distance, not one kilometre.
+    """),
+
+    code(r"""
+    distance_mean = route_distance_km.mean()
+    distance_std = route_distance_km.std(ddof=0)
+    standardized_distance = (route_distance_km - distance_mean) / distance_std
+
+    def fit_logistic_regression_from_scratch(
+        features,
+        labels,
+        learning_rate=0.20,
+        steps=2_000,
+        start=(0.0, 0.0),
+    ):
+        '''Fit one-feature logistic regression and return parameters and history.'''
+        parameters = np.asarray(start, dtype=float).copy()
+        if parameters.shape != (2,):
+            raise ValueError("start must contain [intercept, coefficient]")
+        if learning_rate <= 0 or steps < 1:
+            raise ValueError("learning_rate and steps must be positive")
+
+        records = []
+        for step in range(steps + 1):
+            loss, gradient, probabilities = logistic_loss_and_gradient(
+                features,
+                labels,
+                intercept=parameters[0],
+                coefficient=parameters[1],
+            )
+            if not np.isfinite(loss) or not np.all(np.isfinite(gradient)):
+                raise FloatingPointError("optimization became non-finite")
+
+            records.append(
+                {
+                    "step": step,
+                    "loss": loss,
+                    "intercept": parameters[0],
+                    "coefficient": parameters[1],
+                    "gradient_norm": np.linalg.norm(gradient),
+                }
+            )
+            if step < steps:
+                parameters = parameters - learning_rate * gradient
+
+        return parameters, pd.DataFrame(records), probabilities
+
+
+    fitted_parameters, logistic_history, fitted_probabilities = (
+        fit_logistic_regression_from_scratch(
+            standardized_distance,
+            late_label,
+            learning_rate=0.20,
+            steps=2_000,
+        )
+    )
+
+    print("parameters [intercept, standardized-distance coefficient]:", fitted_parameters)
+    print("starting cross-entropy:", logistic_history.iloc[0]["loss"])
+    print("final cross-entropy:", logistic_history.iloc[-1]["loss"])
+    print("fitted probabilities:", fitted_probabilities.round(3))
+
+    assert logistic_history.iloc[-1]["loss"] < logistic_history.iloc[0]["loss"]
+    assert np.all((fitted_probabilities > 0) & (fitted_probabilities < 1))
+    assert fitted_parameters[1] > 0
+    """),
+
+    code(r"""
+    probability_grid_distance = np.linspace(0.5, 5.0, 300)
+    probability_grid_standardized = (
+        probability_grid_distance - distance_mean
+    ) / distance_std
+    probability_curve = stable_sigmoid(
+        fitted_parameters[0]
+        + fitted_parameters[1] * probability_grid_standardized
+    )
+
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].scatter(route_distance_km, late_label, color="tab:blue", label="training labels")
+    axes[0].plot(probability_grid_distance, probability_curve, color="tab:red", label="probability curve")
+    axes[0].set_xlabel("distance (km)")
+    axes[0].set_ylabel("predicted late probability")
+    axes[0].set_ylim(-0.05, 1.05)
+    axes[0].set_title("A linear score becomes an S-shaped probability")
+    axes[0].legend()
+
+    axes[1].plot(logistic_history["step"], logistic_history["loss"], color="tab:green")
+    axes[1].set_xlabel("gradient-descent step")
+    axes[1].set_ylabel("training cross-entropy")
+    axes[1].set_title("Cross-entropy falls during fitting")
+
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** The red linear fit shoots **below 0 and above 1** — nonsensical as
-    a probability — and its slope is yanked around by points far from the boundary.
-    The green **sigmoid** stays inside $[0,1]$, saturates gracefully at the extremes,
-    and transitions smoothly through 0.5 at the boundary. This bounded S-shape is
-    precisely what we need, and it is *not* an arbitrary choice — it's what the
-    Bernoulli likelihood demands (next section).
-    """),
+    ## 9 · Apply a threshold after probability prediction
 
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
+    The probability model is now frozen. A threshold converts probabilities to
+    decisions:
 
-    ### 4.1 Build the model from the requirement "output a probability"
-    We want $p=P(y=1\mid\mathbf x)\in(0,1)$ but a linear score lives on all of
-    $\mathbb R$. Bridge them through the **odds** and **log-odds**:
-    $$\text{odds}=\frac{p}{1-p}\in(0,\infty),\qquad \log\text{-odds}=\log\frac{p}{1-p}\in(-\infty,\infty).$$
-    Model the *log-odds* as linear: $\log\frac{p}{1-p}=\mathbf w^\top\mathbf x$.
-    Solving for $p$ inverts to the **sigmoid**:
-    $$\boxed{\ p=\sigma(\mathbf w^\top\mathbf x)=\frac{1}{1+e^{-\mathbf w^\top\mathbf x}}\ }$$
-    The sigmoid *is* the inverse of the logit — it wasn't pulled from a hat.
+    $$
+    \hat y_i=\mathbb 1[p_i\ge t]
+    $$
 
-    ### 4.2 The loss from the Bernoulli likelihood (Lesson FND-02)
-    Each label is Bernoulli: $P(y\mid\mathbf x)=p^{y}(1-p)^{1-y}$. The log-likelihood
-    over the dataset is
-    $$\ell(\mathbf w)=\sum_i\big[y_i\log p_i+(1-y_i)\log(1-p_i)\big].$$
-    Its negative is the **binary cross-entropy** loss:
-    $$J(\mathbf w)=-\frac1n\sum_i\big[y_i\log p_i+(1-y_i)\log(1-p_i)\big].$$
-    So just as MSE was the Gaussian NLL (Lesson CML-01), **cross-entropy is the
-    Bernoulli NLL.** Choosing the loss = choosing the noise model, again.
+    **Symbols:** $\mathbb 1$ is an indicator that returns 1 when the condition is true
+    and 0 otherwise; $t$ is the decision threshold.
 
-    ### 4.3 The gradient — and a beautiful coincidence
-    Using $\sigma'=\sigma(1-\sigma)$, the gradient simplifies to
-    $$\nabla_{\mathbf w}J=\frac1n X^\top(\mathbf p-\mathbf y).$$
-    This is the **exact same form** as linear regression's gradient
-    $\frac1n X^\top(X\mathbf w-\mathbf y)$ — only the prediction changed from
-    $X\mathbf w$ to $\sigma(X\mathbf w)$. Both are GLMs; the gradient is always
-    $\frac1n X^\top(\hat{\mathbf y}-\mathbf y)$. There is **no closed form** (the
-    sigmoid is nonlinear), so we fit by **gradient descent** (Lesson FND-04).
+    Four decision outcomes are possible:
 
-    ### 4.4 Convexity — and why cross-entropy, not MSE
-    The cross-entropy loss is **convex** in $\mathbf w$ (its Hessian
-    $\frac1n X^\top \text{diag}(p_i(1-p_i)) X$ is positive semidefinite), so gradient
-    descent reaches the **global** optimum. If you instead used **MSE on the
-    sigmoid**, the loss is **non-convex** *and* its gradient **vanishes when the model
-    is confidently wrong** ($p(1-p)\to0$), so learning stalls. Cross-entropy's
-    gradient $(p-y)$ stays strong exactly when you're most wrong — we visualize this
-    in §6, Fig 3. This is *the* reason classifiers use cross-entropy.
+    | Actual label | Decision | Name |
+    | ---: | ---: | --- |
+    | 1 | 1 | True positive |
+    | 0 | 0 | True negative |
+    | 0 | 1 | False positive |
+    | 1 | 0 | False negative |
 
-    ### 4.5 Reading coefficients; regularization; multiclass
-    - **Odds ratio:** $e^{w_j}$ is the multiplicative change in odds per unit
-      increase in feature $j$ (holding others fixed) — the interpretable payoff.
-    - **Regularization:** add $\lambda\lVert\mathbf w\rVert_2^2$ (L2, the default in
-      sklearn) or L1 — same Gaussian/Laplace-prior logic as Lesson CML-01, and
-      *essential* to prevent weights exploding under near-separable data (§7).
-    - **Multiclass:** replace the sigmoid with the **softmax**
-      $p_k=e^{z_k}/\sum_j e^{z_j}$ and use categorical cross-entropy — the multiclass
-      generalization, and exactly the output layer of neural classifiers.
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    A complete logistic-regression classifier in NumPy: a numerically stable
-    sigmoid, cross-entropy loss, the $\frac1n X^\top(\mathbf p-\mathbf y)$ gradient,
-    and gradient-descent fitting with optional L2. We verify it against sklearn in §8.
+    A threshold of 0.5 is a convention, not a universal law. Lowering it usually
+    creates more positive decisions, which can reduce false negatives while increasing
+    false positives. The correct trade-off depends on costs and must be chosen using
+    development evidence, not the final test.
     """),
 
     code(r"""
-    # 5.1 Stable sigmoid, BCE loss, and gradient-descent fit (with optional L2).
-    def sigmoid(z):
-        # branch to avoid overflow in exp for large |z|
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
+    def count_binary_decisions(labels, probabilities, threshold):
+        '''Return decisions and the four raw error counts.'''
+        label_array = np.asarray(labels, dtype=int)
+        probability_array = np.asarray(probabilities, dtype=float)
+        decisions = (probability_array >= threshold).astype(int)
+        counts = {
+            "true_positive": int(np.sum((label_array == 1) & (decisions == 1))),
+            "true_negative": int(np.sum((label_array == 0) & (decisions == 0))),
+            "false_positive": int(np.sum((label_array == 0) & (decisions == 1))),
+            "false_negative": int(np.sum((label_array == 1) & (decisions == 0))),
+        }
+        return decisions, counts
 
-    def bce(y, p, eps=1e-12):
-        p = np.clip(p, eps, 1 - eps)                  # avoid log(0)
-        return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
 
-    def fit_logistic(X, y, lr=0.1, steps=5000, l2=0.0):
-        A = np.c_[np.ones(len(X)), X]
-        w = np.zeros(A.shape[1]); n = len(y)
-        history = []
-        for _ in range(steps):
-            p = sigmoid(A @ w)
-            grad = (1 / n) * A.T @ (p - y)            # the GLM gradient from Section 4.3
-            grad[1:] += (l2 / n) * w[1:]              # L2 (don't penalize intercept)
-            w -= lr * grad
-            history.append(bce(y, p))
-        return w, history
+    for threshold in [0.30, 0.50, 0.70]:
+        decisions, counts = count_binary_decisions(
+            late_label,
+            fitted_probabilities,
+            threshold,
+        )
+        print(f"threshold={threshold:.2f}")
+        print(" decisions:", decisions)
+        print(" counts:", counts)
 
-    def predict_proba(X, w):
-        return sigmoid(np.c_[np.ones(len(X)), X] @ w)
+    decisions_at_half, counts_at_half = count_binary_decisions(
+        late_label,
+        fitted_probabilities,
+        threshold=0.50,
+    )
 
-    # two Gaussian blobs in 2D
-    n = 400
-    X = np.vstack([rng.normal([-1.5, -1.5], 1.0, (n // 2, 2)),
-                   rng.normal([1.5, 1.5], 1.0, (n // 2, 2))])
-    y = np.r_[np.zeros(n // 2), np.ones(n // 2)]
-
-    w, hist = fit_logistic(X, y, lr=0.5, steps=3000)
-    acc = np.mean((predict_proba(X, w) > 0.5) == y)
-    print("learned weights [bias, w1, w2]:", w.round(3))
-    print(f"training accuracy: {acc:.3f}")
-    print(f"final cross-entropy: {hist[-1]:.4f}")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    Three pictures: the learned **decision boundary** with probability contours, the
-    **convergence** of cross-entropy under gradient descent, and the decisive
-    **why-not-MSE** gradient comparison.
-    """),
-
-    code(r"""
-    # Figure 2 — decision boundary and probability contours of the fitted model.
-    xx, yy = np.meshgrid(np.linspace(-5, 5, 300), np.linspace(-5, 5, 300))
-    grid = np.c_[xx.ravel(), yy.ravel()]
-    probs = predict_proba(grid, w).reshape(xx.shape)
-
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    cf = axes[0].contourf(xx, yy, probs, levels=20, cmap="RdBu_r", alpha=0.8)
-    axes[0].contour(xx, yy, probs, levels=[0.5], colors="k", linewidths=2)
-    axes[0].scatter(X[:, 0], X[:, 1], c=y, cmap="RdBu_r", edgecolor="k", s=15)
-    axes[0].set_title("Probability field; black line = 0.5 boundary (linear)")
-    fig.colorbar(cf, ax=axes[0], label="P(y=1)")
-
-    axes[1].plot(hist)
-    axes[1].set_xlabel("gradient-descent step"); axes[1].set_ylabel("cross-entropy")
-    axes[1].set_title("Convex loss converges smoothly")
-    plt.suptitle("Figure 2 — Learned boundary and training convergence")
-    plt.tight_layout()
-    plt.show()
+    assert sum(counts_at_half.values()) == len(late_label)
     """),
 
     md(r"""
-    **Figure 2.** **Left:** the probability surface runs smoothly from blue (class 0)
-    to red (class 1); the black 0.5 contour — the decision boundary — is a **straight
-    line**, because the log-odds are linear in $\mathbf x$. Points near the line are
-    uncertain ($p\approx0.5$); points far away are confident. **Right:** because
-    cross-entropy is convex (§4.4), gradient descent descends smoothly to the global
-    optimum — no local minima to worry about.
-    """),
+    ## 10 · Use scikit-learn after the manual implementation
 
-    code(r"""
-    # Figure 3 — the decisive reason classifiers use cross-entropy, not MSE.
-    # Compare the gradient w.r.t. the logit z for a single positive example (y=1).
-    p = np.linspace(0.001, 0.999, 400)
-    grad_bce = np.abs(p - 1)                          # d/dz of BCE = (p - y)
-    grad_mse = np.abs(2 * (p - 1) * p * (1 - p))      # d/dz of MSE-on-sigmoid
+    We use `penalty=None` so the library solves the same unregularized problem as our
+    scratch implementation. Later lessons add coefficient penalties deliberately.
 
-    fig, ax = plt.subplots()
-    ax.plot(p, grad_bce, label="cross-entropy |dL/dz|", color="tab:green", lw=2)
-    ax.plot(p, grad_mse, label="MSE-on-sigmoid |dL/dz|", color="tab:red", lw=2)
-    ax.axvspan(0.001, 0.15, color="orange", alpha=0.15)
-    ax.annotate("confidently WRONG\n(p~0 but y=1)", (0.02, 0.6), fontsize=9)
-    ax.set_xlabel("predicted probability p (true label y=1)")
-    ax.set_ylabel("gradient magnitude w.r.t. logit z")
-    ax.set_title("Figure 3 — MSE's gradient vanishes when confidently wrong; CE's doesn't")
-    ax.legend()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** Consider a positive example ($y=1$) the model gets *confidently
-    wrong* ($p\approx0$, orange zone). **Cross-entropy's** gradient is $|p-1|\approx
-    1$ — a strong push to correct the error. **MSE-on-sigmoid's** gradient is
-    $|2(p-1)\,p(1-p)|\to0$ because the $p(1-p)$ sigmoid-derivative term **vanishes**
-    at the extremes. So with MSE, the most badly misclassified points produce
-    almost *no* learning signal — training stalls. Cross-entropy is the loss whose
-    gradient is largest exactly where you most need to learn. (Plus MSE+sigmoid is
-    non-convex.) This is why every classifier, up to and including LLMs, trains on
-    cross-entropy.
-    """),
-
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Perfect separation** | Weights → ∞; loss → 0; absurd certainty | Linearly separable data; MLE is unbounded | **L2 regularization** (always); bounded solvers |
-    | **Nonlinear boundary** | Underfits; high error despite tuning | True boundary isn't linear | Feature engineering (interactions, polynomials); kernels; trees/NNs |
-    | **Class imbalance** | 99% "accuracy" by always predicting majority | Accuracy is the wrong metric | `class_weight`, resampling, **threshold tuning**, PR-AUC (MLE-01 and MLE-04) |
-    | **Miscalibration** | Predicted 0.9 ≠ 90% empirical | Regularization/imbalance shift probabilities | Platt / isotonic calibration; reliability plots |
-    | **Multicollinearity** | Unstable, uninterpretable coefficients | Correlated features (Lesson FND-01) | L2; drop/merge features |
-    | **Wrong threshold** | Too many false positives/negatives | Using default 0.5 regardless of costs | Choose threshold from the cost matrix / PR curve |
-
-    The cell demonstrates **perfect separation**: on separable data, unregularized
-    logistic regression's weights grow without bound (the loss can always be reduced
-    by making the sigmoid steeper), while L2 keeps them finite.
-    """),
-
-    code(r"""
-    # Perfect separation: weights blow up without regularization; L2 tames them.
-    Xsep = np.vstack([rng.normal([-3, 0], 0.4, (50, 2)),
-                      rng.normal([3, 0], 0.4, (50, 2))])   # cleanly separable
-    ysep = np.r_[np.zeros(50), np.ones(50)]
-
-    w_none, _ = fit_logistic(Xsep, ysep, lr=0.5, steps=8000, l2=0.0)
-    w_reg, _ = fit_logistic(Xsep, ysep, lr=0.5, steps=8000, l2=2.0)
-    print(f"||w|| without L2 : {np.linalg.norm(w_none):8.2f}   <- growing toward infinity")
-    print(f"||w|| with L2    : {np.linalg.norm(w_reg):8.2f}   <- bounded, stable")
-    print("Both classify perfectly, but the unregularized model is absurdly overconfident.")
-    """),
-
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
-
-    sklearn's `LogisticRegression` uses robust solvers (lbfgs, liblinear, saga),
-    supports L1/L2/elastic-net penalties, multinomial softmax, and `class_weight`
-    for imbalance. Crucially it is **regularized by default** (`C=1.0`, where
-    `C=1/λ`) — which is *why* you rarely hit the perfect-separation blow-up in
-    practice, but also why you must scale features for the penalty to be fair.
+    Both implementations receive the same standardized feature values and labels.
+    We compare probabilities and cross-entropy—not only thresholded decisions.
     """),
 
     code(r"""
     from sklearn.linear_model import LogisticRegression
-    from sklearn.pipeline import make_pipeline
+
+    sklearn_logistic_model = LogisticRegression(
+        penalty=None,
+        solver="lbfgs",
+        max_iter=10_000,
+    )
+    sklearn_logistic_model.fit(standardized_distance.reshape(-1, 1), late_label.astype(int))
+    sklearn_probabilities = sklearn_logistic_model.predict_proba(
+        standardized_distance.reshape(-1, 1)
+    )[:, 1]
+
+    sklearn_loss = binary_cross_entropy(late_label, sklearn_probabilities)
+    scratch_loss = binary_cross_entropy(late_label, fitted_probabilities)
+
+    print("sklearn probabilities:", sklearn_probabilities.round(3))
+    print("scratch probabilities:", fitted_probabilities.round(3))
+    print("sklearn cross-entropy:", sklearn_loss)
+    print("scratch cross-entropy:", scratch_loss)
+
+    assert np.allclose(sklearn_probabilities, fitted_probabilities, atol=2e-3)
+    assert np.isclose(sklearn_loss, scratch_loss, atol=1e-5)
+    """),
+
+    md(r"""
+    ## 11 · Interpret coefficients without claiming causation
+
+    The model says:
+
+    $$
+    \log\left(\frac{p}{1-p}\right)=b+wx
+    $$
+
+    Increasing $x$ by one unit adds $w$ to log-odds. Exponentiating gives an odds
+    multiplier:
+
+    $$
+    \text{odds multiplier}=e^w
+    $$
+
+    If $w=0.4$, then $e^{0.4}\approx1.49$: odds are multiplied by about 1.49 for a
+    one-unit increase, holding other included features fixed.
+
+    In our scratch model, $x$ is standardized distance. One unit means one training
+    standard deviation of kilometres. Raw and standardized coefficients therefore
+    have different units.
+
+    Odds multipliers are not probability-point changes. The probability change from
+    one unit depends on the starting score because the sigmoid is curved.
+
+    A coefficient describes a fitted association. It does not prove longer routes
+    cause lateness; weather, traffic, route type, and loading may be missing.
+    """),
+
+    code(r"""
+    standardized_odds_multiplier = np.exp(fitted_parameters[1])
+
+    low_score_probability = stable_sigmoid(np.array([-1.0]))[0]
+    low_score_plus_one = stable_sigmoid(np.array([-1.0 + 0.4]))[0]
+    high_score_probability = stable_sigmoid(np.array([1.0]))[0]
+    high_score_plus_one = stable_sigmoid(np.array([1.0 + 0.4]))[0]
+
+    print("fitted standardized-distance coefficient:", fitted_parameters[1])
+    print("fitted odds multiplier:", standardized_odds_multiplier)
+    print("probability change from score -1 with +0.4:", low_score_plus_one - low_score_probability)
+    print("probability change from score +1 with +0.4:", high_score_plus_one - high_score_probability)
+
+    assert standardized_odds_multiplier > 1
+    assert not np.isclose(
+        low_score_plus_one - low_score_probability,
+        high_score_plus_one - high_score_probability,
+    )
+    """),
+
+    md(r"""
+    ## 12 · When logistic regression helps—and when it does not
+
+    ### Use it when
+
+    - the target has two declared classes;
+    - a linear boundary is a reasonable baseline;
+    - probability output is useful;
+    - fast training and inference matter;
+    - coefficient direction and units support inspection.
+
+    ### Do not rely on it unchanged when
+
+    - the feature relationship needs strong curves or interactions;
+    - labels or prediction time are unclear;
+    - classes can be perfectly separated and coefficients grow without a finite
+      unregularized optimum;
+    - probabilities are used outside the feature range without evidence;
+    - repeated entities or time ordering make the split dishonest;
+    - decisions require a causal effect rather than a prediction association.
+
+    ### Failure modes
+
+    | Symptom | Likely cause | Safe next step |
+    | --- | --- | --- |
+    | Loss does not fall | Wrong gradient, poor scale, or unstable rate | Check first update and finite differences |
+    | Probabilities are exactly 0 or 1 in logs | Unstable numerical calculation | Use stable sigmoid and clipped/logit-based loss |
+    | Coefficients grow continually | Perfect or near-perfect separation | Add later regularization and inspect data |
+    | One threshold gives costly errors | Threshold ignores decision costs | Preserve probabilities; tune later on development evidence |
+    | Validation is poor but training is good | Overfit, shift, leakage, or nonlinear boundary | Inspect split and error rows before complexity |
+    | Coefficient is called causal | Observational association was overinterpreted | Require experimental or causal design |
+
+    ### Topics deliberately deferred
+
+    - MLE-01 turns raw error counts into task-aligned evaluation metrics.
+    - MLE-02 explains cross-validation and controlled threshold/model selection.
+    - MLE-04 handles imbalanced outcomes.
+    - Later regularization material controls coefficient growth.
+    - Decision trees provide nonlinear tabular boundaries next.
+    """),
+
+    md(r"""
+    ## 13 · Mini-project: binary Wine classification with a sealed test
+
+    **Goal:** estimate whether a Wine sample belongs to cultivar class 0 using two
+    chemical features. This is educational only; it is not a quality or safety tool.
+
+    **Task frame:**
+
+    | Field | Definition |
+    | --- | --- |
+    | Prediction unit | One laboratory-tested wine sample |
+    | Positive class | Original cultivar target equals 0 |
+    | Features | `alcohol` and `color_intensity` |
+    | Prediction time | After those measurements, before cultivar confirmation |
+    | Identifier | Generated `sample_id`, excluded from features |
+    | Evidence | Training fit, validation probability loss, sealed final test |
+
+    The split happens before the baseline, scaler, or model learns any value.
+    """),
+
+    code(r"""
+    from sklearn.datasets import load_wine
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
-    from sklearn.metrics import log_loss, accuracy_score
 
-    clf = make_pipeline(StandardScaler(),
-                        LogisticRegression(C=1.0)).fit(X, y)
-    p_sklearn = clf.predict_proba(X)[:, 1]
-    p_scratch = predict_proba(X, w)
+    wine_dataset = load_wine(as_frame=True)
+    wine_frame = wine_dataset.frame.copy()
+    wine_frame.insert(
+        0,
+        "sample_id",
+        [f"wine_{row_number:03d}" for row_number in range(len(wine_frame))],
+    )
+    wine_frame["is_class_zero"] = (wine_frame["target"] == 0).astype(int)
 
-    print(f"sklearn  accuracy {accuracy_score(y, p_sklearn > 0.5):.3f} | "
-          f"log-loss {log_loss(y, p_sklearn):.4f}")
-    print(f"scratch  accuracy {accuracy_score(y, p_scratch > 0.5):.3f} | "
-          f"log-loss {log_loss(y, p_scratch):.4f}")
-    print(f"\\nprobability correlation (scratch vs sklearn): "
-          f"{np.corrcoef(p_sklearn, p_scratch)[0,1]:.4f}")
+    project_features = ["alcohol", "color_intensity"]
+    project_X = wine_frame[project_features]
+    project_y = wine_frame["is_class_zero"]
+    project_ids = wine_frame["sample_id"]
 
-    # Coefficients as ODDS RATIOS — the interpretable payoff:
-    coefs = clf.named_steps["logisticregression"].coef_[0]
-    print("\\nodds ratios exp(w):", np.exp(coefs).round(3),
-          "  (>1 raises odds of class 1, <1 lowers them)")
+    X_development, X_test, y_development, y_test, id_development, id_test = train_test_split(
+        project_X,
+        project_y,
+        project_ids,
+        test_size=0.20,
+        random_state=42,
+        stratify=project_y,
+    )
+    X_train, X_validation, y_train, y_validation, id_train, id_validation = train_test_split(
+        X_development,
+        y_development,
+        id_development,
+        test_size=0.25,
+        random_state=42,
+        stratify=y_development,
+    )
+
+    print("training rows:", len(X_train))
+    print("validation rows:", len(X_validation))
+    print("sealed test rows:", len(X_test))
+
+    assert len(X_train) == 106
+    assert len(X_validation) == 36
+    assert len(X_test) == 36
+    assert set(id_train).isdisjoint(id_validation)
+    assert set(id_train).isdisjoint(id_test)
+    assert set(id_validation).isdisjoint(id_test)
+    """),
+
+    code(r"""
+    frozen_baseline_probability = float(y_train.mean())
+    validation_baseline_probabilities = np.full(
+        len(y_validation),
+        frozen_baseline_probability,
+    )
+    validation_baseline_loss = binary_cross_entropy(
+        y_validation,
+        validation_baseline_probabilities,
+    )
+
+    project_pipeline = Pipeline(
+        steps=[
+            ("standard_scaler", StandardScaler()),
+            (
+                "logistic_regression",
+                LogisticRegression(penalty=None, solver="lbfgs", max_iter=10_000),
+            ),
+        ]
+    )
+    project_pipeline.fit(X_train, y_train)
+    validation_probabilities = project_pipeline.predict_proba(X_validation)[:, 1]
+    validation_model_loss = binary_cross_entropy(y_validation, validation_probabilities)
+
+    print("training class-rate baseline:", round(frozen_baseline_probability, 4))
+    print("validation baseline cross-entropy:", round(validation_baseline_loss, 4))
+    print("validation model cross-entropy:", round(validation_model_loss, 4))
+
+    assert validation_model_loss < validation_baseline_loss
+    assert np.all((validation_probabilities > 0) & (validation_probabilities < 1))
+    """),
+
+    code(r"""
+    validation_decisions, validation_error_counts = count_binary_decisions(
+        y_validation,
+        validation_probabilities,
+        threshold=0.50,
+    )
+
+    project_partition_manifest = pd.concat(
+        [
+            pd.DataFrame({"sample_id": id_train, "partition": "train"}),
+            pd.DataFrame({"sample_id": id_validation, "partition": "validation"}),
+            pd.DataFrame({"sample_id": id_test, "partition": "test"}),
+        ],
+        ignore_index=True,
+    )
+
+    project_result = {
+        "features": project_features,
+        "positive_class": "original cultivar target equals 0",
+        "baseline_probability": frozen_baseline_probability,
+        "validation_baseline_loss": validation_baseline_loss,
+        "validation_model_loss": validation_model_loss,
+        "validation_error_counts_at_0.5": validation_error_counts,
+        "partition_manifest": project_partition_manifest,
+        "test_status": "sealed — no transformation, probability, decision, or score calculated",
+    }
+
+    print("validation error counts at threshold 0.5:", validation_error_counts)
+    print("partition counts:\n", project_partition_manifest["partition"].value_counts())
+    print("test status:", project_result["test_status"])
+
+    assert sum(validation_error_counts.values()) == len(y_validation)
+    assert project_partition_manifest["sample_id"].is_unique
+    assert len(project_partition_manifest) == len(wine_frame)
+    assert project_result["test_status"].startswith("sealed")
     """),
 
     md(r"""
-    **Scratch vs production.** Our hand-written classifier matches sklearn's
-    probabilities closely — the difference is sklearn's default L2 penalty and a
-    second-order solver (lbfgs) that converges faster than vanilla GD. The library
-    also gives `predict_proba`, `class_weight`, calibrated multinomial softmax, and
-    sparse support. And it hands you the coefficients as **odds ratios**, the
-    quantity you'll put in front of a domain expert or regulator.
+    ## 14 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    For score $z=\log(3)$:
+
+    $$
+    p=\frac{1}{1+e^{-\log(3)}}=\frac{3}{4}=0.75
+    $$
+
+    If $y=1$, cross-entropy is $-\log(0.75)\approx0.288$. At threshold 0.8,
+    the class decision is still 0. Probability and decision are separate.
+
+    ### Guided practice
+
+    1. Explain why a categorical 0/1 target is not an ordinary numerical regression target.
+    2. Calculate sigmoid probabilities for scores $[-2,0,2]$.
+    3. Convert probabilities 0.2 and 0.8 to odds and log-odds.
+    4. Calculate one-row cross-entropy for $(y,p)=(1,0.9)$ and $(1,0.1)$.
+    5. At $b=0,w=0$, calculate the gradient for rows $(1,0)$ and $(2,1)$.
+    6. Apply thresholds 0.3 and 0.7 to probabilities $[0.2,0.4,0.8]$.
+
+    ### Independent practice
+
+    7. Rebuild stable sigmoid and test scores -1,000 and 1,000.
+    8. Rebuild binary cross-entropy and prove confidently wrong predictions cost more.
+    9. Fit one-feature logistic regression without copying the training loop.
+    10. Verify its gradient with finite differences using FND-04.
+    11. Compare scratch probabilities with sklearn probabilities.
+    12. Create a raw four-count error table at three thresholds and explain the trade-off
+        without using precision, recall, or F1 yet.
+
+    ### Challenge
+
+    Rebuild the Wine mini-project without copying. Include:
+
+    - a declared positive class and prediction time;
+    - a frozen training class-rate baseline;
+    - disjoint training, validation, and sealed test partitions;
+    - a training-only scaling Pipeline;
+    - validation cross-entropy calculated manually;
+    - validation error counts at three thresholds;
+    - coefficient units, odds interpretation, and causal caution;
+    - a partition manifest and at least eight assertions;
+    - no final-test result and no unexplained evaluation metric.
+
+    ### Self-check
+
+    For every output, identify whether it is:
+
+    - a linear score;
+    - a probability;
+    - a cross-entropy loss;
+    - a class decision;
+    - an error count;
+    - a coefficient association.
+
+    Then name which rows were allowed to determine it.
     """),
 
-    # ============================================ 9. Business Case Study
     md(r"""
-    ## 9 · Realistic Business Case Study — Credit Default Scoring
+    ### Solution and scoring rubric
 
-    **Scenario.** A lender predicts the **probability a loan applicant defaults**,
-    using income, debt ratio, payment history, etc. The probability drives the
-    approve/decline decision and the interest rate.
+    1. The labels name classes; arithmetic distance between class codes has no target meaning.
+    2. Approximately $[0.119,0.500,0.881]$.
+    3. For 0.2, odds are 0.25 and log-odds about -1.386. For 0.8, odds are 4 and
+       log-odds about 1.386.
+    4. $-\log(0.9)\approx0.105$ and $-\log(0.1)\approx2.303$.
+    5. Intercept gradient 0; coefficient gradient -0.25.
+    6. At 0.3 decisions are $[0,1,1]$; at 0.7 they are $[0,0,1]$.
+    7. Both extreme scores must return finite probabilities without overflow warnings.
+    8. Loss must be finite after clipping and larger for confident mistakes.
+    9. A useful learning rate should lower training cross-entropy.
+    10. Analytical and numerical gradients should match within a small tolerance.
+    11. Scratch and sklearn probabilities should be close on the same scaled rows.
+    12. Lower thresholds usually increase positive decisions, false positives, and
+        true positives; higher thresholds usually do the reverse.
 
-    **Why logistic regression?**
-    - **Regulation (e.g. fair-lending / ECOA, "right to explanation").** Decisions
-      must be explainable; **odds ratios** give a defensible, signed reason per
-      feature ("each missed payment multiplies default odds by 1.5×"). This is why
-      scorecards — essentially logistic regression — dominate consumer credit.
-    - **Calibration matters as much as ranking:** the predicted probability feeds
-      expected-loss and pricing calculations, so 0.2 must *mean* 20%.
+    Challenge scoring:
 
-    **Business objectives:** approve good borrowers, decline likely defaulters, price
-    risk correctly, stay compliant.
+    | Skill | Points |
+    | --- | ---: |
+    | Task frame, labels, and baseline | 3 |
+    | Score, sigmoid, and cross-entropy calculations | 4 |
+    | Correct gradient and training loop | 4 |
+    | Split and scaling boundaries | 3 |
+    | Threshold and raw error-count reasoning | 2 |
+    | Coefficient interpretation and limitations | 2 |
+    | Assertions and sealed final test | 2 |
+    | **Total** | **20** |
 
-    **Cost of mistakes (asymmetric!)**
-    - **False negative** (approve a defaulter): lose principal — expensive.
-    - **False positive** (decline a good borrower): lose the interest margin +
-      goodwill — cheaper, but real.
-    The cost asymmetry sets the **decision threshold**, *not* the default 0.5. This
-    is the core senior insight: the model outputs a probability; the *business*
-    chooses the cut-point.
+    ### Common mistakes
 
-    **Constraints:** protected attributes and proxies handled per law; monotonicity
-    often required (more debt ⇒ never *lower* predicted risk); full model
-    documentation.
+    - Calling the linear score a probability.
+    - Calling a probability a final decision.
+    - Treating 0.5 as a mandatory threshold.
+    - Reversing the positive and negative class meaning.
+    - Using MSE because labels are stored as numbers.
+    - Taking `log(0)` without numerical protection.
+    - Reversing $p-y$ to $y-p$ without changing the update sign.
+    - Fitting the scaler on validation or test rows.
+    - Choosing a threshold from the final test.
+    - Interpreting an odds multiplier as a probability-point increase.
+    - Treating a coefficient as a causal effect.
+    - Reporting only thresholded decisions and discarding useful probabilities.
 
-    **KPIs:** AUC / KS (ranking), calibration error (reliability), approval rate,
-    realized default rate by score band, fairness across protected groups, and
-    expected profit at the chosen threshold.
+    ### Readiness threshold
+
+    Score at least **16/20**, including correct sigmoid, cross-entropy, gradient,
+    split boundaries, and score/probability/decision distinctions.
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ## Ready to move on?
 
-    - **Threshold ≠ 0.5.** Choose the operating point from the cost matrix or a
-      precision/recall target (Lesson MLE-01). One model can serve many thresholds for
-      different segments.
-    - **Calibration.** Regularization and imbalance distort probabilities; validate
-      with **reliability diagrams** and apply **Platt/isotonic** calibration when the
-      probability itself is consumed (pricing, expected loss).
-    - **Latency / cost.** Inference is a dot product + one sigmoid — microseconds,
-      the cheapest model to serve; trivially scalable.
-    - **Explainability.** Coefficients → odds ratios out of the box; for nonlinear
-      feature engineering, pair with SHAP (Lesson MLE-05). A major reason it ships in
-      regulated domains.
-    - **Monitoring & drift.** Track score-distribution shift, calibration over time,
-      and class-balance changes. Watch coefficient stability across retrains
-      (instability ⇒ multicollinearity or pipeline change).
-    - **Imbalance.** Use `class_weight`/resampling and PR-based metrics; never report
-      plain accuracy on a skewed problem (Lesson MLE-04).
-    """),
+    ### Quick check
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    1. Why is logistic regression a classifier?
+    2. What is the difference between score, probability, and decision?
+    3. Why does sigmoid produce values between 0 and 1?
+    4. How are probability, odds, and log-odds related?
+    5. Why does Bernoulli likelihood lead to cross-entropy?
+    6. Why is a confidently wrong probability penalized strongly?
+    7. Why does the gradient contain $p-y$?
+    8. What changes when a decision threshold moves?
+    9. What does $e^w$ mean, and what does it not mean?
+    10. Why can a falling training loss still fail to justify deployment?
 
-    **Logistic Regression vs alternatives:**
+    ### Teach it back
 
-    | Dimension | Logistic Regression | XGBoost | SVM (RBF) | Neural Net |
-    |---|---|---|---|---|
-    | Accuracy on complex data | Lower (linear) | **High** | High | **High** |
-    | Probability quality | **Well-calibrated** | Decent (needs calib.) | Poor (not native) | Decent |
-    | Interpretability | **High (odds ratios)** | Low (SHAP) | Low | Low |
-    | Nonlinearity/interactions | Manual only | **Automatic** | Via kernel | **Automatic** |
-    | Latency / cost | **Lowest** | Medium | Medium–High | Higher |
-    | Data needed | Low | Medium | Medium | High |
-    | Regulatory suitability | **High** | Lower | Low | Lower |
+    Explain the complete chain without using sklearn:
 
-    **L1 vs L2 penalty:**
+    **binary label → training-rate baseline → linear score → sigmoid probability →
+    Bernoulli cross-entropy → gradient descent → frozen probability → threshold →
+    raw error counts.**
 
-    | Dimension | L2 (Ridge, default) | L1 (Lasso) |
-    |---|---|---|
-    | Effect on weights | Shrinks smoothly | Drives some to **zero** |
-    | Feature selection | No | **Yes** |
-    | Correlated features | Splits weight | Picks one |
-    | Use when | Many useful features | Want a sparse, simple model |
+    Name which steps learn parameters and which step expresses a decision policy.
 
-    **Senior lesson:** logistic regression is the baseline whose *calibrated
-    probabilities + interpretability* are often worth more than a few points of AUC
-    from a black box — especially where decisions must be explained.
-    """),
+    ### Memory aid
 
-    # ============================================ 12. Interview Prep
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    **Logistic regression fits a linear score through sigmoid and cross-entropy;
+    a separate threshold turns its probability into a decision.**
 
-    **Common questions**
-    - *Derive logistic regression from the Bernoulli likelihood.* (Sections 4.1–4.3.)
-    - *What does a coefficient mean?* → Change in **log-odds** per unit feature;
-      $e^{w_j}$ is the odds ratio.
+    ### Next dependency
 
-    **Deep-dive questions**
-    - *Why cross-entropy and not MSE?* → Convexity + non-vanishing gradient when
-      confidently wrong (Section 4.4, Fig 3). Be able to *show* the $p(1-p)$ term.
-    - *Why is there no closed form, unlike linear regression?* → The sigmoid makes
-      the score nonlinear; solve by GD/Newton (IRLS).
-    - *What is perfect separation?* → MLE pushes weights to infinity; fix with L2.
-
-    **Whiteboard questions**
-    - "Implement logistic regression with gradient descent." (Section 5 — and state
-      the gradient is $\frac1n X^\top(\mathbf p-\mathbf y)$.)
-    - "Derive the gradient using $\sigma'=\sigma(1-\sigma)$."
-
-    **Strong vs weak answers**
-    - *"99% accuracy on 1% fraud — good model?"*
-      - **Weak:** "Yes, 99% is great."
-      - **Strong:** "Accuracy is meaningless here — predicting 'never fraud' scores
-        99%. I'd look at precision/recall, PR-AUC, and the confusion matrix at a
-        cost-chosen threshold, and probably use class weights." (MLE-01 and MLE-04.)
-    - *"Your probabilities are off."*
-      - **Weak:** "Retrain."
-      - **Strong:** "Check calibration with a reliability diagram; regularization or
-        imbalance may have distorted them — apply Platt/isotonic calibration and
-        validate on held-out data."
-
-    **Follow-ups:** "How do you pick the threshold?" (cost matrix / PR target).
-    "Multiclass?" (softmax + categorical cross-entropy). "Relationship to neural
-    nets?" (it *is* the one-layer, sigmoid/softmax output).
-
-    **Common mistakes:** reporting accuracy on imbalanced data; using 0.5 blindly;
-    confusing calibration with discrimination/ranking; forgetting L2 enables fitting
-    near-separable data; interpreting raw coefficients without scaling.
-    """),
-
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
-
-    1. **What is it?** Define logistic regression and what it outputs.
-    2. **Why was it invented?** Why not just use linear regression for 0/1 targets?
-    3. **How does it work?** Walk log-odds → sigmoid → cross-entropy → GD.
-    4. **Why does it work?** Why is cross-entropy the right loss (convex, non-
-       saturating), and why is the boundary linear?
-    5. **When to use it?** Name three production settings where it's the right call.
-    6. **When NOT to use it?** Give two situations where it underperforms and why.
-    7. **Tradeoffs?** vs XGBoost; L1 vs L2; ranking vs calibration.
-    8. **How would you productionize it?** Threshold selection, calibration,
-       monitoring, and explainability for a regulated decision.
-    """),
-
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises, Self-Check, and Solutions
-
-    **Worked example:** a logit of zero gives sigmoid probability `0.5`; threshold
-    `0.5` predicts positive. A logit of `ln(3)` gives odds 3:1 and probability 0.75.
-
-    **Guided practice (25 min):** calculate sigmoid probabilities for logits
-    `[-2,0,2]`, then predict at threshold 0.5. Hint: use `1/(1+exp(-z))`.
-    Self-check: probabilities are approximately `[0.119,0.5,0.881]`.
-
-    **Independent practice (45 min):** fit a mean-class-frequency baseline and a
-    logistic regression on one stratified split. Report the confusion matrix and list
-    false positives and false negatives separately without yet choosing an advanced
-    metric.
-
-    **Challenge extension (60 min):** sweep three thresholds and calculate the total
-    cost when a false negative costs 10 and a false positive costs 1. Choose from
-    validation data, not test data. Calibration and fairness audits remain later work.
-
-    <details><summary><strong>Solution and scoring rubric</strong></summary>
-
-    Award 2 points for correct sigmoid values, 3 for a stratified split and baseline,
-    3 for correct error counting, and 2 for a threshold decision tied to cost. Common
-    mistakes: treating logits as probabilities, fitting on the test set, assuming
-    threshold 0.5 is mandatory, and reporting accuracy without error types.
-    **Readiness threshold: 8/10.**
-    </details>
-    """),
-
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    Logistic regression is linear regression's classification twin: the **same
-    linear score**, a **sigmoid** to make it a probability, a **Bernoulli
-    likelihood** giving the **cross-entropy** loss, and **gradient descent** to fit
-    it. Cross-entropy (not MSE) because it's convex and keeps a strong gradient when
-    confidently wrong. It outputs calibrated probabilities and interpretable odds
-    ratios — which is why it's the default classifier in fraud, credit, and churn,
-    and the read-out layer of deep classifiers.
-
-    **Next in the canonical route:** `MLE-01 · Evaluation Metrics` turns these scores,
-    thresholds, and error types into task-aligned evidence before flexible models.
+    CML-03 introduces decision trees as a nonlinear alternative. Evaluation metrics
+    remain deferred until the student understands what classification predictions and
+    errors actually are.
     """),
 ]
+
 
 build("02_classical_ml/02_logistic_regression.ipynb", cells)

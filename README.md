@@ -1,6 +1,6 @@
 # ML / AI Refresher — Zero-Math Foundations to Senior Engineering
 
-A 65-notebook curriculum that starts with mathematical and Python prerequisites,
+A 66-notebook curriculum that starts with mathematical and Python prerequisites,
 then teaches Machine Learning and AI from first principles through production
 system design. Later sections remain useful as a refresher for experienced engineers.
 
@@ -12,8 +12,9 @@ new, complete the prerequisite section in order:
 1. `PRE-01 · Mathematical Language and Arithmetic`
 2. `PRE-02 · Algebra, Functions, and Graphs`
 3. `PRE-03 · Python, NumPy, and Jupyter Foundations`
-4. `PRE-04 · Calculus and Probability Intuition`
-5. `PRE-05 · Practical Python, Pandas, Debugging, and Tests`
+4. `PRE-04 · Calculus, Exponentials, and Logarithms`
+5. `PRE-06 · Probability, Random Variables, and Statistics` *(new lesson; ordered here canonically)*
+6. `PRE-05 · Practical Python, Pandas, Debugging, and Tests` *(existing stable ID)*
 
 Each prerequisite notebook includes worked examples, guided practice,
 independent exercises, solutions, and a readiness threshold. Experienced learners
@@ -38,7 +39,7 @@ generated notebook. In particular, the core ML spine intentionally teaches:
 > data workflow (FND-03) → linear regression and squared loss (CML-01) →
 > optimization (FND-04) → logistic regression (CML-02) → metrics (MLE-01) →
 > validation/leakage (MLE-02) → experiment tracking (PROD-04) → feature engineering
-> (MLE-03) → trees and ensembles (CML-03 through CML-05)
+> (MLE-03) → trees and ensembles (CML-03 through CML-06)
 
 The Deep Learning spine is:
 

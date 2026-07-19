@@ -1,797 +1,1096 @@
-"""Builder for Lesson FND-02 — Probability and Statistics.
+"""Build FND-02: Probability and Statistics."""
 
-
-Every cell body is a RAW string (r\"\"\"...\"\"\") so LaTeX backslashes and code
-escapes survive verbatim.
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # FND-02 · Probability and Statistics
-    ### Section 01 — Mathematical Foundations · *ML/AI Senior Mastery Curriculum*
 
-    **Prerequisites:** PRE-01 through PRE-04 and FND-01. You should be able to
-    read fractions, summations, logarithms, subscripts, and basic derivatives.
-    **Estimated time:** 4–6 hours including exercises.
+    **Prerequisites:** PRE-06 and FND-01  
+    **Estimated study time:** 8–10 hours, including practice  
+    **Next lesson:** FND-03 · Data Workflow, EDA, and Cleaning
 
-    > Lesson FND-01 gave us the *geometry* of data (vectors, matrices, SVD). This
-    > notebook gives us the *reasoning under uncertainty* that turns geometry into
-    > **learning**. The single most important idea you will take away: **almost
-    > every loss function in ML is a negative log-likelihood.** MSE, cross-entropy,
-    > and L2/L1 regularization are not arbitrary — they fall out of probability the
-    > moment you state your assumptions. A senior engineer can derive them on
-    > demand and, more importantly, knows *which assumption* each one encodes.
+    PRE-06 taught the language of events, conditional probability, Bayes' rule,
+    random variables, expected value, variance, and standard deviation. This lesson
+    uses that language to answer a harder question:
+
+    > When a sample changes, which differences are meaningful and which could be
+    > ordinary sampling variation?
+
+    We will calculate everything with small numbers before using a library.
+
+    ### Scope boundary
+
+    This lesson does **not** derive model-specific losses or regularization:
+
+    - Gaussian likelihood and squared-error regression belong in CML-01;
+    - Bernoulli likelihood and cross-entropy belong in CML-02;
+    - MAP estimation, Ridge, and Lasso belong after regression is understood;
+    - production drift monitoring belongs in PROD-05.
+
+    Here, the goal is a dependable foundation for reasoning from samples.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - Probability as both **long-run frequency** and **degree of belief**, and why
-      ML quietly uses both.
-    - Random variables, the distributions that matter in ML (Bernoulli, Binomial,
-      Poisson, Gaussian, Exponential), and **expectation / variance / covariance**.
-    - **Bayes' theorem** as belief-updating, with the base-rate trap that fools
-      most people (and most candidates).
-    - **Maximum Likelihood Estimation (MLE)** — derived from scratch — and the
-      punchline that **MSE = Gaussian NLL** and **cross-entropy = Bernoulli NLL**.
-    - **MAP** estimation and why **L2 regularization is a Gaussian prior** and
-      **L1 is a Laplace prior**.
-    - The **Law of Large Numbers** and **Central Limit Theorem** — why the Gaussian
-      is everywhere and why your metrics' error bars shrink like $1/\sqrt n$.
-    - Estimator **bias & variance**, the **bootstrap**, confidence intervals, and
-      **hypothesis testing** (the math behind A/B tests).
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - Loss design, calibration, and uncertainty estimates all live here.
-    - A/B testing and experimentation are applied statistics; a wrong test ships a
-      revenue-losing change with "statistical significance."
-    - Data/concept **drift** is literally a change in a probability distribution.
+    - distinguish a population, sample, parameter, statistic, estimator, and estimate;
+    - recognize Bernoulli, binomial, and normal distributions from their data stories;
+    - calculate mean, variance, covariance, and correlation manually;
+    - explain why covariance is not yet causation;
+    - distinguish a data distribution from a sampling distribution;
+    - explain the Law of Large Numbers and Central Limit Theorem without slogans;
+    - calculate standard error and a confidence interval;
+    - state a null and alternative hypothesis;
+    - interpret a p-value correctly;
+    - separate statistical significance from practical importance;
+    - explain false positives, false negatives, and statistical power;
+    - build and check a small A/B analysis;
+    - use a bootstrap when a simple uncertainty formula is unavailable.
 
-    **Typical interview questions**
-    - "Derive MLE for a Gaussian. Why does that justify squared-error loss?"
-    - "Explain Bayes' theorem and the base-rate fallacy with a numeric example."
-    - "What is the Central Limit Theorem and why should an ML engineer care?"
-    - "What does a p-value actually mean — and what does it *not* mean?"
-    - "Why is the L2 penalty equivalent to a Gaussian prior on the weights?"
-    """),
+    ### What mastery looks like
 
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **Gambling (1650s).** Probability began with Pascal and Fermat settling a
-    dispute about how to split the stakes of an interrupted game of chance. The
-    early view was purely **frequentist**: probability = the long-run fraction of
-    times an event happens.
-
-    **Bayes & Laplace (1760s–1810s).** Thomas Bayes (published posthumously) and
-    Laplace formalized the opposite direction: not "given a known coin, what data
-    will I see?" but "**given the data I saw, what should I believe about the
-    coin?**" This *inverse* question — updating beliefs with evidence — is the core
-    loop of learning from data.
-
-    **Gauss & Legendre (c. 1805).** The Gaussian ("normal") distribution arose from
-    modeling measurement error in astronomy. Gauss showed that *if* errors are
-    normal, the least-squares estimate is the maximum-likelihood estimate — the
-    first bridge from probability to the optimization we do today.
-
-    **Fisher (1920s).** R.A. Fisher made **maximum likelihood** the central
-    estimation principle and built the machinery of hypothesis testing,
-    significance, and experimental design that A/B testing still runs on.
-
-    **The frequentist–Bayesian split.** Two camps emerged. Frequentists treat
-    parameters as fixed unknowns and data as random (p-values, confidence
-    intervals). Bayesians treat parameters as random and update a prior into a
-    posterior. Modern ML is pragmatically **both**: MLE/cross-entropy is
-    frequentist; regularization, priors, and Bayesian deep learning are Bayesian.
-    Knowing which lens you're using — and its assumptions — is senior-level fluency.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **Probability is a number in [0,1] that measures uncertainty.** Two readings,
-    both useful:
-    - *Frequentist:* "If I repeat this many times, the event happens this fraction
-      of the time." (coin flips, click-through rate)
-    - *Bayesian:* "This is my degree of belief, which I update as evidence arrives."
-      (Is this transaction fraud? Start with a base rate, update with features.)
-
-    **A distribution is a shape that says where outcomes land.** Discrete outcomes
-    get a *probability mass function* (bars that sum to 1); continuous outcomes get
-    a *probability density function* (a curve whose area is 1). Expectation is the
-    balance point of the shape; variance is its spread.
-
-    **Bayes' theorem is belief-updating.** Posterior ∝ Likelihood × Prior. Start
-    with a prior belief, see data, multiply, renormalize. Do it again tomorrow with
-    today's posterior as the new prior. *That loop is what "learning" means.*
+    You are ready to continue when you can explain the full chain:
 
     ```mermaid
     flowchart LR
-        P["Prior belief<br/>P(theta)"] --> M["x Likelihood<br/>P(data | theta)"]
-        D["Observed data"] --> M
-        M --> N["Normalize"]
-        N --> Post["Posterior belief<br/>P(theta | data)"]
-        Post -.->|"becomes tomorrow's prior"| P
+        A[Population] --> B[Sample]
+        B --> C[Statistic]
+        C --> D[Sampling uncertainty]
+        D --> E[Interval or test]
+        E --> F[Scoped decision]
     ```
 
-    **Central Limit Theorem — the reason the Gaussian is everywhere.** Average
-    enough independent things and the average looks Gaussian, *whatever* the
-    original distribution. This is why measurement noise, aggregate metrics, and
-    sampling error are so often bell-shaped — and why your A/B metric's uncertainty
-    shrinks like $1/\sqrt n$.
+    An interval or test does not repair biased sampling, leakage, or a badly defined
+    metric. Statistical machinery starts **after** the data question is valid.
+    """),
 
-    Run the cells and watch these claims become pictures.
+    md(r"""
+    ## 2 · The practical problem: did checkout really improve?
+
+    An online shop tests a new checkout page:
+
+    | Group | Visitors | Purchases | Observed conversion |
+    | --- | ---: | ---: | ---: |
+    | Old checkout | 1,000 | 100 | 10% |
+    | New checkout | 1,000 | 130 | 13% |
+
+    The observed difference is 3 percentage points. It is tempting to announce that
+    the new page is better. But these 2,000 visitors are only samples from future
+    visitors.
+
+    The real question is:
+
+    > Is the 3-point difference large relative to the amount these sample rates would
+    > naturally move from one random sample to another?
+
+    We need four separate ideas:
+
+    1. **Effect:** what difference did we observe?
+    2. **Uncertainty:** how much would the estimate change across samples?
+    3. **Evidence:** how compatible is this result with a no-difference model?
+    4. **Decision:** is the effect valuable enough and safe enough to act on?
+
+    Statistics supports the decision. It does not make the business decision for us.
     """),
 
     code(r"""
     import math
-    import numpy as np
+
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    random_generator = np.random.default_rng(42)
+
+    old_visitors, old_purchases = 1_000, 100
+    new_visitors, new_purchases = 1_000, 130
+
+    old_rate = old_purchases / old_visitors
+    new_rate = new_purchases / new_visitors
+    observed_difference = new_rate - old_rate
+
+    print(f"old conversion: {old_rate:.1%}")
+    print(f"new conversion: {new_rate:.1%}")
+    print(f"observed difference: {observed_difference:.1%} points")
+
+    assert np.isclose(old_rate, 0.10)
+    assert np.isclose(new_rate, 0.13)
+    assert np.isclose(observed_difference, 0.03)
+    """),
+
+    md(r"""
+    ## 3 · Population, sample, parameter, and statistic
+
+    These words describe different objects. Mixing them creates vague conclusions.
+
+    | Term | Simple meaning | Checkout example |
+    | --- | --- | --- |
+    | Population | Every case we want to understand | All eligible future visitors |
+    | Sample | Cases actually observed | Visitors included in the experiment |
+    | Parameter | Fixed but unknown population quantity | True future conversion rate |
+    | Statistic | Number calculated from a sample | Observed sample conversion rate |
+    | Estimator | Rule used to calculate an estimate | purchases divided by visitors |
+    | Estimate | The estimator's result for one sample | 0.13 for the new page |
+
+    A parameter is not random after the population is fixed, but we do not know it.
+    A statistic changes when the sample changes.
+
+    For binary outcomes $x_i\in\{0,1\}$, the sample conversion rate is:
+
+    $$
+    \hat p=\frac{1}{n}\sum_{i=1}^{n}x_i
+    $$
+
+    **Symbols:** $x_i$ is visitor $i$'s outcome, where 1 means purchase and 0 means
+    no purchase; $n$ is the number of visitors; $\sum$ means add all outcomes;
+    $\hat p$ reads “p-hat” and is the sample estimate of population rate $p$.
+
+    If five outcomes are $[1,0,1,0,0]$, then:
+
+    $$
+    \hat p=\frac{1+0+1+0+0}{5}=\frac{2}{5}=0.40
+    $$
+
+    The estimate is 40%. It does not prove that the population parameter is exactly
+    40%.
     """),
 
     code(r"""
-    # Figure 1 — a gallery of the distributions ML actually uses (pmf/pdf from formulas).
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    tiny_purchase_sample = np.array([1, 0, 1, 0, 0])
+    tiny_rate = tiny_purchase_sample.mean()
 
-    # Binomial(n=20, p=0.3): number of successes in 20 independent trials
-    n, p = 20, 0.3
-    ks = np.arange(0, n + 1)
-    binom = np.array([math.comb(n, k) * p**k * (1 - p)**(n - k) for k in ks])
-    axes[0, 0].bar(ks, binom, color="tab:blue")
-    axes[0, 0].set_title("Binomial(20, 0.3) — # successes (PMF)")
+    print("outcomes:", tiny_purchase_sample)
+    print("purchases:", tiny_purchase_sample.sum())
+    print("sample size:", tiny_purchase_sample.size)
+    print("sample conversion:", tiny_rate)
 
-    # Poisson(lambda=4): count of rare events in a fixed window
-    lam = 4.0
-    ks2 = np.arange(0, 15)
-    pois = np.array([math.exp(-lam) * lam**k / math.factorial(k) for k in ks2])
-    axes[0, 1].bar(ks2, pois, color="tab:orange")
-    axes[0, 1].set_title("Poisson(4) — event counts (PMF)")
+    assert tiny_purchase_sample.sum() == 2
+    assert np.isclose(tiny_rate, 0.40)
+    """),
 
-    # Gaussian(0,1): the bell curve
-    x = np.linspace(-4, 4, 400)
-    gauss = np.exp(-x**2 / 2) / np.sqrt(2 * np.pi)
-    axes[1, 0].plot(x, gauss, color="tab:green")
-    axes[1, 0].fill_between(x, gauss, alpha=0.2, color="tab:green")
-    axes[1, 0].set_title("Gaussian(0, 1) — continuous (PDF)")
+    md(r"""
+    ### Sampling quality comes before formulas
 
-    # Exponential(rate=1): waiting times; skewed, heavy right tail
-    xe = np.linspace(0, 6, 400)
-    expo = np.exp(-xe)
-    axes[1, 1].plot(xe, expo, color="tab:red")
-    axes[1, 1].fill_between(xe, expo, alpha=0.2, color="tab:red")
-    axes[1, 1].set_title("Exponential(1) — waiting times (PDF)")
+    A larger biased sample can be worse than a smaller representative sample.
 
-    plt.suptitle("Figure 1 — Distributions that recur across ML")
-    plt.tight_layout()
+    Examples of bad sampling include:
+
+    - showing the new checkout only to loyal customers;
+    - excluding visitors whose page failed to load;
+    - comparing weekdays for one version with weekends for the other;
+    - counting the same returning visitor many times in one group;
+    - stopping the experiment when the result first looks attractive.
+
+    Random assignment helps make experiment groups comparable. It does not guarantee
+    perfect balance in one finite sample, so we still inspect the groups and data flow.
+    """),
+
+    md(r"""
+    ## 4 · Distributions describe uncertain outcomes
+
+    A **random variable** maps an uncertain outcome to a number. A **distribution**
+    describes which values that variable can take and how probable they are.
+
+    ### 4.1 Bernoulli: one yes-or-no trial
+
+    A Bernoulli variable $X$ is 1 with probability $p$ and 0 with probability $1-p$:
+
+    $$
+    P(X=x)=p^x(1-p)^{1-x},\qquad x\in\{0,1\}
+    $$
+
+    **Symbols:** $X$ is the uncertain binary variable; $x$ is an observed value;
+    $p$ is the probability of 1; $1-p$ is the probability of 0.
+
+    If $p=0.10$, then $P(X=1)=0.10$ and $P(X=0)=0.90$.
+
+    ### 4.2 Binomial: the number of successes in repeated trials
+
+    If $K$ counts successes in $n$ independent Bernoulli trials with the same $p$:
+
+    $$
+    P(K=k)=\binom{n}{k}p^k(1-p)^{n-k}
+    $$
+
+    **Symbols:** $K$ is the success count; $k$ is one possible count; $n$ is the
+    number of trials; $\binom{n}{k}$ counts which trials could be successes.
+
+    For $n=3$, $p=0.5$, and exactly $k=2$ successes:
+
+    $$
+    P(K=2)=\binom{3}{2}(0.5)^2(0.5)^1=3(0.125)=0.375
+    $$
+
+    ### 4.3 Normal: a continuous bell-shaped model
+
+    A normal distribution is described by mean $\mu$ and variance $\sigma^2$:
+
+    $$
+    X\sim\mathcal N(\mu,\sigma^2)
+    $$
+
+    The symbol $\sim$ means “is distributed as.” The normal model is symmetric and
+    useful for many measurement errors and sampling distributions. Real data is not
+    automatically normal; counts, waiting times, income, and latency may be skewed.
+    """),
+
+    code(r"""
+    possible_purchases = np.arange(0, 11)
+    number_of_trials = 10
+    purchase_probability = 0.30
+
+    binomial_probabilities = np.array(
+        [
+            math.comb(number_of_trials, purchase_count)
+            * purchase_probability**purchase_count
+            * (1 - purchase_probability) ** (number_of_trials - purchase_count)
+            for purchase_count in possible_purchases
+        ]
+    )
+
+    figure, axis = plt.subplots(figsize=(7, 4))
+    axis.bar(possible_purchases, binomial_probabilities, color="tab:blue")
+    axis.set_xlabel("purchases among 10 visitors")
+    axis.set_ylabel("probability")
+    axis.set_title("Binomial distribution: n=10, p=0.30")
+    figure.tight_layout()
+    plt.show()
+
+    print("sum of probabilities:", binomial_probabilities.sum())
+    print("most likely purchase count:", possible_purchases[np.argmax(binomial_probabilities)])
+
+    assert np.isclose(binomial_probabilities.sum(), 1.0)
+    """),
+
+    md(r"""
+    ## 5 · Mean, variance, covariance, and correlation
+
+    PRE-06 introduced mean and variance. We now connect them to relationships between
+    two variables.
+
+    ### 5.1 Mean and sample variance
+
+    For observations $x_1,\ldots,x_n$, the sample mean is:
+
+    $$
+    \bar x=\frac{1}{n}\sum_{i=1}^{n}x_i
+    $$
+
+    The sample variance is:
+
+    $$
+    s_x^2=\frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar x)^2
+    $$
+
+    **Symbols:** $\bar x$ is the sample mean; $s_x^2$ is sample variance; $x_i$ is
+    observation $i$; $n-1$ is the sample-variance denominator. Variance has squared
+    units. Standard deviation $s_x=\sqrt{s_x^2}$ returns to the original unit.
+
+    For $x=[1,2,3]$, $\bar x=2$. The squared deviations are $[1,0,1]$, so:
+
+    $$
+    s_x^2=\frac{1+0+1}{3-1}=1
+    $$
+
+    ### 5.2 Covariance
+
+    Covariance checks whether two variables tend to move together:
+
+    $$
+    s_{xy}=\frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar x)(y_i-\bar y)
+    $$
+
+    **Symbols:** $s_{xy}$ is sample covariance; $\bar x$ and $\bar y$ are sample
+    means. Positive covariance means the variables often move in the same direction;
+    negative means they often move in opposite directions; near zero means no clear
+    linear co-movement.
+
+    ### 5.3 Correlation removes units
+
+    $$
+    r_{xy}=\frac{s_{xy}}{s_xs_y}
+    $$
+
+    **Symbols:** $r_{xy}$ is sample correlation; $s_x$ and $s_y$ are sample standard
+    deviations. Correlation usually lies from -1 to 1.
+
+    Correlation measures linear association, not causation. A hidden variable can
+    influence both measured variables, and a curved relationship can have low linear
+    correlation.
+    """),
+
+    code(r"""
+    study_hours = np.array([1.0, 2.0, 3.0])
+    exam_scores = np.array([2.0, 4.0, 6.0])
+
+    hours_mean = study_hours.mean()
+    scores_mean = exam_scores.mean()
+    hours_deviation = study_hours - hours_mean
+    scores_deviation = exam_scores - scores_mean
+
+    hours_variance = np.sum(hours_deviation**2) / (study_hours.size - 1)
+    scores_variance = np.sum(scores_deviation**2) / (exam_scores.size - 1)
+    covariance = np.sum(hours_deviation * scores_deviation) / (study_hours.size - 1)
+    correlation = covariance / np.sqrt(hours_variance * scores_variance)
+
+    print("hours deviations:", hours_deviation)
+    print("score deviations:", scores_deviation)
+    print("sample variance of hours:", hours_variance)
+    print("sample covariance:", covariance)
+    print("sample correlation:", correlation)
+
+    assert np.isclose(hours_variance, 1.0)
+    assert np.isclose(covariance, 2.0)
+    assert np.isclose(correlation, 1.0)
+    """),
+
+    md(r"""
+    ### Covariance matrix and FND-01
+
+    With several numerical features, covariance values form a matrix. Diagonal
+    entries are variances; off-diagonal entries are covariances.
+
+    $$
+    S=
+    \begin{bmatrix}
+    s_x^2 & s_{xy}\\
+    s_{xy} & s_y^2
+    \end{bmatrix}
+    $$
+
+    **Symbols:** $S$ is the covariance matrix; $s_x^2$ and $s_y^2$ are feature
+    variances; $s_{xy}$ is their covariance. The matrix is symmetric because
+    $s_{xy}=s_{yx}$.
+
+    Later, PCA will use this matrix to find directions of high variation. We do not
+    need eigenvectors yet.
+    """),
+
+    code(r"""
+    paired_measurements = np.column_stack([study_hours, exam_scores])
+    covariance_matrix = np.cov(paired_measurements, rowvar=False, ddof=1)
+
+    print("data shape:", paired_measurements.shape)
+    print("covariance matrix:\n", covariance_matrix)
+
+    assert covariance_matrix.shape == (2, 2)
+    assert np.allclose(covariance_matrix, [[1, 2], [2, 4]])
+    assert np.allclose(covariance_matrix, covariance_matrix.T)
+    """),
+
+    md(r"""
+    ## 6 · An estimator has its own sampling distribution
+
+    Imagine drawing many samples of the same size from one population. Calculate the
+    sample mean each time. Those means form a new distribution called the **sampling
+    distribution of the mean**.
+
+    Do not confuse these:
+
+    | Distribution | What varies? | Example |
+    | --- | --- | --- |
+    | Data distribution | Individual observations | One visitor's spending |
+    | Sampling distribution | A statistic across repeated samples | Mean spending from samples of 50 visitors |
+
+    An estimator can be judged by:
+
+    - **bias:** whether its repeated-sample average misses the true parameter;
+    - **variance:** how widely it changes across samples;
+    - **standard error:** the standard deviation of its sampling distribution.
+
+    Analogy: arrows tightly grouped away from the bullseye have low variance but high
+    bias. Arrows spread around the bullseye have low bias but high variance. We want
+    estimates that are centered correctly and reasonably stable.
+    """),
+
+    code(r"""
+    population = random_generator.exponential(scale=20.0, size=200_000)
+    population_mean = population.mean()
+
+    sample_size = 40
+    repeated_sample_means = np.array(
+        [
+            random_generator.choice(population, size=sample_size, replace=True).mean()
+            for _ in range(5_000)
+        ]
+    )
+
+    estimator_bias = repeated_sample_means.mean() - population_mean
+    estimated_standard_error = repeated_sample_means.std(ddof=1)
+
+    print("population mean:", round(population_mean, 3))
+    print("average sample mean:", round(repeated_sample_means.mean(), 3))
+    print("estimated bias:", round(estimator_bias, 3))
+    print("estimated standard error:", round(estimated_standard_error, 3))
+
+    assert abs(estimator_bias) < 0.3
+    assert estimated_standard_error > 0
+    """),
+
+    md(r"""
+    ## 7 · Law of Large Numbers: one estimate becomes more stable
+
+    The Law of Large Numbers says that, under suitable conditions, the sample mean
+    approaches the population mean as sample size grows:
+
+    $$
+    \bar X_n\longrightarrow\mu
+    \quad\text{as}\quad n\longrightarrow\infty
+    $$
+
+    **Symbols:** $\bar X_n$ is the mean of $n$ observations; $\mu$ is the population
+    mean; the arrow means the sample mean approaches the population mean; $\infty$
+    means sample size grows without bound.
+
+    It does **not** say every larger sample is closer than the previous sample. The
+    path can wiggle. It says large-sample deviation becomes less likely.
+
+    It also does not repair bias. A huge sample of only loyal customers still may not
+    represent all customers.
+    """),
+
+    code(r"""
+    coin_flips = random_generator.binomial(n=1, p=0.60, size=5_000)
+    running_sample_sizes = np.arange(1, coin_flips.size + 1)
+    running_rates = np.cumsum(coin_flips) / running_sample_sizes
+
+    figure, axis = plt.subplots(figsize=(8, 4))
+    axis.plot(running_sample_sizes, running_rates, label="running sample rate")
+    axis.axhline(0.60, color="tab:red", linestyle="--", label="population rate 0.60")
+    axis.set_xlabel("number of observations")
+    axis.set_ylabel("sample rate")
+    axis.set_title("Law of Large Numbers: the estimate settles with more data")
+    axis.legend()
+    figure.tight_layout()
+    plt.show()
+
+    print("rate after 10 flips:", running_rates[9])
+    print("rate after 5,000 flips:", running_rates[-1])
+
+    assert abs(running_rates[-1] - 0.60) < 0.03
+    """),
+
+    md(r"""
+    ## 8 · Central Limit Theorem: repeated means become bell-shaped
+
+    The Central Limit Theorem concerns a **sampling distribution**, not necessarily
+    the raw data. For independent observations with finite variance, sufficiently
+    large sample means are approximately normal:
+
+    $$
+    \frac{\bar X_n-\mu}{\sigma/\sqrt n}
+    \overset{d}{\longrightarrow}
+    \mathcal N(0,1)
+    $$
+
+    **Symbols:** $\bar X_n$ is a sample mean; $\mu$ and $\sigma$ are population mean
+    and standard deviation; $\sigma/\sqrt n$ is the standard deviation of the sample
+    mean; $\overset{d}{\longrightarrow}$ means the distribution approaches;
+    $\mathcal N(0,1)$ is a standard normal distribution.
+
+    The raw population may remain skewed. The repeated sample means become more
+    bell-shaped and narrower.
+
+    The approximation can be poor with tiny samples, strong dependence, or extremely
+    heavy tails. Always inspect the data-generating situation.
+    """),
+
+    code(r"""
+    figure, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+    for axis, current_sample_size in zip(axes, [1, 5, 40]):
+        simulated_means = random_generator.exponential(
+            scale=1.0,
+            size=(10_000, current_sample_size),
+        ).mean(axis=1)
+        axis.hist(simulated_means, bins=50, density=True, color="tab:blue", alpha=0.75)
+        axis.set_title(f"means of n={current_sample_size}")
+        axis.set_xlabel("sample mean")
+        axis.set_ylabel("density")
+
+    figure.suptitle("The source is skewed; repeated means become more bell-shaped")
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** Each shape encodes a different *generative story*. **Binomial**:
-    how many of $n$ independent yes/no trials succeed (conversions out of visitors).
-    **Poisson**: counts of rare events per window (fraud attempts/hour, server
-    errors/min). **Gaussian**: sums/averages of many small effects (the CLT below).
-    **Exponential**: time between events; note its skew and heavy right tail — a
-    reminder that *not everything is Gaussian*, and assuming so is a classic failure
-    (Section 7). When you choose a likelihood/loss, you are choosing one of these
-    stories for your data.
-    """),
+    ## 9 · Standard error measures estimate-to-estimate movement
 
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
+    Standard deviation describes variation among individual observations. Standard
+    error describes variation among repeated estimates.
 
-    **Notation bridge.** $P(A)$ means the probability of event $A$;
-    $P(A\mid B)$ means probability of $A$ after restricting attention to cases
-    where $B$ is true; $\sum$ adds discrete possibilities; $\int$ accumulates a
-    continuous range; $\mathbb E$ means probability-weighted average; and a hat
-    such as $\hat\mu$ marks an estimate calculated from observed data. Notebook
-    PRE-04 introduces each symbol with small examples.
+    For a sample mean, estimate the standard error with:
 
-    ### 4.1 Axioms, random variables, expectation
-    Kolmogorov's axioms: probabilities are non-negative, the whole space has
-    probability 1, and probabilities of disjoint events add. A **random variable**
-    $X$ maps outcomes to numbers. Its **expectation** (mean) and **variance**:
-    $$\mathbb E[X]=\sum_x x\,p(x)\ \ (\text{or}\ \int x\,f(x)\,dx),\qquad
-    \operatorname{Var}(X)=\mathbb E[(X-\mathbb E[X])^2]=\mathbb E[X^2]-\mathbb E[X]^2.$$
-    **Read and symbols:** $X$ is a random variable; lowercase $x$ is one possible
-    value; $p(x)$ is its probability in the discrete case; $f(x)$ is density in
-    the continuous case; $\mathbb E[X]$ is the long-run weighted average;
-    $\operatorname{Var}(X)$ is average squared distance from that mean. Density is
-    not itself probability—the integral over a range gives probability.
-    **Covariance** measures co-movement: $\operatorname{Cov}(X,Y)=\mathbb
-    E[(X-\mathbb E X)(Y-\mathbb E Y)]$; the covariance matrix is the statistical
-    cousin of $X^\top X$ from Lesson FND-01 (and PCA diagonalizes it).
+    $$
+    \operatorname{SE}(\bar x)=\frac{s}{\sqrt n}
+    $$
 
-    ### 4.2 Joint, marginal, conditional; independence
-    $P(X,Y)$ is joint; summing out a variable gives a **marginal**; $P(X\mid
-    Y)=P(X,Y)/P(Y)$ is **conditional**. $X,Y$ are **independent** iff
-    $P(X,Y)=P(X)P(Y)$. The IID assumption ("independent and identically
-    distributed") underlies nearly every train/test split — and violating it
-    (time series, grouped data) silently breaks evaluation (Lesson MLE-02).
+    **Symbols:** $\operatorname{SE}$ means standard error; $\bar x$ is the sample
+    mean; $s$ is sample standard deviation; $n$ is sample size.
 
-    **Symbols and example:** the comma in $P(X,Y)$ means both variable outcomes;
-    the vertical bar means “given.” If 6 of 8 premium users renew, then
-    $P(\text{renew}\mid\text{premium})=6/8$. Independence means learning one event
-    does not change the probability assigned to the other.
+    Example: if $s=12$ minutes and $n=36$ deliveries:
 
-    ### 4.3 Bayes' theorem
-    $$P(\theta\mid D)=\frac{P(D\mid\theta)\,P(\theta)}{P(D)}\ \propto\ \underbrace{P(D\mid\theta)}_{\text{likelihood}}\;\underbrace{P(\theta)}_{\text{prior}}.$$
-    **Read aloud:** “probability of theta given data equals likelihood times prior
-    divided by evidence.” **Symbols:** $\theta$ (theta) is an unknown model
-    parameter or hypothesis; $D$ is observed data; $P(\theta)$ is the prior belief;
-    $P(D\mid\theta)$ is compatibility of data with the hypothesis; $P(D)$
-    normalizes all hypotheses; $\propto$ means “proportional to.”
-    The denominator $P(D)=\int P(D\mid\theta)P(\theta)\,d\theta$ just renormalizes.
-    **Base-rate fallacy:** even a 99%-accurate test for a 1-in-10,000 disease yields
-    mostly false positives, because the prior $P(\text{disease})$ is tiny. We'll
-    compute this in Section 5 — it is a guaranteed interview question.
+    $$
+    \operatorname{SE}(\bar x)=\frac{12}{\sqrt{36}}=\frac{12}{6}=2\text{ minutes}
+    $$
 
-    ### 4.4 Maximum Likelihood Estimation — derived
-    Given IID data $x_1,\dots,x_n$ and a model $p(x\mid\theta)$, the **likelihood**
-    is $L(\theta)=\prod_i p(x_i\mid\theta)$. We maximize the **log**-likelihood
-    (sums are nicer than products, and it's monotonic):
-    $$\ell(\theta)=\sum_i \log p(x_i\mid\theta).$$
+    To halve standard error, we need about four times as many independent observations:
 
-    **Symbols:** IID means each $x_i$ is generated independently by the same
-    distribution; $n$ is sample size; $\prod$ means multiply repeated terms;
-    $L$ is likelihood; lowercase $\ell$ is log-likelihood; $\log$ reverses an
-    exponential and turns products into sums.
+    $$
+    \frac{s}{\sqrt{4n}}=\frac{1}{2}\frac{s}{\sqrt n}
+    $$
 
-    **Gaussian case.** With $p(x\mid\mu,\sigma^2)=\frac{1}{\sqrt{2\pi\sigma^2}}\exp\!\big(-\frac{(x-\mu)^2}{2\sigma^2}\big)$,
-    $$\ell(\mu,\sigma^2)=-\frac{n}{2}\log(2\pi\sigma^2)-\frac{1}{2\sigma^2}\sum_i (x_i-\mu)^2.$$
-    **Symbols:** $\mu$ (mu) is the Gaussian center; $\sigma^2$ (sigma squared) is
-    variance; $\pi\approx3.14159$ is the circle constant; $\exp$ means the natural
-    exponential; $(x_i-\mu)^2$ is squared distance from the center. The first term
-    penalizes excessive spread and the second penalizes poor fit.
-    Set $\partial\ell/\partial\mu=0$: $\;\hat\mu=\frac1n\sum_i x_i$ (the sample mean).
-    Set $\partial\ell/\partial\sigma^2=0$: $\;\hat\sigma^2=\frac1n\sum_i (x_i-\hat\mu)^2$.
-
-    > **The payoff.** Maximizing the Gaussian log-likelihood over $\mu$ is *exactly*
-    > minimizing $\sum_i (x_i-\mu)^2$ — squared error. So **MSE is not arbitrary: it
-    > is the negative log-likelihood under the assumption of Gaussian noise.**
-    > Likewise, **cross-entropy is the NLL under a Bernoulli/Categorical model**
-    > (Lesson CML-02). Choosing a loss = choosing a noise model.
-
-    ### 4.5 MAP and the prior–regularizer bridge
-    Maximizing the posterior instead of the likelihood gives the **MAP** estimate:
-    $$\hat\theta_{\text{MAP}}=\arg\max_\theta\big[\log P(D\mid\theta)+\log P(\theta)\big].$$
-    **Read and symbols:** “theta-hat MAP is the value of theta that maximizes log
-    likelihood plus log prior.” A hat marks an estimate; $\arg\max$ returns the
-    input value producing the largest expression; MAP means maximum a posteriori.
-    A **Gaussian prior** $\theta\sim\mathcal N(0,\tau^2)$ contributes $-\frac{1}{2\tau^2}\lVert\theta\rVert_2^2$
-    — i.e. **L2 (Ridge) regularization**. A **Laplace prior** gives $\lVert\theta\rVert_1$
-    — **L1 (Lasso)**. Regularization is just MAP with a belief that weights are small.
-
-    ### 4.6 LLN and the Central Limit Theorem
-    **Law of Large Numbers:** the sample mean converges to the true mean as
-    $n\to\infty$. **Central Limit Theorem:** for IID $X_i$ with mean $\mu$ and
-    finite variance $\sigma^2$,
-    $$\frac{\bar X_n-\mu}{\sigma/\sqrt n}\ \xrightarrow{\ d\ }\ \mathcal N(0,1).$$
-    **Read and symbols:** $\bar X_n$ is the average of $n$ observations; $\mu$ and
-    $\sigma$ are population mean and standard deviation; $\sigma/\sqrt n$ is the
-    standard error; the arrow marked $d$ means the distribution approaches;
-    $\mathcal N(0,1)$ is a normal distribution with mean zero and variance one.
-    The standard error of a mean shrinks like $\sigma/\sqrt n$ — *quadruple your
-    sample to halve your error bar.* This is the engine behind confidence intervals
-    and A/B-test sample-size math.
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    We implement, in plain NumPy/stdlib: (1) MLE for a Gaussian — and verify it
-    equals the sample mean/variance; (2) the base-rate Bayes calculation;
-    (3) Bayesian belief-updating for a coin; (4) the bootstrap; (5) a two-proportion
-    hypothesis test (the math inside an A/B test). No scipy yet.
+    More data has diminishing returns. Dependence also reduces effective information;
+    1,000 repeated events from ten users are not equivalent to 1,000 independent users.
     """),
 
     code(r"""
-    # 5.1 MLE for a Gaussian == sample mean and (1/n) variance. Verify against the formula.
-    def gaussian_mle(data):
-        mu = data.mean()
-        var = ((data - mu) ** 2).mean()      # note: 1/n (MLE), not 1/(n-1)
-        return mu, var
+    delivery_standard_deviation = 12.0
 
-    truth_mu, truth_sigma = 5.0, 2.0
-    data = rng.normal(truth_mu, truth_sigma, size=10_000)
-    mu_hat, var_hat = gaussian_mle(data)
-    print(f"true (mu, sigma^2)      = ({truth_mu}, {truth_sigma**2})")
-    print(f"MLE  (mu_hat, var_hat)  = ({mu_hat:.3f}, {var_hat:.3f})")
+    for delivery_count in [36, 144, 576]:
+        standard_error = delivery_standard_deviation / np.sqrt(delivery_count)
+        print(f"n={delivery_count:>3}: standard error={standard_error:.2f} minutes")
 
-    # The MLE variance is BIASED low by a factor (n-1)/n; the unbiased estimator divides by n-1.
-    n = len(data)
-    print(f"\\nMLE var (1/n)      = {var_hat:.4f}")
-    print(f"unbiased (1/(n-1)) = {var_hat * n / (n - 1):.4f}")
-    print(f"numpy ddof=0 / ddof=1: {data.var(ddof=0):.4f} / {data.var(ddof=1):.4f}")
-    """),
-
-    code(r"""
-    # 5.2 The base-rate fallacy, in numbers (a guaranteed interview question).
-    # A disease affects 1 in 10,000. A test is 99% sensitive and 99% specific.
-    # You test positive. What's the probability you actually have the disease?
-    prior = 1 / 10_000
-    sensitivity = 0.99            # P(test+ | disease)
-    specificity = 0.99            # P(test- | healthy)  => false-positive rate = 0.01
-
-    p_pos_given_disease = sensitivity
-    p_pos_given_healthy = 1 - specificity
-    p_pos = p_pos_given_disease * prior + p_pos_given_healthy * (1 - prior)
-    posterior = p_pos_given_disease * prior / p_pos
-
-    print(f"P(disease | positive test) = {posterior:.4f}  ({posterior:.1%})")
-    print("Despite a '99% accurate' test, a positive result is ~99% likely a FALSE alarm,")
-    print("because the disease is so rare. The prior dominates. This is base-rate neglect.")
-    """),
-
-    code(r"""
-    # 5.3 Bayesian updating for a coin's bias, computed on a grid (no conjugacy needed).
-    # Posterior(p) is proportional to likelihood p^heads * (1-p)^tails, with a uniform prior.
-    p_grid = np.linspace(0, 1, 500)
-
-    def posterior(heads, tails, prior=None):
-        if prior is None:
-            prior = np.ones_like(p_grid)           # uniform = Beta(1,1)
-        like = p_grid ** heads * (1 - p_grid) ** tails
-        post = prior * like
-        return post / np.trapezoid(post, p_grid)   # normalize so area = 1
-
-    true_p = 0.7
-    flips = (rng.random(200) < true_p).astype(int)
-    stages = [0, 1, 5, 20, 200]
-    posteriors = {}
-    for s in stages:
-        h = int(flips[:s].sum()); t = s - h
-        posteriors[s] = posterior(h, t)
-    # MAP estimate after all data:
-    map_p = p_grid[np.argmax(posteriors[200])]
-    print(f"true p = {true_p}; MAP estimate after 200 flips = {map_p:.3f}")
-    """),
-
-    code(r"""
-    # 5.4 The bootstrap: estimate the sampling distribution (and a CI) of ANY statistic,
-    # with no distributional assumptions, by resampling the data with replacement.
-    sample = rng.gamma(shape=2.0, scale=2.0, size=200)   # skewed population
-
-    def bootstrap(data, stat=np.median, B=5000):
-        n = len(data)
-        idx = rng.integers(0, n, size=(B, n))            # B resamples of size n
-        return stat(data[idx], axis=1)
-
-    boot_medians = bootstrap(sample, np.median, B=5000)
-    ci = np.percentile(boot_medians, [2.5, 97.5])
-    print(f"sample median            = {np.median(sample):.3f}")
-    print(f"95% bootstrap CI (median)= [{ci[0]:.3f}, {ci[1]:.3f}]")
-    """),
-
-    code(r"""
-    # 5.5 Two-proportion z-test from scratch — the engine inside an A/B test.
-    def two_proportion_ztest(x1, n1, x2, n2):
-        p1, p2 = x1 / n1, x2 / n2
-        p_pool = (x1 + x2) / (n1 + n2)
-        se = math.sqrt(p_pool * (1 - p_pool) * (1 / n1 + 1 / n2))
-        z = (p2 - p1) / se
-        # two-sided p-value via the standard-normal CDF, using math.erf (no scipy)
-        cdf = 0.5 * (1 + math.erf(abs(z) / math.sqrt(2)))
-        p_value = 2 * (1 - cdf)
-        return z, p_value
-
-    # Control: 1000 visitors, 100 conversions (10%). Treatment: 1000, 130 (13%).
-    z, pval = two_proportion_ztest(100, 1000, 130, 1000)
-    print(f"control 10.0%  vs  treatment 13.0%")
-    print(f"z = {z:.3f}, two-sided p-value = {pval:.4f}")
-    print("p < 0.05 -> reject 'no difference'; the lift is unlikely to be pure noise.")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    Three pictures cement the theory: Bayesian updating sharpening with data, the
-    CLT manufacturing a bell curve out of a skewed population, and the bootstrap
-    distribution of a statistic.
-    """),
-
-    code(r"""
-    # Figure 2 — Bayesian updating: the posterior concentrates as evidence accrues.
-    fig, ax = plt.subplots()
-    for s in stages:
-        ax.plot(p_grid, posteriors[s], label=f"after {s} flips")
-    ax.axvline(true_p, color="k", ls="--", lw=1, label=f"true p={true_p}")
-    ax.set_xlabel("p (coin bias)"); ax.set_ylabel("posterior density")
-    ax.set_title("Figure 2 — Posterior over coin bias sharpens with data")
-    ax.legend()
-    plt.show()
+    assert np.isclose(delivery_standard_deviation / np.sqrt(36), 2.0)
+    assert np.isclose(delivery_standard_deviation / np.sqrt(144), 1.0)
     """),
 
     md(r"""
-    **Figure 2.** With zero flips the posterior is flat — we believe nothing in
-    particular. Each batch of evidence multiplies the likelihood in and the belief
-    *concentrates* around the truth (0.7), getting narrower (more certain) as $n$
-    grows. This is learning made literal: prior → evidence → sharper posterior.
-    """),
+    ## 10 · Confidence intervals show a plausible estimation range
 
-    code(r"""
-    # Figure 3 — the Central Limit Theorem in action on a skewed (exponential) population.
-    fig, axes = plt.subplots(1, 4, figsize=(16, 3.5))
-    pop_mean, pop_sd = 1.0, 1.0                      # Exponential(1): mean=sd=1, very skewed
-    for ax, nsamp in zip(axes, [1, 2, 10, 50]):
-        means = rng.exponential(1.0, size=(20_000, nsamp)).mean(axis=1)
-        ax.hist(means, bins=60, density=True, alpha=0.6, color="tab:blue")
-        xs = np.linspace(means.min(), means.max(), 200)
-        se = pop_sd / np.sqrt(nsamp)                 # CLT-predicted standard error
-        ax.plot(xs, np.exp(-(xs - pop_mean)**2 / (2 * se**2)) / (se * np.sqrt(2 * np.pi)),
-                "r", lw=2)
-        ax.set_title(f"mean of n={nsamp}")
-    plt.suptitle("Figure 3 — CLT: averages become Gaussian (red) even from a skewed source")
-    plt.tight_layout()
-    plt.show()
-    """),
+    A confidence interval combines an estimate with a margin of error:
 
-    md(r"""
-    **Figure 3.** The source is a heavily right-skewed exponential. With $n=1$ the
-    histogram *is* that skew. But the distribution of the **sample mean** marches
-    toward the Gaussian (red curve) as $n$ grows, and tightens with standard error
-    $\sigma/\sqrt n$. This is *why* aggregate metrics and estimation errors are so
-    often bell-shaped, and why confidence intervals use the normal distribution.
-    """),
+    $$
+    \text{estimate}\ \pm\ \text{critical value}\times\text{standard error}
+    $$
 
-    code(r"""
-    # Figure 4 — the bootstrap distribution and its 95% percentile interval.
-    fig, ax = plt.subplots()
-    ax.hist(boot_medians, bins=50, density=True, alpha=0.7, color="tab:purple")
-    ax.axvline(ci[0], color="r", ls="--"); ax.axvline(ci[1], color="r", ls="--",
-                                                       label="95% CI")
-    ax.axvline(np.median(sample), color="k", lw=2, label="observed median")
-    ax.set_title("Figure 4 — Bootstrap sampling distribution of the median")
-    ax.set_xlabel("median of a resample"); ax.legend()
-    plt.show()
-    """),
+    For a mean with unknown population standard deviation, a common interval is:
 
-    md(r"""
-    **Figure 4.** We never derived a formula for the standard error of a *median* —
-    we didn't have to. Resampling the data with replacement thousands of times and
-    recomputing the statistic *empirically reconstructs its sampling distribution*.
-    The middle 95% gives a confidence interval. The bootstrap is the senior
-    engineer's universal tool for "what's the uncertainty on this metric?" when no
-    clean formula exists (AUC, recall@k, revenue-per-user, …).
-    """),
+    $$
+    \bar x\pm t^*\frac{s}{\sqrt n}
+    $$
 
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
+    **Symbols:** $\bar x$ is the sample mean; $t^*$ is a critical value from a
+    t-distribution; $s$ is sample standard deviation; $n$ is sample size.
 
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Base-rate neglect** | "99% accurate" test, yet most positives are false | Ignoring a small prior $P(\text{event})$ | Always reason with Bayes; report precision at the true base rate |
-    | **p-hacking / multiple comparisons** | Lots of "significant" findings that don't replicate | Testing many hypotheses; stopping when $p<0.05$ | Pre-register; correct (Bonferroni / FDR); hold-out confirmation |
-    | **Peeking at A/B tests** | "Significant!" early, reverts later | Repeatedly testing inflates false-positive rate | Fix sample size in advance, or use sequential/Bayesian tests |
-    | **Assuming Gaussian** | Models blow up on outliers; bad tail risk | Heavy-tailed data (income, latency, losses) | Check the data; use robust stats, log-transforms, heavier-tailed likelihoods |
-    | **Correlation ⇒ causation** | A feature "works" then fails after a change | Confounders; non-causal association | Experiments / causal inference, not just correlation |
-    | **Simpson's paradox** | Trend reverses after aggregation | A lurking confounder across groups | Segment; condition on the confounder |
-    | **Non-IID data** | Great offline, bad online | Temporal/grouped leakage breaks independence | Time-based & grouped splits (Lesson MLE-02) |
+    Suppose $\bar x=50$, $s=12$, $n=36$, and the chosen critical value is about 2:
 
-    The next cell demonstrates **p-hacking** quantitatively — pure noise will hand
-    you "significant" results if you test enough hypotheses.
-    """),
+    $$
+    50\pm2\left(\frac{12}{6}\right)=50\pm4=[46,54]
+    $$
 
-    code(r"""
-    # Demonstrate p-hacking: test 100 PURE-NOISE features against a random label.
-    # Under the null, ~5% will be "significant" at p<0.05 — by construction, not signal.
-    n = 500
-    label = rng.normal(size=n)
-    false_hits = 0
-    n_features = 100
-    for _ in range(n_features):
-        feature = rng.normal(size=n)                  # independent of label, by design
-        # correlation t-statistic -> two-sided p-value via normal approx
-        r = np.corrcoef(feature, label)[0, 1]
-        z = r * math.sqrt(n - 1)                       # rough large-n approximation
-        p = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
-        if p < 0.05:
-            false_hits += 1
-    print(f"'significant' noise features at p<0.05: {false_hits}/{n_features}")
-    print("Expected ~5 by pure chance. Test enough hypotheses and noise looks like signal.")
-    print("Fix: multiple-comparison correction + out-of-sample confirmation.")
-    """),
+    Correct interpretation of a 95% frequentist confidence procedure:
 
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
+    > If we repeated the sampling method many times, about 95% of intervals built by
+    > this procedure would contain the true parameter, when its assumptions hold.
 
-    `scipy.stats` provides every distribution (with `pdf/cdf/ppf/rvs`), and proper
-    statistical tests; `numpy.random.Generator` is the modern, fast, reproducible
-    sampler. In real pipelines you also reach for `statsmodels` (regression
-    inference, multiple-testing correction) and dedicated experimentation platforms
-    for A/B tests. Below: scipy reproduces our scratch results and adds exact tests.
+    After one interval is calculated, the parameter is fixed. Avoid saying there is
+    a 95% frequentist probability that this particular fixed parameter is inside.
+
+    A narrow interval from biased data is precisely wrong, not trustworthy.
     """),
 
     code(r"""
     from scipy import stats
 
-    # Distributions are objects with pdf/cdf/ppf/rvs — no more hand-rolled formulas.
-    print("P(X<=12) for Binomial(20,0.3):", stats.binom.cdf(12, 20, 0.3).round(4))
-    print("97.5th percentile of N(0,1):  ", stats.norm.ppf(0.975).round(4))
+    delivery_times = np.array([44, 48, 51, 47, 55, 52, 49, 46, 58, 50], dtype=float)
+    delivery_count = delivery_times.size
+    mean_delivery_time = delivery_times.mean()
+    sample_standard_deviation = delivery_times.std(ddof=1)
+    standard_error = sample_standard_deviation / np.sqrt(delivery_count)
+    critical_value = stats.t.ppf(0.975, df=delivery_count - 1)
+    margin_of_error = critical_value * standard_error
+    confidence_interval = (
+        mean_delivery_time - margin_of_error,
+        mean_delivery_time + margin_of_error,
+    )
 
-    # Exact two-sided test that a coin with 130/1000 differs from p=0.10:
-    res = stats.binomtest(130, 1000, 0.10)
-    print("binom test p-value:", round(res.pvalue, 4))
+    print("sample mean:", round(mean_delivery_time, 3))
+    print("sample standard deviation:", round(sample_standard_deviation, 3))
+    print("standard error:", round(standard_error, 3))
+    print("t critical value:", round(critical_value, 3))
+    print("95% confidence interval:", tuple(round(value, 3) for value in confidence_interval))
 
-    # Welch's t-test for two continuous samples (unequal variances):
-    a = rng.normal(0.0, 1.0, 300)
-    b = rng.normal(0.3, 1.5, 320)
-    t, p = stats.ttest_ind(a, b, equal_var=False)
-    print(f"Welch t-test: t={t:.3f}, p={p:.4f}")
+    library_interval = stats.t.interval(
+        confidence=0.95,
+        df=delivery_count - 1,
+        loc=mean_delivery_time,
+        scale=standard_error,
+    )
 
-    # Our scratch z-test vs scipy's normal CDF — same machinery, validated:
-    z = (0.13 - 0.10) / math.sqrt(0.115 * 0.885 * (2 / 1000))
-    print("scratch p-value via scipy norm.sf:", round(2 * stats.norm.sf(abs(z)), 4))
+    assert np.allclose(confidence_interval, library_interval)
+    assert confidence_interval[0] < mean_delivery_time < confidence_interval[1]
     """),
 
     md(r"""
-    **Scratch vs production.** Our hand-rolled erf-based p-values match scipy — the
-    point of Section 5 was to prove there's no magic. What the libraries add:
-    *numerically stable* tails, *exact* (non-asymptotic) tests for small samples,
-    correct handling of edge cases, and a vast catalogue of distributions and tests
-    you should not reimplement in anger. Know the math; call the library.
-    """),
+    ## 11 · Hypothesis tests ask whether data conflicts with a model
 
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — A/B Testing a Checkout Change
+    A hypothesis test begins with two claims:
 
-    **Scenario.** An e-commerce team proposes a new one-click checkout. Current
-    conversion is **~10%**. They want to ship only if the new flow *truly* lifts
-    conversion, because a worse flow directly loses revenue.
+    - **null hypothesis $H_0$:** the reference claim, often no difference;
+    - **alternative hypothesis $H_1$:** the competing claim.
 
-    **Business objectives:** maximize conversion without degrading the funnel; make
-    a *reliable* ship/no-ship decision.
+    For the checkout experiment:
 
-    **Cost of mistakes**
-    - **False positive** (ship a flow that isn't actually better): lost revenue +
-      eng cost of a change that must be rolled back.
-    - **False negative** (miss a real improvement): permanent opportunity cost.
-    These costs set $\alpha$ (false-positive tolerance) and power $1-\beta$.
+    $$
+    H_0:p_{new}-p_{old}=0
+    $$
 
-    **Design (the statistics).**
-    1. Pick the **minimum detectable effect** (e.g. +1pt absolute, 10%→11%) — the
-       smallest lift worth shipping.
-    2. Compute **sample size** so the test has, say, 80% power at $\alpha=0.05$.
-       Sample size scales like $1/\text{MDE}^2$ (CLT again) — small effects need
-       *huge* traffic. The cell below shows the magnitude.
-    3. **Randomize** users to control/treatment; run until the pre-computed $n$.
-    4. Analyze with the **two-proportion test** from Section 5 — *no peeking*.
+    $$
+    H_1:p_{new}-p_{old}\ne0
+    $$
 
-    **Constraints:** finite traffic (time budget), novelty effects, and the need
-    not to harm the live funnel during the test.
+    **Symbols:** $p_{new}$ and $p_{old}$ are population conversion rates; $H_0$ and
+    $H_1$ name the two hypotheses; $\ne$ means not equal.
 
-    **KPIs:** primary = conversion rate (with CI); guardrails = revenue/user, page
-    latency, refund rate. A win on the primary that tanks a guardrail is not a win.
+    A test statistic measures how far the observed effect is from the null value in
+    standard-error units:
+
+    $$
+    z=\frac{\text{observed difference}-\text{null difference}}
+            {\text{standard error under }H_0}
+    $$
+
+    The **p-value** is the probability, assuming $H_0$ and the test assumptions are
+    true, of a result at least as extreme as the observed result.
+
+    A p-value is **not**:
+
+    - the probability that $H_0$ is true;
+    - the probability the result happened “by chance”;
+    - the size or business value of the effect;
+    - proof that assumptions or data collection were valid.
+
+    We choose a significance level $\alpha$ before seeing the result. If $p<\alpha$,
+    we reject $H_0$. Otherwise we fail to reject it. “Fail to reject” does not prove
+    equality; the study may simply be imprecise.
     """),
 
     code(r"""
-    # Rough sample-size intuition for an A/B test (normal approximation).
-    # n per arm ~ (z_alpha/2 + z_beta)^2 * 2 * p(1-p) / MDE^2
-    p0 = 0.10
-    z_alpha = stats.norm.ppf(0.975)     # two-sided alpha=0.05
-    z_beta = stats.norm.ppf(0.80)       # 80% power
-    for mde in [0.02, 0.01, 0.005]:
-        n = (z_alpha + z_beta) ** 2 * 2 * p0 * (1 - p0) / mde ** 2
-        print(f"MDE = {mde*100:>4.1f}pt absolute  ->  ~{math.ceil(n):,} users PER ARM")
-    print("\\nHalving the effect you want to detect ~4x's the traffic needed (1/MDE^2).")
+    def two_proportion_z_test(successes_a, total_a, successes_b, total_b):
+        '''Return rates, difference, pooled standard error, z score, and two-sided p-value.'''
+        for successes, total in [(successes_a, total_a), (successes_b, total_b)]:
+            if not 0 <= successes <= total:
+                raise ValueError("successes must lie between zero and total")
+            if total <= 0:
+                raise ValueError("total must be positive")
+
+        rate_a = successes_a / total_a
+        rate_b = successes_b / total_b
+        difference = rate_b - rate_a
+        pooled_rate = (successes_a + successes_b) / (total_a + total_b)
+        null_standard_error = math.sqrt(
+            pooled_rate * (1 - pooled_rate) * (1 / total_a + 1 / total_b)
+        )
+        z_score = difference / null_standard_error
+        p_value = 2 * stats.norm.sf(abs(z_score))
+        return rate_a, rate_b, difference, null_standard_error, z_score, p_value
+
+
+    test_result = two_proportion_z_test(100, 1_000, 130, 1_000)
+    rate_a, rate_b, difference, null_se, z_score, p_value = test_result
+
+    print(f"old rate: {rate_a:.3f}")
+    print(f"new rate: {rate_b:.3f}")
+    print(f"difference: {difference:.3f}")
+    print(f"null standard error: {null_se:.4f}")
+    print(f"z score: {z_score:.3f}")
+    print(f"two-sided p-value: {p_value:.4f}")
+
+    assert np.isclose(difference, 0.03)
+    assert 0 < p_value < 0.05
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ### Expected result and its limit
 
-    - **Experimentation at scale.** Pre-compute sample sizes; *don't* peek. Use
-      **sequential** or **Bayesian** testing if you need to stop early without
-      inflating false positives. Track guardrail metrics, not just the target.
-    - **Drift = distribution change.** Monitor feature/label distributions over
-      time (population stability index, KL divergence, KS test). A shift in $P(x)$
-      is data drift; a shift in $P(y\mid x)$ is concept drift (Lesson PROD-05).
-    - **Uncertainty in serving.** Report **calibrated** probabilities and intervals,
-      not just point predictions — downstream decisions (pricing, routing,
-      thresholds) depend on the *distribution*, not the mean.
-    - **Heavy tails.** Latency, revenue, and losses are rarely Gaussian. Monitor
-      **percentiles (p95/p99)**, not means; one whale or one outage moves the mean
-      but the business runs on the tail.
-    - **Reproducibility.** Seed every sampler (`np.random.default_rng(seed)`), log
-      seeds, and version the data snapshot a statistic was computed on.
-    - **Multiple comparisons in monitoring.** Hundreds of dashboards each alert at
-      5% → constant false alarms. Apply corrections / sensible thresholds.
+    The p-value is about 0.036. At a pre-declared $\alpha=0.05$, this test rejects
+    the no-difference hypothesis.
+
+    That narrow statement does not prove the new page caused the improvement unless
+    assignment and data collection were valid. It also does not tell us whether a
+    3-point lift is worth shipping. For that, inspect the effect and its interval.
     """),
 
-    # ============================================ 11. Tradeoff Analysis
     md(r"""
-    ## 11 · Tradeoff Analysis
+    ## 12 · Effect size, errors, power, and practical importance
 
-    **Frequentist vs Bayesian:**
+    ### Effect size
 
-    | Dimension | Frequentist (p-values, CIs) | Bayesian (posteriors) |
-    |---|---|---|
-    | Interpretation | Long-run error rates | Direct probability of hypotheses |
-    | Priors | None (pro & con) | Required (encode knowledge; can bias) |
-    | Small data | Weaker, asymptotic | Priors regularize, often better |
-    | Compute | Cheap, closed-form tests | Often needs MCMC/VI |
-    | Stopping early | Inflates false positives | Naturally supports sequential decisions |
-    | Industry use | Default A/B testing | Personalization, bandits, small-sample |
+    The absolute conversion change is:
 
-    **MLE vs MAP (regularized):**
+    $$
+    \Delta=\hat p_{new}-\hat p_{old}=0.13-0.10=0.03
+    $$
 
-    | Dimension | MLE | MAP (= MLE + prior/penalty) |
-    |---|---|---|
-    | Overfitting | Prone (esp. small $n$) | Controlled by the prior |
-    | Bias/variance | Low bias, higher variance | Trades a little bias for much less variance |
-    | ML analogue | Unregularized fit | Ridge (Gaussian prior) / Lasso (Laplace) |
+    **Symbols:** $\Delta$ (delta) means change; the hats mark sample estimates.
+    This is a 3-percentage-point absolute lift. Relative lift is $0.03/0.10=30\%$.
+    Always state which one you mean.
 
-    **Parametric vs nonparametric uncertainty (formula vs bootstrap):**
+    ### Two possible testing errors
 
-    | Dimension | Closed-form (CLT) CI | Bootstrap |
-    |---|---|---|
-    | Assumptions | Distributional / large $n$ | Almost none |
-    | Works for any statistic | No (need a formula) | **Yes** (median, AUC, recall@k) |
-    | Cost | Instant | Many resamples (compute) |
+    | Reality and decision | Name | Checkout meaning |
+    | --- | --- | --- |
+    | No real effect, but reject $H_0$ | Type I error | Ship a page that is not better |
+    | Real effect, but fail to reject $H_0$ | Type II error | Miss a useful improvement |
+
+    The pre-declared significance level $\alpha$ controls the long-run Type I error
+    rate under the test assumptions. **Power** is the probability of detecting a
+    specified real effect:
+
+    $$
+    \text{power}=1-\beta
+    $$
+
+    **Symbols:** $\beta$ is the Type II error probability for the specified effect.
+
+    Power generally increases with:
+
+    - a larger true effect;
+    - a larger sample;
+    - lower measurement noise;
+    - a less strict significance threshold.
+
+    Decide the minimum effect worth detecting before collecting data. A massive sample
+    can make a tiny, useless difference statistically significant.
     """),
 
-    # ============================================ 12. Interview Prep
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    code(r"""
+    unpooled_difference_standard_error = math.sqrt(
+        old_rate * (1 - old_rate) / old_visitors
+        + new_rate * (1 - new_rate) / new_visitors
+    )
+    difference_margin = stats.norm.ppf(0.975) * unpooled_difference_standard_error
+    difference_interval = (
+        observed_difference - difference_margin,
+        observed_difference + difference_margin,
+    )
 
-    **Common questions**
-    - *Difference between probability and likelihood?* → Probability: data varies,
-      parameters fixed. Likelihood: data fixed (observed), viewed as a function of
-      parameters. We maximize the latter.
-    - *Expectation vs variance vs covariance in one line each?* (Section 4.1)
+    relative_lift = observed_difference / old_rate
 
-    **Deep-dive questions**
-    - *Derive MLE for a Gaussian; connect to MSE.* (Section 4.4 — be able to write
-      it on a board.)
-    - *Why is L2 regularization a Gaussian prior?* (Section 4.5)
-    - *State the CLT precisely and give its standard error.* (Section 4.6)
+    print(f"absolute lift: {observed_difference:.1%} points")
+    print(f"relative lift: {relative_lift:.1%}")
+    print("approximate 95% interval for absolute lift:",
+          tuple(f"{value:.1%}" for value in difference_interval))
 
-    **Whiteboard questions**
-    - "Disease prevalence 0.5%, test 95% sensitive/specific. P(disease | positive)?"
-      → Plug into Bayes (Section 5.2). The answer being *low* is the whole point.
-    - "Design an A/B test for a 1pt conversion lift: what sample size, what test,
-      what could go wrong?" (Sections 5.5, 9, 10.)
-
-    **Strong vs weak answers**
-    - *"What's a p-value?"*
-      - **Weak:** "The probability the null hypothesis is true." (Wrong.)
-      - **Strong:** "The probability of seeing data *at least this extreme* **if the
-        null were true**. It is *not* P(H0 | data), and a small p-value doesn't
-        measure effect size or importance."
-    - *"Is your metric improvement real?"*
-      - **Weak:** "The number went up."
-      - **Strong:** "I'd put a confidence interval on the delta (bootstrap if no
-        formula), check it excludes zero at a pre-set $\alpha$, confirm power and
-        sample size, and watch guardrail metrics."
-
-    **Follow-ups:** "Now you ran 50 variants — what changes?" (multiple comparisons).
-    "Your data is heavy-tailed — does the t-test still apply?" (robustness, larger
-    $n$, transforms).
-
-    **Common mistakes:** equating p-value with P(H0); forgetting the base rate;
-    assuming Gaussianity; peeking at experiments; reporting means for heavy-tailed
-    metrics; ignoring the IID assumption when splitting data.
+    assert np.isclose(relative_lift, 0.30)
+    assert difference_interval[0] > 0
     """),
 
-    # ============================================ 13. Teach-Back
     md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    ## 13 · Bootstrap: let resampling approximate uncertainty
 
-    1. **What is it?** Distinguish probability, likelihood, prior, and posterior.
-    2. **Why was it invented?** Why did the Bayesian "inverse" question matter for
-       learning from data?
-    3. **How does it work?** Walk through Bayes' theorem and one MLE derivation.
-    4. **Why does it work?** Why does maximizing Gaussian likelihood give squared
-       error, and Bernoulli likelihood give cross-entropy?
-    5. **When to use it?** When would you choose Bayesian over frequentist?
-    6. **When NOT to use it?** When does the Gaussian/CLT assumption break, and what
-       do you do instead?
-    7. **Tradeoffs?** MLE vs MAP; closed-form CI vs bootstrap.
-    8. **How would you productionize it?** Design a trustworthy A/B test and a drift
-       monitor; say what you'd track and how you'd avoid false positives.
+    Some statistics have no simple standard-error formula. The **bootstrap** treats
+    the observed sample as a stand-in population:
+
+    1. draw a new sample of the same size **with replacement**;
+    2. calculate the statistic;
+    3. repeat many times;
+    4. inspect the distribution of bootstrap statistics.
+
+    “With replacement” means an observed row may appear more than once in a resample.
+    Without replacement, every full-size resample would contain the same rows and
+    produce no useful variation.
+
+    For percentile interval endpoints:
+
+    $$
+    [q_{0.025},q_{0.975}]
+    $$
+
+    **Symbols:** $q_{0.025}$ and $q_{0.975}$ are the 2.5th and 97.5th percentiles of
+    the bootstrap statistics.
+
+    Bootstrap limitations matter:
+
+    - it cannot repair an unrepresentative original sample;
+    - ordinary row bootstrap is wrong for dependent time-series or grouped data;
+    - very small samples may not represent the population shape;
+    - a basic percentile interval is not ideal for every statistic.
     """),
 
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises
+    code(r"""
+    customer_spending = np.array([12, 14, 15, 18, 21, 23, 25, 28, 40, 90], dtype=float)
 
-    **Estimated time:** 90–150 minutes. Use the hints for the first attempt, then
-    compare with the expected results and rubric.
+    def bootstrap_statistic(data, statistic_function, repetitions=5_000, seed=123):
+        data = np.asarray(data, dtype=float)
+        if data.ndim != 1 or data.size < 2:
+            raise ValueError("data must be a one-dimensional sample with at least two values")
+        generator = np.random.default_rng(seed)
+        resample_indices = generator.integers(0, data.size, size=(repetitions, data.size))
+        resamples = data[resample_indices]
+        return np.apply_along_axis(statistic_function, 1, resamples)
 
-    **Beginner (conceptual)**
-    1. A test is 99% sensitive and 99% specific for a disease with prevalence 2%.
-       Compute P(disease | positive) by hand, then verify with code.
-    2. Explain in two sentences why MSE corresponds to assuming Gaussian noise.
 
-    **Beginner → Intermediate (coding)**
-    3. Extend `gaussian_mle` to fit a Gaussian by **numerically** maximizing the
-       log-likelihood (grid or gradient ascent) and confirm it matches the closed
-       form.
-    4. Implement MLE for a **Bernoulli** ($\hat p=\frac1n\sum x_i$) and show that
-       maximizing its log-likelihood equals minimizing **cross-entropy**.
+    bootstrap_medians = bootstrap_statistic(customer_spending, np.median)
+    median_interval = np.percentile(bootstrap_medians, [2.5, 97.5])
 
-    **Intermediate (analysis)**
-    5. Reproduce Figure 3 (CLT) starting from a **different** skewed distribution
-       (e.g. log-normal). At what $n$ does the mean look Gaussian? Does a
-       heavy-tailed source (e.g. Cauchy) ever converge — and why not?
-    6. Use the bootstrap to put a 95% CI on the **AUC** of a toy classifier. Why is
-       there no simple closed-form CI for AUC?
+    print("sample median:", np.median(customer_spending))
+    print("bootstrap median interval:", median_interval)
 
-    **Senior (interview + production design)**
-    7. *Whiteboard:* derive MAP for linear regression with a Gaussian prior and show
-       it equals Ridge; identify $\lambda$ in terms of the prior/noise variances.
-    8. *Design:* an A/B test shows $p=0.04$ after 3 days, but the team peeked daily.
-       Explain why the result is untrustworthy and design a correct protocol
-       (fixed-$n$ or sequential), including guardrail metrics and a rollback rule.
-    9. *Drift:* propose a monitoring system that distinguishes **data drift**
-       ($P(x)$ changes) from **concept drift** ($P(y\mid x)$ changes), naming the
-       statistics you'd compute and the alert thresholds you'd set.
+    figure, axis = plt.subplots(figsize=(7, 4))
+    axis.hist(bootstrap_medians, bins=30, color="tab:purple", alpha=0.75)
+    axis.axvline(median_interval[0], color="tab:red", linestyle="--")
+    axis.axvline(median_interval[1], color="tab:red", linestyle="--")
+    axis.set_xlabel("bootstrap sample median")
+    axis.set_ylabel("count")
+    axis.set_title("Bootstrap distribution of the median")
+    figure.tight_layout()
+    plt.show()
 
-    <details>
-    <summary><strong>Hints, expected results, and scoring rubric</strong></summary>
-
-    1. Out of 10,000 people, expect 200 diseased and 198 true positives. Of 9,800
-       non-diseased people, expect 98 false positives. The answer is
-       `198/(198+98) ≈ 66.9%`, not 99%.
-    2. With fixed variance, Gaussian negative log-likelihood differs from squared
-       error only by constants and a positive scale.
-    3. The numerical optimum should agree with sample mean and population variance
-       within the grid or optimizer tolerance.
-    4. The Bernoulli MLE is the observed positive fraction. Clip probabilities away
-       from exactly zero and one before taking logs.
-    5. A log-normal source approaches a normal sampling distribution for the mean
-       as $n$ grows. A Cauchy source violates the ordinary CLT's finite-moment
-       conditions.
-    6. Resample paired `(label, score)` observations. Report a percentile interval
-       and explain that AUC depends on rankings of many positive-negative pairs.
-    7. Award 2 points for the Gaussian likelihood, 2 for the Gaussian prior, and 1
-       for identifying $\lambda$ using noise and prior variances.
-    8. Full credit identifies repeated peeking as inflated Type-I error and specifies
-       a fixed-horizon or valid sequential design, guardrails, and rollback.
-    9. Full credit separates unlabeled feature-distribution monitoring from delayed
-       labeled performance or residual monitoring and uses effect sizes rather than
-       p-values alone.
-
-    A score of 12/15 across Questions 7–9 indicates senior-level readiness.
-    </details>
+    assert median_interval[0] <= np.median(customer_spending) <= median_interval[1]
     """),
 
-    # ---------------------------------------------------------------- Footer
     md(r"""
-    ---
-    ### Summary
-    Probability is the language of uncertainty; statistics is how we reason from
-    data to beliefs and decisions. The throughline for ML: **losses are negative
-    log-likelihoods** (Gaussian → MSE, Bernoulli → cross-entropy), **regularizers
-    are priors** (Gaussian → L2, Laplace → L1), and the **CLT/bootstrap** give us
-    the error bars that make metrics trustworthy.
+    ## 14 · Mini-project, practice, and mastery checkpoint
 
-    **Related lesson:** `FND-04 · Optimization and Gradient Descent` — having defined *what* to
-    minimize (a likelihood-derived loss), we now study *how* to minimize it, the
-    algorithm at the heart of every model in this curriculum.
+    ### Mini-project: checked checkout experiment report
+
+    **Goal:** turn experiment counts into a transparent statistical report without
+    turning the p-value into the decision.
+
+    **Input columns:**
+
+    | Column | Meaning |
+    | --- | --- |
+    | `variant` | Stable group name |
+    | `visitors` | Assigned visitors |
+    | `purchases` | Visitors who purchased |
+    | `revenue` | Total group revenue |
+
+    **Required workflow:**
+
+    1. validate counts and unique variant names;
+    2. calculate conversion rates;
+    3. calculate absolute and relative effect;
+    4. calculate a two-sided test and an interval for the conversion difference;
+    5. calculate revenue per visitor as a guardrail;
+    6. return evidence separately from the ship/no-ship decision.
+    """),
+
+    code(r"""
+    experiment_data = pd.DataFrame(
+        {
+            "variant": ["old", "new"],
+            "visitors": [1_000, 1_000],
+            "purchases": [100, 130],
+            "revenue": [25_000.0, 29_000.0],
+        }
+    )
+
+    required_columns = {"variant", "visitors", "purchases", "revenue"}
+    if set(experiment_data.columns) != required_columns:
+        raise ValueError("experiment columns do not match the required contract")
+    if experiment_data["variant"].duplicated().any():
+        raise ValueError("variant names must be unique")
+    if (experiment_data["visitors"] <= 0).any():
+        raise ValueError("visitor counts must be positive")
+    if (experiment_data["purchases"] < 0).any():
+        raise ValueError("purchase counts cannot be negative")
+    if (experiment_data["purchases"] > experiment_data["visitors"]).any():
+        raise ValueError("purchases cannot exceed visitors")
+
+    report = experiment_data.copy()
+    report["conversion_rate"] = report["purchases"] / report["visitors"]
+    report["revenue_per_visitor"] = report["revenue"] / report["visitors"]
+
+    old_row = report.loc[report["variant"] == "old"].iloc[0]
+    new_row = report.loc[report["variant"] == "new"].iloc[0]
+    project_test = two_proportion_z_test(
+        int(old_row["purchases"]),
+        int(old_row["visitors"]),
+        int(new_row["purchases"]),
+        int(new_row["visitors"]),
+    )
+    project_difference = project_test[2]
+    project_p_value = project_test[5]
+    project_relative_lift = project_difference / old_row["conversion_rate"]
+
+    project_standard_error = math.sqrt(
+        old_row["conversion_rate"] * (1 - old_row["conversion_rate"]) / old_row["visitors"]
+        + new_row["conversion_rate"] * (1 - new_row["conversion_rate"]) / new_row["visitors"]
+    )
+    project_margin = stats.norm.ppf(0.975) * project_standard_error
+    project_interval = (
+        project_difference - project_margin,
+        project_difference + project_margin,
+    )
+
+    print(report.to_string(index=False))
+    print(f"\nabsolute conversion lift: {project_difference:.1%} points")
+    print(f"relative conversion lift: {project_relative_lift:.1%}")
+    print(f"two-sided p-value: {project_p_value:.4f}")
+    print("approximate 95% lift interval:", tuple(f"{value:.1%}" for value in project_interval))
+    print("evidence statement: data conflicts with equal rates at alpha=0.05")
+    print("decision statement: shipping still requires effect, guardrail, and validity review")
+
+    assert np.isclose(project_difference, 0.03)
+    assert np.isclose(project_relative_lift, 0.30)
+    assert project_p_value < 0.05
+    assert new_row["revenue_per_visitor"] > old_row["revenue_per_visitor"]
+    """),
+
+    md(r"""
+    ### Worked example
+
+    A sample has values $[2,4,6]$.
+
+    - Mean: $(2+4+6)/3=4$.
+    - Deviations: $[-2,0,2]$.
+    - Squared deviations: $[4,0,4]$.
+    - Sample variance: $(4+0+4)/(3-1)=4$.
+    - Sample standard deviation: $\sqrt4=2$.
+    - Standard error of the mean: $2/\sqrt3\approx1.155$.
+
+    Each number answers a different question. Standard deviation describes the three
+    observations; standard error describes how their mean would vary across samples.
+
+    ### Guided practice
+
+    1. Label each item: population, sample, parameter, or statistic.
+    2. Calculate the conversion rate for 18 purchases among 120 visitors.
+    3. Calculate mean, sample variance, and standard deviation for $[1,3,5]$.
+    4. For $x=[1,2,3]$ and $y=[6,4,2]$, calculate covariance and correlation.
+    5. Calculate standard error when $s=15$ and $n=25$.
+    6. Explain the difference between a data distribution and sampling distribution.
+
+    ### Independent practice
+
+    7. Simulate repeated Bernoulli samples for $p=0.2$ with sizes 10, 100, and 1,000.
+       Compare the spread of their sample rates.
+    8. Recreate the CLT plot with a log-normal source.
+    9. Build a 95% t-interval for a small numerical sample and verify with SciPy.
+    10. State $H_0$ and $H_1$ for a two-sided difference in average delivery time.
+    11. Explain a p-value without using the phrase “probability the null is true.”
+    12. Bootstrap the mean and median of a skewed sample. Compare their intervals.
+
+    ### Challenge
+
+    Rebuild the checkout mini-project without copying its code. Add:
+
+    - a minimum practically important lift;
+    - a guardrail rule for revenue per visitor;
+    - validation for missing values and exactly two variants;
+    - an explicit assumptions list;
+    - six meaningful assertions;
+    - a conclusion that separates evidence from action.
+
+    ### Self-check
+
+    Before reporting any result, answer:
+
+    - What population does this sample represent?
+    - How were observations selected or assigned?
+    - What is the effect in understandable units?
+    - What uncertainty measure was used, and why?
+    - Which assumptions could fail?
+    - Was the threshold chosen before viewing results?
+    - Is the result practically important?
+    """),
+
+    md(r"""
+    ### Solution and scoring rubric
+
+    1. A population is the full target group; a sample is observed cases; a parameter
+       describes the population; a statistic is calculated from the sample.
+    2. $18/120=0.15=15\%$.
+    3. Mean 3; deviations $[-2,0,2]$; sample variance 4; standard deviation 2.
+    4. The variables move in opposite directions; covariance is negative and
+       correlation is -1.
+    5. $15/\sqrt{25}=3$.
+    6. Individual values form the data distribution; repeated estimates form a
+       sampling distribution.
+    7. All rate distributions center near 0.2; their spread shrinks with sample size.
+    8. Raw log-normal values remain skewed while sufficiently large sample means become
+       more bell-shaped.
+    9. The manual interval should match `stats.t.interval` within rounding.
+    10. $H_0:\mu_A-\mu_B=0$ and $H_1:\mu_A-\mu_B\ne0$.
+    11. A p-value is a tail probability calculated under the null model and assumptions.
+    12. In skewed data, mean and median can have noticeably different bootstrap behavior.
+
+    Challenge scoring:
+
+    | Skill | Points |
+    | --- | ---: |
+    | Input contract and valid unit of analysis | 3 |
+    | Correct effect, interval, and test | 4 |
+    | Correct p-value interpretation | 3 |
+    | Practical threshold and guardrail | 3 |
+    | Assumptions and limitations | 3 |
+    | Assertions and readable report | 4 |
+    | **Total** | **20** |
+
+    ### Common mistakes
+
+    - Treating a sample statistic as the exact population parameter.
+    - Using $n$ instead of $n-1$ without stating whether population or sample variance
+      is intended.
+    - Saying covariance or correlation proves causation.
+    - Confusing standard deviation with standard error.
+    - Saying the CLT makes raw data normal.
+    - Interpreting a 95% confidence interval as a 95% frequentist probability about
+      one already-fixed parameter.
+    - Saying a p-value is the probability that the null hypothesis is true.
+    - Treating “not significant” as proof of no effect.
+    - Ignoring effect size because $p<0.05$.
+    - Repeatedly checking a test and stopping at the first small p-value.
+    - Bootstrapping rows that are dependent by user, group, or time.
+    - Using more data to hide a biased sampling process.
+
+    ### Readiness threshold
+
+    Score at least **16/20** on the challenge and answer all Quick Check questions
+    without notes. If standard deviation, standard error, confidence interval, and
+    p-value blur together, repeat Sections 6–12 before continuing.
+    """),
+
+    md(r"""
+    ## Ready to move on?
+
+    ### Quick check
+
+    1. Why can two random samples produce different statistics?
+    2. What is the difference between a parameter and a statistic?
+    3. What does covariance add after learning variance?
+    4. What is the difference between standard deviation and standard error?
+    5. What does the CLT say about sample means?
+    6. What does a 95% confidence procedure guarantee in repeated use?
+    7. What exactly is a p-value conditioned on?
+    8. Why must practical importance be checked separately?
+    9. What are Type I and Type II errors?
+    10. Why does an ordinary bootstrap require representative, appropriately
+        independent observations?
+
+    ### Teach it back
+
+    Explain this story to someone who has never studied statistics:
+
+    > We observe a sample, calculate an effect, estimate how much that effect would
+    > move across samples, and make a limited claim whose strength depends on both
+    > the data-collection design and the statistical assumptions.
+
+    If you can explain each link with the checkout example and no jargon, the
+    foundation is solid.
+
+    ### Memory aid
+
+    **A sample gives an estimate; uncertainty tells us how carefully to trust it.**
+
+    ### Next dependency
+
+    FND-03 uses these ideas during data exploration. A mean, correlation, or unusual
+    group difference is evidence to investigate—not automatically a population truth
+    or causal result.
     """),
 ]
+
 
 build("01_ml_foundations/02_probability_and_statistics.ipynb", cells)

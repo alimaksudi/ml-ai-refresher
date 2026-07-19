@@ -13,7 +13,7 @@ cells = [
 
     **Prerequisites:** CML-03 · Decision Trees and MLE-02 · Validation and Data Leakage  
     **Estimated study time:** 8–10 hours, including practice  
-    **Next lesson:** CML-05 · Gradient Boosting and XGBoost
+    **Next lesson:** CML-05 · Gradient Boosting Foundations
 
     One decision tree can learn useful nonlinear rules, but a small change in the
     training rows may produce a different tree. A random forest reduces that

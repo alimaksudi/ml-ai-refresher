@@ -1,713 +1,1225 @@
-"""Builder for Lesson CML-01 — Linear Regression.
-
-"""
+"""Builder for Lesson CML-01 — Linear Regression."""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # CML-01 · Linear Regression
-    ### Section 02 — Classical Machine Learning · *ML/AI Senior Mastery Curriculum*
 
-    **Prerequisites:** FND-01 through FND-03. You should be able to reason about
-    vectors, samples, a prediction target, a naive baseline, and a train/test split.
+    *Build the first prediction model one calculation at a time*
 
-    > This is the first *complete* learning algorithm, and it is where the first
-    > Phase-0 pillars snap together: the **geometry** of Lesson FND-01 (least squares
-    > is a projection onto a column space), the **probability** of Lesson FND-02 (MSE
-    > is the negative log-likelihood of Gaussian noise; Ridge/Lasso are Gaussian/
-    > Laplace priors), and the **data contract** of Lesson FND-03. This notebook
-    > gives gradient descent its first concrete objective: squared loss. Notebook
-    > 03 follows and generalizes that optimization method. Master linear regression deeply and
-    > you have a template for every supervised model that follows — logistic
-    > regression, neural nets, even the read-out layer of an LLM are the same idea
-    > with different link functions and losses.
+    | Lesson detail | Value |
+    | --- | --- |
+    | Prerequisites | FND-01, FND-02, and FND-03 |
+    | Estimated study time | 7–9 hours across two or more sessions |
+    | Main outcome | Fit, inspect, and explain an ordinary linear-regression model |
+    | Next lesson | FND-04 · Optimization and Gradient Descent |
+
+    Linear regression is the first complete learning algorithm in this curriculum.
+    The goal is not to memorise `LinearRegression().fit(...)`. The goal is to know
+    where every prediction, residual, squared error, slope, and intercept comes from.
+
+    We deliberately stop before gradient descent, Ridge, Lasso, cross-validation,
+    and a large catalogue of metrics. Those ideas make more sense after ordinary
+    least squares is familiar.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The linear model $\hat y=\mathbf w^\top\mathbf x+b$ as a weighted sum, and
-      why "linear" means *linear in the parameters* (so polynomials still count).
-    - The squared-error **loss function** as the explicit quantity learning will
-      minimize, first with a tiny numeric example.
-    - Two ways to fit it — the **closed-form normal equations** and a preview of
-      **gradient descent** — and when each is the right tool. Lesson FND-04 derives
-      and diagnoses iterative optimization in depth after this concrete example.
-    - The **probabilistic justification**: minimizing MSE = maximizing Gaussian
-      likelihood (Lesson FND-02), which is why squared error and not something else.
-    - The **Gauss–Markov** assumptions and what each one buys you (and what breaks
-      when it's violated).
-    - **Ridge (L2)** and **Lasso (L1)** regularization as MAP estimation, and the
-      **bias–variance tradeoff** they navigate.
-    - How to *diagnose* a regression with residual plots, $R^2$, and learning curves.
+    By the end of this lesson, you will be able to:
 
-    **Why it matters in industry**
-    - It is the **interpretable baseline** every serious project starts with — and
-      in regulated domains (credit, insurance, healthcare) it's often the model that
-      actually ships because you can explain every coefficient.
-    - Fast to train, trivial to serve, easy to monitor — the cost/latency floor.
-    - The mental model transfers directly to GLMs, logistic regression, and the
-      linear layers inside deep nets.
+    - recognise a regression task with a numerical target;
+    - define the prediction unit, feature, target, and prediction time;
+    - create a training-mean baseline before fitting a line;
+    - explain slope and intercept using their real units;
+    - calculate predictions, residuals, squared errors, and mean squared error by hand;
+    - explain why residuals are calculated before they are squared;
+    - fit a one-feature least-squares line using centred deviations;
+    - implement that calculation with small, readable NumPy code;
+    - explain why a constant feature cannot determine a slope;
+    - connect one-feature regression to a multi-feature weighted sum;
+    - use `np.linalg.lstsq` without explicitly inverting a matrix;
+    - fit sklearn `LinearRegression` after the manual version;
+    - compare a fixed model with its frozen baseline using validation data only;
+    - read residual, outlier, interpolation, and extrapolation plots;
+    - interpret coefficients as model associations rather than causal effects;
+    - complete a small Wine-data project while leaving final test data sealed.
 
-    **Typical interview questions**
-    - "Derive the OLS solution. Why squared error and not absolute error?"
-    - "State the assumptions of linear regression. Which matter most in practice?"
-    - "Ridge vs Lasso — what's the difference and when do you use each?"
-    - "What is the bias–variance tradeoff and how does regularization move along it?"
-    - "Your $R^2$ is high but predictions are bad on new data. What's going on?"
+    MSE is the only required score here because it is also the loss the model fits.
+    MAE, RMSE, $R^2$, metric selection, and uncertainty belong to MLE-01.
     """),
 
-    # =================================================== 2. Historical Motivation
     md(r"""
-    ## 2 · Historical Motivation
+    ## 2 · The practical problem
 
-    **Least squares (Legendre 1805, Gauss 1809).** As in Lesson FND-02, the method
-    was born from astronomy/geodesy: fit a model to noisy measurements by minimizing
-    the sum of squared errors. Gauss showed that *if* the noise is Gaussian, least
-    squares **is** maximum likelihood — the first principled reason to square the
-    residuals rather than, say, take absolute values.
+    A local delivery team wants a rough estimate of travel time from route distance.
+    We have four completed routes:
 
-    **"Regression" (Galton, 1880s).** Francis Galton studied how tall parents have
-    tall children, but *less extreme* than themselves — heights "regress toward the
-    mean." The name stuck even though we now use it for any continuous-target
-    prediction. The phenomenon (regression to the mean) is itself a classic
-    interview trap (Section 7).
+    | Route | Distance (km) | Travel time (minutes) |
+    | --- | ---: | ---: |
+    | A | 1 | 3 |
+    | B | 2 | 5 |
+    | C | 3 | 6 |
+    | D | 4 | 8 |
 
-    **Why it still matters after 200 years.** Newer models (trees, boosting, deep
-    nets) beat linear regression on raw accuracy for complex data. So why teach it
-    first and why does it still ship?
-    - **Interpretability:** each coefficient is a quantified, signed, auditable
-      effect — essential where decisions must be explained or are legally regulated.
-    - **Data efficiency & stability:** with few rows or many features, a regularized
-      linear model often *generalizes better* than a high-variance flexible model.
-    - **Speed:** closed-form or a few GD steps; microsecond inference.
-    - **Foundation:** it is the simplest member of the family (GLMs → logistic →
-      neural nets) and the cleanest place to learn loss design, regularization, and
-      the bias–variance tradeoff that govern *all* of them.
+    Our task frame is:
 
-    The throughline of Section 02: start with the most transparent model, understand
-    *why* it works and where it fails, then earn the right to add complexity.
+    | Field | Definition |
+    | --- | --- |
+    | Decision | Provide a rough planning estimate for a dispatcher |
+    | Prediction unit | One delivery route |
+    | Feature | Route distance in kilometres |
+    | Target | Travel time in minutes |
+    | Prediction time | After route distance is known, before the trip starts |
+    | Evaluation unit | One future route |
+
+    Distance cannot explain traffic, weather, turns, or loading time. A line will be
+    a useful first approximation, not a complete map of reality.
+
+    <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin: 24px 0; flex-wrap: wrap;">
+      <div style="border: 2px solid #4c78a8; border-radius: 10px; padding: 12px 16px; background: #eef5ff; color: #172b4d; text-align: center;"><strong>Distance</strong><br>known feature</div>
+      <div style="font-size: 24px; color: #555;">→</div>
+      <div style="border: 2px solid #f28e2b; border-radius: 10px; padding: 12px 16px; background: #fff4e8; color: #4a2b0b; text-align: center;"><strong>Prediction rule</strong><br>intercept + slope × distance</div>
+      <div style="font-size: 24px; color: #555;">→</div>
+      <div style="border: 2px solid #59a14f; border-radius: 10px; padding: 12px 16px; background: #eef8ec; color: #173d17; text-align: center;"><strong>Estimated time</strong><br>numerical target</div>
+    </div>
+
+    This is a **regression** problem because the target is a numerical quantity for
+    which arithmetic differences are meaningful.
     """),
 
-    # ================================================ 3. Intuition & Visual
     md(r"""
-    ## 3 · Intuition & Visual Understanding
+    ## 3 · Begin with the simplest baseline
 
-    **The line of best fit.** Given a cloud of points, draw the straight line (or
-    hyperplane, in higher dimensions) that comes *closest* to all of them. "Closest"
-    means the **vertical** gaps between each point and the line — the **residuals** —
-    are as small as possible *on average*. We square those gaps (so positives and
-    negatives don't cancel, and big misses are penalized more) and minimize the sum.
+    Before using distance, predict the average training travel time for every route.
+    This is the **training-mean baseline**.
 
-    **Two complementary pictures of the same fit:**
-    - *Statistics view:* find the slope/intercept that minimize total squared
-      residual — the wiggling-the-ruler picture.
-    - *Linear-algebra view (Lesson FND-01):* the predictions $\hat{\mathbf y}=X\mathbf
-      w$ can only land in the column space of $X$; least squares is the **orthogonal
-      projection** of the target $\mathbf y$ onto that subspace. The residual is
-      what's left over, perpendicular to everything $X$ can express.
+    $$
+    \bar y = \frac{1}{n}\sum_{i=1}^{n} y_i
+    $$
 
-    **Why squared error specifically?** Because (Lesson FND-02) it's the negative
-    log-likelihood when we assume the noise is Gaussian. Squared error isn't a
-    random choice — it's the *right* loss under a specific, checkable assumption
-    about the world.
+    Symbols:
 
-    ```mermaid
-    flowchart LR
-        X["Features X"] --> M["Linear model<br/>y_hat = Xw + b"]
-        M --> R["Residuals<br/>y - y_hat"]
-        R --> L["Loss = mean(residual^2)<br/>(= Gaussian NLL)"]
-        L -->|"minimize: normal equations<br/>OR gradient descent"| W["Best weights w"]
-        W -.->|"+ L2 / L1 penalty"| Reg["Ridge / Lasso<br/>(bias-variance control)"]
-    ```
+    - $y_i$ is the actual target for route $i$;
+    - $n$ is the number of training routes;
+    - $\bar y$ is the arithmetic mean of the training targets.
 
-    Run the cells to see the line, the residuals, and what happens when the
-    assumptions break.
+    For our four routes:
+
+    $$
+    \bar y = \frac{3+5+6+8}{4} = \frac{22}{4} = 5.5\text{ minutes}
+    $$
+
+    The baseline predicts 5.5 minutes for every route. It ignores distance. That is
+    exactly why it is useful: a fitted line must earn its added complexity.
     """),
 
     code(r"""
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    route_distance_km = np.array([1.0, 2.0, 3.0, 4.0])
+    travel_time_minutes = np.array([3.0, 5.0, 6.0, 8.0])
+
+    training_mean_minutes = travel_time_minutes.mean()
+    baseline_predictions = np.full_like(travel_time_minutes, training_mean_minutes)
+
+    print("training target mean:", training_mean_minutes, "minutes")
+    print("baseline predictions:", baseline_predictions)
+
+    assert training_mean_minutes == 5.5
+    """),
+
+    md(r"""
+    A baseline must be learned from training targets and then frozen. For future
+    validation rows, we reuse the training mean; we never replace it with the
+    validation mean.
+    """),
+
+    md(r"""
+    ## 4 · A line turns a feature into a prediction
+
+    A one-feature linear model is:
+
+    $$
+    \hat y = b_0 + b_1x
+    $$
+
+    Read it as:
+
+    > Predicted travel time equals the intercept plus the slope multiplied by route
+    > distance.
+
+    Symbols and units:
+
+    - $x$ is route distance, measured in kilometres;
+    - $\hat y$ is predicted travel time, measured in minutes;
+    - $b_0$ is the intercept, measured in minutes;
+    - $b_1$ is the slope, measured in minutes per kilometre.
+
+    The hat on $\hat y$ means “estimated.” It distinguishes a prediction from the
+    observed target $y$.
+
+    Suppose we try:
+
+    $$
+    \hat y = 1.5 + 1.6x
+    $$
+
+    The slope says the predicted time rises by 1.6 minutes when distance rises by one
+    kilometre, within the range supported by our data. The intercept predicts 1.5
+    minutes at zero kilometres. That may represent fixed preparation time, but the
+    data contains no zero-kilometre route, so this interpretation is uncertain.
     """),
 
     code(r"""
-    # Figure 1 — the line of best fit and the residuals it minimizes.
-    n = 40
-    x = np.sort(rng.uniform(0, 10, n))
-    y = 2.0 + 1.3 * x + rng.normal(0, 1.5, n)          # true: intercept 2, slope 1.3
+    intercept_minutes = 1.5
+    slope_minutes_per_km = 1.6
 
-    # fit a simple OLS line (we derive this properly in Section 4/5)
-    A = np.c_[np.ones(n), x]
-    w = np.linalg.lstsq(A, y, rcond=None)[0]
-    yhat = A @ w
+    line_predictions = intercept_minutes + slope_minutes_per_km * route_distance_km
 
-    fig, ax = plt.subplots()
-    ax.scatter(x, y, color="tab:blue", label="data")
-    ax.plot(x, yhat, color="tab:red", lw=2, label=f"fit: y = {w[0]:.2f} + {w[1]:.2f}x")
-    for xi, yi, yh in zip(x, y, yhat):
-        ax.plot([xi, xi], [yi, yh], color="gray", lw=0.8, alpha=0.7)  # residual segments
-    ax.set_title("Figure 1 — Best-fit line minimizes the squared vertical residuals")
-    ax.set_xlabel("x"); ax.set_ylabel("y"); ax.legend()
+    print("distance (km):", route_distance_km)
+    print("predicted time (minutes):", line_predictions)
+
+    assert np.allclose(line_predictions, [3.1, 4.7, 6.3, 7.9])
+    """),
+
+    md(r"""
+    “Linear” means linear in the learned parameters $b_0$ and $b_1$. The prediction
+    changes by the same amount for every additional kilometre. Later, transformed
+    features can create curves while remaining linear in their coefficients, but the
+    first mental model should be one ordinary line.
+    """),
+
+    md(r"""
+    ## 5 · Residuals come before squared loss
+
+    A **residual** is the signed difference between the observed target and prediction:
+
+    $$
+    r_i = y_i - \hat y_i
+    $$
+
+    Symbols:
+
+    - $r_i$ is the residual for route $i$;
+    - $y_i$ is its actual travel time;
+    - $\hat y_i$ is its predicted travel time.
+
+    A positive residual means the actual trip took longer than predicted. A negative
+    residual means it took less time than predicted. Residuals keep the target unit:
+    minutes.
+
+    For the proposed line:
+
+    | Distance | Actual | Predicted | Residual: actual − predicted | Squared residual |
+    | ---: | ---: | ---: | ---: | ---: |
+    | 1 | 3.0 | 3.1 | −0.1 | 0.01 |
+    | 2 | 5.0 | 4.7 | 0.3 | 0.09 |
+    | 3 | 6.0 | 6.3 | −0.3 | 0.09 |
+    | 4 | 8.0 | 7.9 | 0.1 | 0.01 |
+
+    If we simply add residuals, positive and negative misses can cancel. Squaring
+    makes every contribution non-negative and makes large misses matter more.
+    """),
+
+    code(r"""
+    residuals_minutes = travel_time_minutes - line_predictions
+    squared_residuals = residuals_minutes ** 2
+
+    calculation_table = pd.DataFrame(
+        {
+            "distance_km": route_distance_km,
+            "actual_minutes": travel_time_minutes,
+            "predicted_minutes": line_predictions,
+            "residual_minutes": residuals_minutes,
+            "squared_residual_minutes2": squared_residuals,
+        }
+    )
+
+    print(calculation_table)
+    print("residual sum:", residuals_minutes.sum())
+    print("squared residual sum:", squared_residuals.sum())
+
+    assert np.allclose(residuals_minutes, [-0.1, 0.3, -0.3, 0.1])
+    assert np.isclose(squared_residuals.sum(), 0.2)
+    """),
+
+    md(r"""
+    ### 5.1 Mean squared error
+
+    Mean squared error, abbreviated MSE, averages the squared residuals:
+
+    $$
+    \operatorname{MSE}
+    = \frac{1}{n}\sum_{i=1}^{n}(y_i-\hat y_i)^2
+    $$
+
+    For the proposed line:
+
+    $$
+    \operatorname{MSE}
+    = \frac{0.01+0.09+0.09+0.01}{4}
+    = \frac{0.20}{4}
+    = 0.05\text{ minutes}^2
+    $$
+
+    MSE has squared target units. Here, that is squared minutes. This makes its raw
+    value less intuitive, but squaring gives us a smooth objective and strongly
+    penalises large misses.
+
+    A **loss function** is the quantity the learning algorithm tries to make small.
+    Ordinary least squares uses the sum or mean of squared residuals. Both choose the
+    same line because dividing every candidate's sum by the same positive number does
+    not change which candidate is smallest.
+
+    The formula can play two different roles:
+
+    | Role | Rows used | Purpose |
+    | --- | --- | --- |
+    | Training loss | Training rows | Choose slope and intercept |
+    | Validation metric | Validation rows after fitting | Judge the frozen model |
+
+    Reusing one formula does not make the roles interchangeable. Validation MSE must
+    never be used to refit the same model parameters.
+    """),
+
+    code(r"""
+    def mean_squared_loss(actual_values, predicted_values):
+        '''Return the average squared residual.'''
+        actual_array = np.asarray(actual_values, dtype=float)
+        predicted_array = np.asarray(predicted_values, dtype=float)
+        if actual_array.shape != predicted_array.shape:
+            raise ValueError("Actual and predicted values must have the same shape")
+        return float(np.mean((actual_array - predicted_array) ** 2))
+
+
+    baseline_training_mse = mean_squared_loss(travel_time_minutes, baseline_predictions)
+    line_training_mse = mean_squared_loss(travel_time_minutes, line_predictions)
+
+    print("baseline training MSE:", baseline_training_mse)
+    print("line training MSE:", line_training_mse)
+
+    assert np.isclose(baseline_training_mse, 3.25)
+    assert np.isclose(line_training_mse, 0.05)
+    """),
+
+    md(r"""
+    The line fits these four training routes much better than the constant baseline.
+    That does not prove it will predict new routes well. Generalisation requires
+    validation rows that did not determine the line.
+    """),
+
+    md(r"""
+    ## 6 · Fit the least-squares line by hand
+
+    So far, we tried a line whose parameters were already given. Learning means
+    choosing the slope and intercept from the training data.
+
+    ### 6.1 Find the slope
+
+    The least-squares slope is:
+
+    $$
+    b_1 =
+    \frac{\sum_{i=1}^{n}(x_i-\bar x)(y_i-\bar y)}
+         {\sum_{i=1}^{n}(x_i-\bar x)^2}
+    $$
+
+    Read the numerator as “how distance and time move together.” Read the denominator
+    as “how much distance varies by itself.”
+
+    Symbols:
+
+    - $x_i$ and $y_i$ are the feature and target for route $i$;
+    - $\bar x$ and $\bar y$ are their training means;
+    - $b_1$ is the fitted slope.
+
+    Our means are:
+
+    $$
+    \bar x = 2.5\text{ km}
+    \qquad
+    \bar y = 5.5\text{ minutes}
+    $$
+
+    The centred calculation is:
+
+    | $x_i-\bar x$ | $y_i-\bar y$ | Product | Squared feature deviation |
+    | ---: | ---: | ---: | ---: |
+    | −1.5 | −2.5 | 3.75 | 2.25 |
+    | −0.5 | −0.5 | 0.25 | 0.25 |
+    | 0.5 | 0.5 | 0.25 | 0.25 |
+    | 1.5 | 2.5 | 3.75 | 2.25 |
+
+    Therefore:
+
+    $$
+    b_1 = \frac{3.75+0.25+0.25+3.75}{2.25+0.25+0.25+2.25}
+        = \frac{8}{5}
+        = 1.6\text{ minutes per km}
+    $$
+
+    ### 6.2 Find the intercept
+
+    The fitted line passes through the point of training means:
+
+    $$
+    b_0 = \bar y - b_1\bar x
+    $$
+
+    $$
+    b_0 = 5.5 - (1.6)(2.5) = 1.5\text{ minutes}
+    $$
+
+    We have now derived the line used earlier rather than guessing it.
+    """),
+
+    code(r"""
+    distance_mean = route_distance_km.mean()
+    time_mean = travel_time_minutes.mean()
+
+    centered_distance = route_distance_km - distance_mean
+    centered_time = travel_time_minutes - time_mean
+
+    slope_numerator = np.sum(centered_distance * centered_time)
+    slope_denominator = np.sum(centered_distance ** 2)
+    fitted_slope = slope_numerator / slope_denominator
+    fitted_intercept = time_mean - fitted_slope * distance_mean
+
+    print("slope numerator:", slope_numerator)
+    print("slope denominator:", slope_denominator)
+    print("fitted slope:", fitted_slope, "minutes per km")
+    print("fitted intercept:", fitted_intercept, "minutes")
+
+    assert np.isclose(fitted_slope, 1.6)
+    assert np.isclose(fitted_intercept, 1.5)
+    """),
+
+    md(r"""
+    If every $x$ value is identical, the denominator is zero. Distance did not vary,
+    so the data cannot tell us how time changes with distance. This is a data problem,
+    not a division trick to work around.
+    """),
+
+    code(r"""
+    def fit_simple_linear_regression(feature_values, target_values):
+        '''Fit one slope and intercept by ordinary least squares.'''
+        feature_array = np.asarray(feature_values, dtype=float)
+        target_array = np.asarray(target_values, dtype=float)
+
+        if feature_array.ndim != 1 or target_array.ndim != 1:
+            raise ValueError("Simple regression expects one-dimensional inputs")
+        if feature_array.shape != target_array.shape:
+            raise ValueError("Feature and target must contain the same number of rows")
+        if len(feature_array) < 2:
+            raise ValueError("At least two training rows are required")
+
+        feature_deviation = feature_array - feature_array.mean()
+        denominator = np.sum(feature_deviation ** 2)
+        if np.isclose(denominator, 0):
+            raise ValueError("Cannot fit a slope because the feature is constant")
+
+        target_deviation = target_array - target_array.mean()
+        slope = np.sum(feature_deviation * target_deviation) / denominator
+        intercept = target_array.mean() - slope * feature_array.mean()
+        return float(intercept), float(slope)
+
+
+    def predict_simple_linear_regression(feature_values, intercept, slope):
+        '''Apply a fitted one-feature line without changing its parameters.'''
+        feature_array = np.asarray(feature_values, dtype=float)
+        return intercept + slope * feature_array
+
+
+    manual_intercept, manual_slope = fit_simple_linear_regression(
+        route_distance_km,
+        travel_time_minutes,
+    )
+    manual_predictions = predict_simple_linear_regression(
+        route_distance_km,
+        manual_intercept,
+        manual_slope,
+    )
+
+    print("manual intercept:", manual_intercept)
+    print("manual slope:", manual_slope)
+    print("manual predictions:", manual_predictions)
+
+    assert np.isclose(manual_intercept, 1.5)
+    assert np.isclose(manual_slope, 1.6)
+    assert np.allclose(manual_predictions, line_predictions)
+    """),
+
+    code(r"""
+    try:
+        fit_simple_linear_regression([2, 2, 2], [3, 4, 5])
+        raise AssertionError("Expected a constant feature to raise ValueError")
+    except ValueError as error:
+        print(type(error).__name__ + ":", error)
+        assert "constant" in str(error)
+    """),
+
+    md(r"""
+    ## 7 · The loss landscape prepares us for optimization
+
+    Every possible slope and intercept defines a candidate line and therefore an MSE.
+    For any chosen slope in this one-feature example, the best matching intercept is:
+
+    $$
+    b_0 = \bar y - b_1\bar x
+    $$
+
+    We can evaluate many candidate slopes and draw their losses. This is a visual
+    search only. FND-04 will explain how gradient descent uses slope information from
+    the loss itself to move efficiently through much larger parameter spaces.
+    """),
+
+    code(r"""
+    candidate_slopes = np.linspace(-0.5, 3.5, 161)
+    candidate_losses = []
+
+    for candidate_slope in candidate_slopes:
+        candidate_intercept = time_mean - candidate_slope * distance_mean
+        candidate_prediction = candidate_intercept + candidate_slope * route_distance_km
+        candidate_losses.append(
+            mean_squared_loss(travel_time_minutes, candidate_prediction)
+        )
+
+    best_grid_position = int(np.argmin(candidate_losses))
+
+    figure, axis = plt.subplots(figsize=(7, 4))
+    axis.plot(candidate_slopes, candidate_losses, color="tab:blue")
+    axis.scatter(
+        [candidate_slopes[best_grid_position]],
+        [candidate_losses[best_grid_position]],
+        color="tab:red",
+        zorder=3,
+        label="smallest checked loss",
+    )
+    axis.axvline(manual_slope, color="tab:green", linestyle="--", label="fitted slope = 1.6")
+    axis.set_title("Training MSE for different candidate slopes")
+    axis.set_xlabel("slope (minutes per km)")
+    axis.set_ylabel("training MSE (minutes²)")
+    axis.legend()
+    figure.tight_layout()
+    plt.show()
+
+    print("best slope on this grid:", candidate_slopes[best_grid_position])
+    """),
+
+    md(r"""
+    The curve has one clear bottom near 1.6. Ordinary least squares finds that bottom
+    directly for this problem. FND-04 will begin from this concrete loss and explain
+    iterative optimization without requiring us to guess many values.
+    """),
+
+    md(r"""
+    ## 8 · From one feature to several features
+
+    With several features, the line becomes a flat surface called a hyperplane. The
+    prediction remains a weighted sum:
+
+    $$
+    \hat y_i = b + w_1x_{i1} + w_2x_{i2} + \cdots + w_dx_{id}
+    $$
+
+    - $i$ identifies one row;
+    - $j$ identifies one feature;
+    - $x_{ij}$ is feature $j$ for row $i$;
+    - $w_j$ is that feature's fitted coefficient;
+    - $d$ is the number of features;
+    - $b$ is the intercept.
+
+    In matrix form:
+
+    $$
+    \hat{\mathbf y} = X\mathbf w + b
+    $$
+
+    If $X$ has shape $(n,d)$, then $\mathbf w$ has shape $(d,)$, and the
+    prediction vector has shape $(n,)$.
+
+    We can add a column of ones to $X$ and include the intercept inside the weight
+    vector. `np.linalg.lstsq` then finds weights that minimise squared residuals using
+    stable numerical methods. We do not calculate an explicit matrix inverse.
+    """),
+
+    code(r"""
+    delivery_features = np.array(
+        [
+            [1.0, 0.0],
+            [2.0, 1.0],
+            [3.0, 0.0],
+            [4.0, 1.0],
+            [5.0, 1.0],
+        ]
+    )
+    delivery_targets = np.array([3.0, 6.0, 6.0, 9.0, 10.0])
+
+    # Columns: distance_km and rain_indicator.
+    design_matrix = np.column_stack(
+        [np.ones(len(delivery_features)), delivery_features]
+    )
+    fitted_weights, residual_sum, matrix_rank, singular_values = np.linalg.lstsq(
+        design_matrix,
+        delivery_targets,
+        rcond=None,
+    )
+    matrix_predictions = design_matrix @ fitted_weights
+
+    print("design shape:", design_matrix.shape)
+    print("weights [intercept, distance, rain]:", fitted_weights.round(3))
+    print("predictions:", matrix_predictions.round(3))
+    print("matrix rank:", matrix_rank)
+
+    assert design_matrix.shape == (5, 3)
+    assert fitted_weights.shape == (3,)
+    assert matrix_predictions.shape == (5,)
+    """),
+
+    md(r"""
+    The distance coefficient has units of minutes per kilometre. The rain-indicator
+    coefficient is the predicted difference in minutes between otherwise identical
+    rows whose rain value changes from 0 to 1.
+
+    “Otherwise identical” is a model statement. With observational data, a coefficient
+    is an adjusted association, not proof that rain or distance caused the outcome.
+
+    ### Optional mathematical bridge
+
+    FND-01 showed projections. Least squares projects the target vector onto the space
+    of predictions the feature columns can express. At the solution, the residual
+    vector is perpendicular to every design-matrix column:
+
+    $$
+    X^\top(\mathbf y-X\mathbf w)=\mathbf 0
+    $$
+
+    These are the normal equations. We use `lstsq` rather than forming
+    $(X^\top X)^{-1}$, which can make numerical instability worse. The projection
+    view is helpful for deeper study, but the manual slope calculation remains the
+    required core.
+    """),
+
+    md(r"""
+    ## 9 · Use scikit-learn after the manual implementation
+
+    The library follows the same sequence:
+
+    1. construct a model object;
+    2. call `fit` on training features and targets;
+    3. inspect the learned intercept and coefficient;
+    4. call `predict` on new feature rows;
+    5. calculate declared evidence without refitting.
+
+    First verify sklearn against our hand-fitted delivery line.
+    """),
+
+    code(r"""
+    from sklearn.linear_model import LinearRegression
+
+    sklearn_delivery_model = LinearRegression()
+    sklearn_delivery_model.fit(route_distance_km.reshape(-1, 1), travel_time_minutes)
+    sklearn_delivery_predictions = sklearn_delivery_model.predict(
+        route_distance_km.reshape(-1, 1)
+    )
+
+    print("sklearn intercept:", sklearn_delivery_model.intercept_)
+    print("sklearn slope:", sklearn_delivery_model.coef_[0])
+    print("sklearn predictions:", sklearn_delivery_predictions)
+
+    assert np.isclose(sklearn_delivery_model.intercept_, manual_intercept)
+    assert np.isclose(sklearn_delivery_model.coef_[0], manual_slope)
+    assert np.allclose(sklearn_delivery_predictions, manual_predictions)
+    """),
+
+    md(r"""
+    `reshape(-1, 1)` turns four scalar feature values into a two-dimensional table
+    with four rows and one feature column. sklearn expects feature tables to have
+    shape `(rows, features)` even when only one feature exists.
+
+    The library did not discover a different algorithm. It reproduced the same least-
+    squares calculation through a tested interface.
+    """),
+
+    md(r"""
+    ## 10 · Diagnose what the line can and cannot express
+
+    ### 10.1 Residual plot
+
+    A residual plot places predictions on the horizontal axis and signed residuals on
+    the vertical axis. A useful linear model usually leaves residuals scattered around
+    zero without a strong curve.
+    """),
+
+    code(r"""
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    axes[0].scatter(route_distance_km, travel_time_minutes, color="tab:blue", label="observed")
+    axes[0].plot(route_distance_km, manual_predictions, color="tab:red", label="fitted line")
+    for distance, actual, predicted in zip(
+        route_distance_km,
+        travel_time_minutes,
+        manual_predictions,
+    ):
+        axes[0].plot([distance, distance], [actual, predicted], color="gray", alpha=0.7)
+    axes[0].set_title("Observed routes, fitted line, and residuals")
+    axes[0].set_xlabel("distance (km)")
+    axes[0].set_ylabel("travel time (minutes)")
+    axes[0].legend()
+
+    axes[1].scatter(manual_predictions, residuals_minutes, color="tab:purple")
+    axes[1].axhline(0, color="black", linewidth=1)
+    axes[1].set_title("Residuals around zero")
+    axes[1].set_xlabel("predicted travel time (minutes)")
+    axes[1].set_ylabel("residual: actual − predicted (minutes)")
+
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** The gray segments are residuals — the vertical misses. Ordinary
-    least squares (OLS) chooses the one line that minimizes the *sum of their
-    squares*. Note it's **vertical** distance (error in predicting $y$), not
-    perpendicular distance — we're predicting $y$ from $x$, not modeling a symmetric
-    relationship (that would be PCA / total least squares). Squaring means a few
-    large misses dominate the fit — the source of OLS's outlier sensitivity (§7).
-    """),
+    Four rows are not enough for a serious diagnostic. The figure teaches how to read
+    the objects, not how to certify a production model.
 
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
+    ### 10.2 Interpolation and extrapolation
 
-    ### 4.1 The model and the loss
-    With features $\mathbf x\in\mathbb R^d$ (a bias term folded in as a constant 1),
-    weights $\mathbf w$, and stacked data $X\in\mathbb R^{n\times(d+1)}$:
-    $$\hat{\mathbf y}=X\mathbf w,\qquad
-    J(\mathbf w)=\frac1n\lVert X\mathbf w-\mathbf y\rVert_2^2\ \ (\text{MSE}).$$
+    - **Interpolation** predicts inside the observed feature range.
+    - **Extrapolation** predicts outside it.
 
-    ### 4.2 Why squared error — the probabilistic view (Lesson FND-02)
-    Assume $y_i=\mathbf w^\top\mathbf x_i+\varepsilon_i$ with $\varepsilon_i\sim
-    \mathcal N(0,\sigma^2)$ IID. The log-likelihood is
-    $\ell(\mathbf w)=-\frac{1}{2\sigma^2}\sum_i (y_i-\mathbf w^\top\mathbf x_i)^2+\text{const}$.
-    **Maximizing $\ell$ is exactly minimizing $\sum_i (y_i-\hat y_i)^2$.** So OLS is
-    MLE under Gaussian noise — that is the justification for the square.
-
-    ### 4.3 The closed-form solution (Lesson FND-01)
-    Setting $\nabla_{\mathbf w}J=0$ gives the **normal equations**
-    $X^\top X\,\mathbf w=X^\top\mathbf y$, hence
-    $$\boxed{\ \hat{\mathbf w}_{\text{OLS}}=(X^\top X)^{-1}X^\top\mathbf y\ }$$
-    — the orthogonal projection of $\mathbf y$ onto $X$'s column space. **As warned
-    in Lesson FND-01, we don't actually invert $X^\top X$ in code** (it squares the
-    condition number); we use QR/SVD via `lstsq`, or gradient descent for large $n$.
-
-    ### 4.4 Gauss–Markov assumptions (what makes OLS trustworthy)
-    Under (1) **linearity** in parameters, (2) **exogeneity** $\mathbb E[\varepsilon
-    \mid X]=0$, (3) **homoscedasticity** (constant error variance), (4)
-    **uncorrelated errors** (independence), and (5) **no perfect multicollinearity**,
-    OLS is **BLUE** — the Best (lowest-variance) Linear Unbiased Estimator. Add
-    **normality** of errors and you also get exact $t$/$F$ tests and confidence
-    intervals. Each violated assumption maps to a specific failure in §7.
-
-    ### 4.5 Regularization = MAP with a prior (Lesson FND-02)
-    Put a prior on the weights and do MAP instead of MLE:
-    - **Ridge (L2):** add $\lambda\lVert\mathbf w\rVert_2^2$. Closed form
-      $\hat{\mathbf w}=(X^\top X+\lambda I)^{-1}X^\top\mathbf y$. The $+\lambda I$
-      lifts the smallest singular values off zero — **fixing both overfitting and
-      ill-conditioning/multicollinearity** at once. This is a **Gaussian prior** on
-      $\mathbf w$. It shrinks coefficients smoothly but never to exactly zero.
-    - **Lasso (L1):** add $\lambda\lVert\mathbf w\rVert_1$. A **Laplace prior**; its
-      diamond geometry (Lesson FND-01, Fig 4) drives some coefficients **exactly to
-      zero**, doing automatic feature selection. No closed form (non-smooth) —
-      solved by coordinate descent or subgradient/proximal methods.
-    - **Elastic Net:** a mix of both.
-
-    ### 4.6 The bias–variance tradeoff
-    Expected test error decomposes as
-    $$\mathbb E[(y-\hat f(x))^2]=\underbrace{(\text{bias})^2}_{\text{too simple}}+\underbrace{\text{variance}}_{\text{too sensitive}}+\underbrace{\sigma^2}_{\text{irreducible}}.$$
-    A too-simple model (e.g. a line for a curve) has high **bias** (underfits); a
-    too-flexible model (high-degree polynomial) has high **variance** (overfits,
-    chasing noise). Regularization deliberately *adds a little bias to remove a lot
-    of variance*. We will see this U-shaped curve directly in §6.
-
-    ### 4.7 Goodness of fit: $R^2$
-    $R^2=1-\frac{\sum(y_i-\hat y_i)^2}{\sum(y_i-\bar y)^2}$ — the fraction of target
-    variance the model explains (1 = perfect, 0 = no better than predicting the
-    mean, and it can go **negative** on test data for a bad model). High training
-    $R^2$ with poor test performance is the signature of overfitting (§7).
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    A tiny linear-regression toolkit in pure NumPy: OLS (the stable way and the
-    naive way, to feel the difference), gradient descent, Ridge in closed form, and
-    an $R^2$ scorer. We verify each against the others.
+    A fitted line continues forever, but the real relationship may not.
     """),
 
     code(r"""
-    # 5.1 A minimal OLS / Ridge toolkit. Gradient fitting follows in FND-04.
-    def add_bias(X):
-        return np.c_[np.ones(len(X)), X]
+    plotted_distances = np.linspace(0, 8, 200)
+    plotted_predictions = predict_simple_linear_regression(
+        plotted_distances,
+        manual_intercept,
+        manual_slope,
+    )
 
-    def fit_ols(X, y):                       # stable: QR/SVD via lstsq (Lesson FND-01)
-        return np.linalg.lstsq(add_bias(X), y, rcond=None)[0]
-
-    def fit_ridge(X, y, lam):                # closed form: (A^T A + lam I)^-1 A^T y
-        A = add_bias(X)
-        I = np.eye(A.shape[1]); I[0, 0] = 0.0   # don't penalize the intercept
-        return np.linalg.solve(A.T @ A + lam * I, A.T @ y)
-
-    def predict(X, w):
-        return add_bias(X) @ w
-
-    def r2(y, yhat):
-        ss_res = np.sum((y - yhat) ** 2)
-        ss_tot = np.sum((y - y.mean()) ** 2)
-        return 1 - ss_res / ss_tot
-
-    # synthetic multi-feature data
-    n, d = 300, 3
-    Xd = rng.normal(size=(n, d))
-    true_w = np.array([5.0, 1.5, -2.0, 0.8])   # [intercept, w1, w2, w3]
-    yd = add_bias(Xd) @ true_w + rng.normal(0, 0.5, n)
-
-    w_ols = fit_ols(Xd, yd)
-    print("OLS (lstsq) :", w_ols.round(3))
-    print("true        :", true_w)
-    print("train R^2   :", round(r2(yd, predict(Xd, w_ols)), 4))
-    """),
-
-    code(r"""
-    # 5.2 Why we don't invert X^T X: the naive normal-equation formula loses accuracy
-    # on ill-conditioned data, while lstsq stays solid (the FND-01 lesson, applied).
-    Xill = Xd.copy()
-    Xill[:, 2] = Xill[:, 1] + 1e-6 * rng.normal(size=n)   # column 2 ~ column 1 (collinear)
-    A = add_bias(Xill)
-    w_naive = np.linalg.inv(A.T @ A) @ A.T @ yd           # DON'T do this in production
-    w_stable = np.linalg.lstsq(A, yd, rcond=None)[0]
-    w_ridge = fit_ridge(Xill, yd, lam=1.0)
-    print(f"cond(X^T X)          : {np.linalg.cond(A.T @ A):.2e}")
-    print("naive inv coefs      :", w_naive.round(2), " <- wild / unstable")
-    print("ridge (lam=1) coefs  :", w_ridge.round(2), " <- tamed by L2 penalty")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    The three figures every regression practitioner reads instinctively: residual
-    diagnostics, the bias–variance U-curve, and the regularization path.
-    """),
-
-    code(r"""
-    # Figure 2 — residual diagnostics: healthy vs heteroscedastic (variance grows with x).
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-
-    xh = np.sort(rng.uniform(0, 10, 200))
-    # left: well-behaved (constant variance)
-    yg = 1 + 0.8 * xh + rng.normal(0, 1.0, 200)
-    wg = np.linalg.lstsq(np.c_[np.ones(200), xh], yg, rcond=None)[0]
-    resg = yg - np.c_[np.ones(200), xh] @ wg
-    axes[0].scatter(np.c_[np.ones(200), xh] @ wg, resg, s=12, color="tab:green")
-    axes[0].axhline(0, color="k", lw=1)
-    axes[0].set_title("Healthy: residuals are a structureless band")
-
-    # right: heteroscedastic (variance increases with x) -> a fan shape
-    yb = 1 + 0.8 * xh + rng.normal(0, 0.3 * xh + 0.1, 200)
-    wb = np.linalg.lstsq(np.c_[np.ones(200), xh], yb, rcond=None)[0]
-    resb = yb - np.c_[np.ones(200), xh] @ wb
-    axes[1].scatter(np.c_[np.ones(200), xh] @ wb, resb, s=12, color="tab:red")
-    axes[1].axhline(0, color="k", lw=1)
-    axes[1].set_title("Heteroscedastic: tell-tale 'fan' (assumption violated)")
-    for ax in axes:
-        ax.set_xlabel("fitted value"); ax.set_ylabel("residual")
-    plt.suptitle("Figure 2 — Residual plots diagnose assumption violations")
-    plt.tight_layout()
+    figure, axis = plt.subplots(figsize=(8, 4))
+    axis.plot(plotted_distances, plotted_predictions, color="tab:red", label="linear prediction")
+    axis.scatter(route_distance_km, travel_time_minutes, color="tab:blue", label="training routes")
+    axis.axvspan(1, 4, color="tab:green", alpha=0.12, label="observed distance range")
+    axis.axvspan(4, 8, color="tab:orange", alpha=0.10, label="extrapolation region")
+    axis.set_title("The line continues beyond the evidence")
+    axis.set_xlabel("distance (km)")
+    axis.set_ylabel("predicted travel time (minutes)")
+    axis.legend()
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 2.** The residuals-vs-fitted plot is the single most informative
-    regression diagnostic. **Left:** a featureless horizontal band — assumptions
-    hold. **Right:** a **fan** that widens with the fitted value —
-    *heteroscedasticity* (error variance isn't constant). OLS is still unbiased but
-    no longer minimum-variance, and your confidence intervals are wrong. Fixes:
-    transform the target (e.g. $\log y$), use weighted least squares, or use
-    robust/heteroscedasticity-consistent standard errors. *Any* visible structure
-    (a curve, a trend) means the model is missing something.
+    A prediction at 3.5 km is interpolation. A prediction at 8 km is extrapolation.
+    The arithmetic works in both cases, but only the first lies inside the observed
+    distance range.
+
+    ### 10.3 Squared loss is sensitive to outliers
+
+    One extreme target creates a very large squared residual and can pull the line
+    toward itself. Investigate unusual rows before deleting them; they may be errors,
+    unit problems, or rare valid cases.
     """),
 
     code(r"""
-    # Figure 3 — the bias-variance tradeoff via polynomial degree.
-    def poly_design(x, degree):
-        xs = (x - x.mean()) / x.std()                 # scale for conditioning (Lesson FND-04)
-        return np.vander(xs, degree + 1, increasing=True)
+    time_with_outlier = travel_time_minutes.copy()
+    time_with_outlier[-1] = 30.0
 
-    xt = np.sort(rng.uniform(-3, 3, 60))
-    ytrue = np.sin(xt) + 0.3 * xt
-    yobs = ytrue + rng.normal(0, 0.3, len(xt))
-    # train/test split
-    idx = rng.permutation(len(xt)); tr, te = idx[:40], idx[40:]
+    outlier_intercept, outlier_slope = fit_simple_linear_regression(
+        route_distance_km,
+        time_with_outlier,
+    )
 
-    degrees = range(1, 16)
-    train_err, test_err = [], []
-    for dg in degrees:
-        Ad = poly_design(xt, dg)
-        w = np.linalg.lstsq(Ad[tr], yobs[tr], rcond=None)[0]
-        train_err.append(np.mean((Ad[tr] @ w - yobs[tr]) ** 2))
-        test_err.append(np.mean((Ad[te] @ w - yobs[te]) ** 2))
-
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-    axes[0].plot(list(degrees), train_err, "o-", label="train error")
-    axes[0].plot(list(degrees), test_err, "s-", label="test error")
-    axes[0].set_yscale("log"); axes[0].set_xlabel("polynomial degree (complexity)")
-    axes[0].set_ylabel("MSE (log)"); axes[0].legend()
-    axes[0].set_title("Train error always drops; test error is U-shaped")
-
-    xx = np.linspace(-3, 3, 200)
-    for dg, color in [(1, "tab:blue"), (4, "tab:green"), (15, "tab:red")]:
-        w = np.linalg.lstsq(poly_design(xt, dg), yobs, rcond=None)[0]
-        xs = (xx - xt.mean()) / xt.std()
-        axes[1].plot(xx, np.vander(xs, dg + 1, increasing=True) @ w,
-                     color=color, label=f"degree {dg}")
-    axes[1].scatter(xt, yobs, s=12, color="gray", alpha=0.6)
-    axes[1].set_ylim(-3, 3); axes[1].legend()
-    axes[1].set_title("Underfit (1) · good (4) · overfit (15)")
-    plt.suptitle("Figure 3 — Bias-variance: complexity vs generalization")
-    plt.tight_layout()
+    figure, axis = plt.subplots(figsize=(7, 4))
+    axis.scatter(route_distance_km, time_with_outlier, color="tab:blue", label="data with outlier")
+    axis.plot(
+        route_distance_km,
+        manual_intercept + manual_slope * route_distance_km,
+        color="tab:green",
+        label=f"original slope {manual_slope:.1f}",
+    )
+    axis.plot(
+        route_distance_km,
+        outlier_intercept + outlier_slope * route_distance_km,
+        color="tab:red",
+        linestyle="--",
+        label=f"outlier slope {outlier_slope:.1f}",
+    )
+    axis.set_title("One extreme target pulls the least-squares line")
+    axis.set_xlabel("distance (km)")
+    axis.set_ylabel("travel time (minutes)")
+    axis.legend()
+    figure.tight_layout()
     plt.show()
+
+    print("original slope:", manual_slope)
+    print("slope after extreme target:", outlier_slope)
     """),
 
     md(r"""
-    **Figure 3.** **Left:** training error falls monotonically with model complexity
-    — a more flexible model *always* fits the training data better, which is exactly
-    why training error is a liar (Lesson MLE-02). Test error is **U-shaped**: it
-    improves while we reduce bias, then worsens as variance takes over. The bottom of
-    the U is the sweet spot. **Right:** degree-1 underfits (high bias, misses the
-    curve), degree-15 overfits (high variance, wiggles through noise and explodes at
-    the edges), degree-4 is just right. Regularization lets us pick a flexible basis
-    *and* pull it back toward simplicity — the next figure.
+    ## 11 · When to use linear regression—and when not to
+
+    ### Use it when
+
+    - the target is numerical;
+    - a straight or additive relationship is a reasonable first approximation;
+    - a transparent, fast baseline is valuable;
+    - data is limited and a highly flexible model is not justified;
+    - coefficient direction and units help people inspect the model.
+
+    ### Do not rely on it unchanged when
+
+    - the target is a category rather than a numerical quantity;
+    - the relationship contains strong curves or interactions the features do not
+      represent;
+    - a few uninvestigated extreme rows dominate squared loss;
+    - future inputs lie far outside the training range;
+    - repeated entities or time dependence make an ordinary random split dishonest;
+    - the decision requires a causal effect rather than a prediction association.
+
+    ### Assumptions at beginner depth
+
+    | Question | What to inspect | If it fails |
+    | --- | --- | --- |
+    | Is the target numerical? | Target meaning and dtype | Use a task suited to the target |
+    | Is an additive line plausible? | Scatter and residual plots | Add justified features or later use a nonlinear model |
+    | Are rows evaluated independently? | Entity and time keys | Use group- or time-based boundaries |
+    | Are extreme rows understood? | Source records and units | Repair documented errors; consider robust methods later |
+    | Are prediction inputs in range? | Training-reference ranges | Flag extrapolation or gather evidence |
+    | Are coefficients being called causal? | Data-collection design | Use experiments or causal methods for causal claims |
+
+    Detailed regression inference—standard errors, confidence intervals,
+    homoscedasticity tests, and Gauss–Markov theory—is an advanced statistics path.
+    It is not required to understand how the prediction line is fitted.
+
+    ### Related methods deferred deliberately
+
+    - FND-04: gradient descent on this squared-loss objective;
+    - MLE-01: MAE, RMSE, $R^2$, and task-aligned metric selection;
+    - MLE-02: cross-validation and model-selection discipline;
+    - later regression extension: Ridge, Lasso, Elastic Net, and robust regression;
+    - CML-03 and beyond: nonlinear tree-based alternatives.
+    """),
+
+    md(r"""
+    ## 12 · Advanced intuition after the core is secure
+
+    This section is a bridge, not part of the required first pass.
+
+    ### 12.1 Why Gaussian noise leads to squared loss
+
+    FND-02 introduced probability distributions. Write the data story as:
+
+    $$
+    y_i=\hat y_i+\varepsilon_i,
+    \qquad
+    \varepsilon_i\sim\mathcal N(0,\sigma^2)
+    $$
+
+    **Symbols:** $y_i$ is an observed target; $\hat y_i$ is the model prediction;
+    $\varepsilon_i$ is unexplained error; $\mathcal N(0,\sigma^2)$ is a normal
+    distribution centred at zero with fixed variance $\sigma^2$.
+
+    Under independent errors, the negative log-likelihood is:
+
+    $$
+    -\log L
+    =\frac{n}{2}\log(2\pi\sigma^2)
+    +\frac{1}{2\sigma^2}\sum_{i=1}^{n}(y_i-\hat y_i)^2
+    $$
+
+    **Read it in two pieces:** the first term is constant when $n$ and $\sigma^2$
+    are fixed. The second is a positive constant multiplied by the sum of squared
+    residuals. Therefore, the coefficients that minimise negative log-likelihood are
+    the same coefficients that minimise squared residuals.
+
+    With residuals $[-1,2]$ and fixed variance $\sigma^2=1$:
+
+    $$
+    \sum_i r_i^2=(-1)^2+2^2=5
+    $$
+
+    A candidate with residuals $[-1,1]$ has squared sum 2 and therefore a smaller
+    Gaussian negative log-likelihood under the same fixed variance.
+
+    This does not make Gaussian noise universally true. It explains why squared loss
+    is principled under one declared data-generating assumption. Outliers and changing
+    residual spread are reasons to question that assumption.
+
+    ### 12.2 Why the matrix solution is a projection
+
+    The feature columns define all predictions a linear model can express. Least
+    squares chooses the expressible prediction vector closest to the observed target
+    vector. The remaining residual is perpendicular to every feature column.
+
+    ### 12.3 What regularization will add later
+
+    Ordinary least squares only minimises prediction residuals. Ridge and Lasso add a
+    penalty on coefficients. That introduces a new choice—the penalty strength—which
+    must be selected without using the final test. It therefore belongs after both
+    optimization and validation foundations.
+
+    Deep mastery means seeing how these ideas connect while keeping the learning order
+    honest: ordinary line first, then optimization, then controlled extensions.
+    """),
+
+    md(r"""
+    ## 13 · Mini-project: predict a Wine measurement without touching final test
+
+    We reuse the Wine dataset from FND-03, but change the task:
+
+    | Field | Definition |
+    | --- | --- |
+    | Decision | Estimate `proline` for an educational laboratory review |
+    | Prediction unit | One wine sample |
+    | Target | `proline`, a numerical chemical measurement |
+    | Features | The other 12 chemical measurements |
+    | Excluded columns | Cultivar target and generated sample ID |
+    | Prediction time | After the 12 feature measurements, before `proline` is read |
+    | Split | Training, validation, and sealed final test |
+
+    The bundled metadata does not document all physical units, so coefficient
+    interpretation remains limited. We will not invent units.
     """),
 
     code(r"""
-    # Figure 4 — the Ridge regularization path: coefficients shrink as lambda grows.
-    # Use a collinear design so the effect is dramatic.
-    p = 8
-    Xc = rng.normal(size=(150, p))
-    Xc[:, 1] = Xc[:, 0] + 0.01 * rng.normal(size=150)   # near-duplicate features
-    Xc[:, 3] = Xc[:, 2] + 0.01 * rng.normal(size=150)
-    beta = rng.normal(size=p)
-    yc = Xc @ beta + rng.normal(0, 0.5, 150)
-
-    lams = np.logspace(-2, 4, 50)
-    paths = []
-    for lam in lams:
-        A = np.c_[np.ones(150), Xc]
-        I = np.eye(p + 1); I[0, 0] = 0
-        w = np.linalg.solve(A.T @ A + lam * I, A.T @ yc)
-        paths.append(w[1:])                              # drop intercept
-    paths = np.array(paths)
-
-    fig, ax = plt.subplots()
-    for j in range(p):
-        ax.plot(lams, paths[:, j], label=f"w{j}")
-    ax.set_xscale("log"); ax.set_xlabel("lambda (regularization strength)")
-    ax.set_ylabel("coefficient value")
-    ax.set_title("Figure 4 — Ridge path: stronger penalty shrinks all coefficients toward 0")
-    ax.legend(ncol=2, fontsize=8)
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 4.** At $\lambda\to0$ (left) we recover OLS — and on this collinear data
-    the coefficients are large and unstable (the near-duplicate features fight each
-    other with huge offsetting weights). As $\lambda$ grows, Ridge **shrinks** every
-    coefficient smoothly toward zero, splitting the credit between correlated
-    features and stabilizing the solution. Lasso's path would instead drive some
-    coefficients to *exactly* zero (selection). Choosing $\lambda$ is a
-    cross-validation problem (Lesson MLE-02): pick the value that minimizes *test*
-    error — the bottom of an implicit U-curve.
-    """),
-
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause (assumption violated) | Mitigation |
-    |---|---|---|---|
-    | **Nonlinearity** | Curved structure in residual plot; underfit | Linearity assumption | Add polynomial/interaction features; use a nonlinear model (trees, §CML-03) |
-    | **Heteroscedasticity** | Fan-shaped residuals (Fig 2) | Constant-variance assumption | Transform target ($\log$); weighted LS; robust SEs |
-    | **Outliers** | One point swings the whole line | Squared loss over-weights extremes | Huber/quantile loss; robust regression; investigate the point |
-    | **Multicollinearity** | Huge, sign-flipping, unstable coefficients | Near-dependent features (Lesson FND-01) | Drop/merge features; **Ridge**; PCA |
-    | **Overfitting** | High train $R^2$, poor test $R^2$ | Too many features / too flexible | Regularize; fewer features; more data; CV |
-    | **Extrapolation** | Confident, wildly wrong outside training range | Model assumed valid everywhere | Flag out-of-range inputs; don't extrapolate |
-    | **Regression to the mean** | "Worst performers improved after intervention!" | Mistaking noise reversion for an effect | Use a control group; randomized experiment |
-
-    The cell shows OLS's **outlier fragility** — one bad point, and squared error
-    drags the entire fit.
-    """),
-
-    code(r"""
-    # A single outlier wrecks an OLS fit (squared loss over-penalizes the big residual).
-    xo = np.sort(rng.uniform(0, 10, 50))
-    yo = 2 + 1.0 * xo + rng.normal(0, 0.7, 50)
-    yo_out = yo.copy(); yo_out[25] += 40                  # inject one extreme outlier
-
-    A = np.c_[np.ones(50), xo]
-    w_clean = np.linalg.lstsq(A, yo, rcond=None)[0]
-    w_dirty = np.linalg.lstsq(A, yo_out, rcond=None)[0]
-
-    fig, ax = plt.subplots()
-    ax.scatter(xo, yo_out, s=18, color="tab:blue")
-    ax.plot(xo, A @ w_clean, "g-", lw=2, label=f"no outlier: slope {w_clean[1]:.2f}")
-    ax.plot(xo, A @ w_dirty, "r--", lw=2, label=f"with outlier: slope {w_dirty[1]:.2f}")
-    ax.set_title("Figure 5 — One outlier tilts the OLS line (squared-loss fragility)")
-    ax.legend()
-    plt.show()
-    print("The single outlier changed the slope materially — MSE has no robustness.")
-    """),
-
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
-
-    scikit-learn provides `LinearRegression` (OLS), `Ridge`, `Lasso`, and
-    `ElasticNet`, plus the all-important `Pipeline` + `StandardScaler` (regularized
-    models *require* scaled features, since the penalty treats all coefficients on
-    one scale — Lesson FND-04's conditioning lesson again). What the library adds:
-    robust solvers, cross-validated variants (`RidgeCV`, `LassoCV`) that pick
-    $\lambda$ for you, sparse support, and battle-tested numerics.
-    """),
-
-    code(r"""
-    from sklearn.linear_model import LinearRegression, Ridge, Lasso
-    from sklearn.pipeline import make_pipeline
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.datasets import load_wine
+    from sklearn.impute import SimpleImputer
     from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
 
-    Xtr, Xte, ytr, yte = train_test_split(Xc, yc, test_size=0.3, random_state=0)
+    wine_dataset = load_wine(as_frame=True)
+    wine_frame = wine_dataset.frame.rename(
+        columns={"od280/od315_of_diluted_wines": "od280_od315_of_diluted_wines"}
+    )
+    wine_frame.insert(
+        0,
+        "sample_id",
+        [f"wine_{row_number:03d}" for row_number in range(len(wine_frame))],
+    )
 
-    ols = LinearRegression().fit(Xtr, ytr)
-    ridge = make_pipeline(StandardScaler(), Ridge(alpha=10.0)).fit(Xtr, ytr)
-    lasso = make_pipeline(StandardScaler(), Lasso(alpha=0.1)).fit(Xtr, ytr)
+    project_target_column = "proline"
+    project_excluded_columns = {"sample_id", "target", project_target_column}
+    project_feature_columns = [
+        column for column in wine_frame.columns
+        if column not in project_excluded_columns
+    ]
 
-    for name, model in [("OLS", ols), ("Ridge", ridge), ("Lasso", lasso)]:
-        print(f"{name:6s}  test R^2 = {model.score(Xte, yte):.4f}")
+    project_X = wine_frame[project_feature_columns]
+    project_y = wine_frame[project_target_column]
+    project_ids = wine_frame["sample_id"]
 
-    # Lasso's sparsity: how many coefficients did it zero out?
-    lasso_coef = lasso.named_steps["lasso"].coef_
-    print(f"\\nLasso zeroed {np.sum(np.abs(lasso_coef) < 1e-8)}/{len(lasso_coef)} coefficients "
-          f"(automatic feature selection).")
+    X_development, X_test, y_development, y_test, id_development, id_test = train_test_split(
+        project_X,
+        project_y,
+        project_ids,
+        test_size=0.20,
+        random_state=42,
+    )
+    X_train, X_validation, y_train, y_validation, id_train, id_validation = train_test_split(
+        X_development,
+        y_development,
+        id_development,
+        test_size=0.25,
+        random_state=42,
+    )
 
-    # Verify sklearn OLS == our scratch OLS on the same data:
-    w_scratch = fit_ols(Xtr, ytr)
-    print("scratch vs sklearn OLS intercept match:",
-          np.allclose(w_scratch[0], ols.intercept_, atol=1e-6))
+    print("training rows:", len(X_train))
+    print("validation rows:", len(X_validation))
+    print("sealed test rows:", len(X_test))
+    print("feature count:", len(project_feature_columns))
+
+    assert len(X_train) == 106
+    assert len(X_validation) == 36
+    assert len(X_test) == 36
+    assert set(id_train).isdisjoint(id_validation)
+    assert set(id_train).isdisjoint(id_test)
+    assert set(id_validation).isdisjoint(id_test)
     """),
 
     md(r"""
-    **Scratch vs production.** sklearn's `LinearRegression` returns the same fit as
-    our `fit_ols` — no magic, just better solvers and ergonomics. The real
-    value-adds: `Pipeline` guarantees the scaler is fit on *train only* (preventing
-    leakage, Lesson MLE-02), `RidgeCV`/`LassoCV` choose the penalty by cross-
-    validation, and everything is vectorized and stable. Note Lasso zeroing
-    coefficients on the collinear features — exactly the L1 sparsity we predicted
-    geometrically in Lesson FND-01.
+    We create the split before learning the baseline, imputation values, or regression
+    coefficients. The final test partition is now sealed and will not be transformed,
+    predicted, or scored in this lesson.
+
+    The baseline learns only the training-target mean.
     """),
 
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — Insurance Premium Pricing
+    code(r"""
+    frozen_baseline_proline = float(y_train.mean())
+    validation_baseline_predictions = np.full(
+        len(y_validation),
+        frozen_baseline_proline,
+    )
+    validation_baseline_mse = mean_squared_loss(
+        y_validation,
+        validation_baseline_predictions,
+    )
 
-    **Scenario.** An insurer must set **annual premiums** from customer features
-    (age, vehicle, region, claim history). A linear/GLM model predicts expected
-    claim cost; the premium is that plus a loaded margin.
-
-    **Why linear (not a black box) here?**
-    - **Regulation:** in most jurisdictions insurers must *justify* pricing and prove
-      it isn't unfairly discriminatory. Every coefficient is an auditable,
-      signed effect — "+$X per year of age" — which regulators can inspect.
-    - **Stability & monitoring:** coefficients are easy to track over time and across
-      segments for fairness and drift.
-
-    **Business objectives:** price risk accurately, stay compliant, remain
-    competitive (overpricing loses customers; underpricing loses money).
-
-    **Cost of mistakes**
-    - **Underprediction** → premiums too low → underwriting losses.
-    - **Overprediction** → premiums too high → customers churn to competitors.
-    - **Unexplainable model** → regulatory rejection, fines, reputational damage.
-    The *asymmetry* of these costs may call for quantile/asymmetric loss, not plain
-    MSE.
-
-    **Constraints:** protected attributes (and proxies) must be handled per law;
-    coefficients must be signed sensibly (monotonicity often required); the model
-    must be documented.
-
-    **KPIs:** loss ratio (claims/premiums), predictive error on held-out claims,
-    coefficient stability across retrains, fairness metrics across protected groups,
-    and competitiveness (quote-to-bind rate).
+    print("training-mean baseline:", round(frozen_baseline_proline, 3))
+    print("validation baseline MSE:", round(validation_baseline_mse, 3))
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
-
-    - **Latency / throughput / cost.** Inference is a single dot product — microsecond
-      latency, trivial to scale, the cheapest possible model to serve. Training is
-      closed-form or a few GD steps.
-    - **Interpretability.** Coefficients *are* the explanation — but only comparable
-      across features if inputs are **standardized**; otherwise a big coefficient may
-      just reflect a small-scale feature. Report standardized coefficients for
-      importance.
-    - **Monitoring & drift.** Watch the **residual distribution** over time: a
-      growing bias or widening spread signals concept drift (Lesson PROD-05). Track
-      coefficient stability across retrains — sudden swings often mean
-      multicollinearity or a data-pipeline change.
-    - **Retraining.** Cheap to retrain; schedule on a cadence or trigger on residual
-      drift. Persist the scaler with the model so serving matches training.
-    - **Explainability & regulation.** Linear models are the gold standard for
-      auditability — a major reason they persist in finance, insurance, and
-      healthcare even when a boosted tree scores higher.
-    - **Reliability.** Guard against **extrapolation**: flag or clip inputs outside
-      the training range, where linear extrapolation is confidently wrong.
+    The Pipeline includes median imputation to make the input contract explicit. The
+    current dataset has no missing values, so the imputer changes nothing. We do not
+    add a scaler: ordinary unregularized least squares does not require equal feature
+    scales to define its predictions. Scaling becomes important when coefficient
+    penalties or numerical conditioning require it.
     """),
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    code(r"""
+    project_pipeline = Pipeline(
+        steps=[
+            ("median_imputer", SimpleImputer(strategy="median")),
+            ("linear_regression", LinearRegression()),
+        ]
+    )
 
-    **OLS vs Ridge vs Lasso vs Elastic Net:**
+    project_pipeline.fit(X_train, y_train)
+    validation_predictions = project_pipeline.predict(X_validation)
+    validation_linear_mse = mean_squared_loss(y_validation, validation_predictions)
 
-    | Dimension | OLS | Ridge (L2) | Lasso (L1) | Elastic Net |
-    |---|---|---|---|---|
-    | Handles multicollinearity | Poorly | **Well** | Picks one of a group | Well |
-    | Feature selection | No | No (shrinks) | **Yes (zeros)** | Yes |
-    | Closed form | Yes | Yes | No | No |
-    | Best when | Few, clean features | Many correlated features | Sparse true model | Correlated + sparse |
-    | Prior (Lesson FND-02) | None (MLE) | Gaussian | Laplace | Mix |
+    print("validation baseline MSE:", round(validation_baseline_mse, 3))
+    print("validation linear-regression MSE:", round(validation_linear_mse, 3))
+    print("MSE reduction:", round(validation_baseline_mse - validation_linear_mse, 3))
 
-    **Linear regression vs flexible models (preview of Section 02):**
-
-    | Dimension | Linear Regression | XGBoost / Neural Net |
-    |---|---|---|
-    | Accuracy on complex data | Lower | **Higher** |
-    | Interpretability | **High** (signed coefficients) | Low (needs SHAP, MLE-05) |
-    | Latency / cost | **Lowest** | Higher |
-    | Data needed | Low | High |
-    | Captures nonlinearity/interactions | Only if hand-engineered | **Automatically** |
-    | Regulatory suitability | **High** | Lower (explainability burden) |
-    | Maintenance | Low | Higher |
-
-    **The senior lesson:** start linear. It's the baseline that tells you whether the
-    extra accuracy of a complex model is worth its interpretability, latency, and
-    maintenance cost. Often it isn't.
+    assert len(validation_predictions) == len(y_validation)
+    assert validation_linear_mse < validation_baseline_mse
     """),
 
-    # ============================================ 12. Interview Prep
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
-
-    **Common questions**
-    - *Derive the OLS estimator.* (Section 4.3 — normal equations from $\nabla J=0$.)
-    - *Why squared error?* → Gaussian-noise MLE (Section 4.2). Bonus: contrast with
-      MAE (Laplace noise, robust to outliers, predicts the median not the mean).
-
-    **Deep-dive questions**
-    - *State the Gauss–Markov assumptions and what each buys you.* (Section 4.4.)
-    - *Ridge vs Lasso — mechanism and use case.* → L2 shrinks (Gaussian prior), L1
-      selects (Laplace prior, diamond corners); cite Lesson FND-01 Fig 4.
-    - *Explain bias–variance and how $\lambda$ moves along it.* (Sections 4.6, 6.)
-
-    **Whiteboard questions**
-    - "Implement OLS and Ridge from scratch." (Section 5 — and explain why you use
-      `lstsq`/`solve`, not `inv`.)
-    - "Given a residual-vs-fitted plot, diagnose the model." (Section 6, Fig 2.)
-
-    **Strong vs weak answers**
-    - *"Your $R^2$ is 0.95 on train but the model is useless live."*
-      - **Weak:** "Need more data."
-      - **Strong:** "Train $R^2$ measures fit, not generalization — classic
-        overfitting. I'd check the train/test gap, add regularization or remove
-        features, cross-validate $\lambda$, and confirm there's no leakage inflating
-        the offline number."
-    - *"Two features are correlated — does it matter?"*
-      - **Weak:** "No, regression handles it."
-      - **Strong:** "It inflates coefficient variance and makes them unstable/
-        uninterpretable (multicollinearity). Predictions may be fine, but individual
-        coefficients aren't trustworthy. I'd use Ridge, drop/merge the features, or
-        report them jointly."
-
-    **Follow-ups:** "How do you choose $\lambda$?" (CV). "MAE vs MSE — when each?"
-    (outliers → MAE/Huber; predict mean → MSE, median → MAE). "Is a high coefficient
-    an important feature?" (only if standardized).
-
-    **Common mistakes:** inverting $X^\top X$ in code; forgetting to scale before
-    regularizing; interpreting raw coefficients across different feature scales;
-    confusing correlation/causation in coefficients; trusting train $R^2$;
-    extrapolating beyond the training range.
+    The fixed linear model has a smaller validation MSE than the frozen mean baseline
+    for this split. Unlike the training MSE comparison, these rows did not determine
+    either model. This provides evidence about generalisation to similar unseen rows.
+    It is still not a final performance claim, and we made no model choice from the
+    final test.
     """),
 
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    code(r"""
+    validation_residuals = y_validation.to_numpy() - validation_predictions
+    project_regression = project_pipeline.named_steps["linear_regression"]
+    coefficient_table = pd.DataFrame(
+        {
+            "feature": project_feature_columns,
+            "coefficient": project_regression.coef_,
+        }
+    ).sort_values("coefficient")
 
-    1. **What is it?** Define the linear model and the OLS objective in one breath.
-    2. **Why was it invented?** Why least squares, and why does it still ship in
-       2020s production?
-    3. **How does it work?** Derive the normal equations *or* describe the GD fit.
-    4. **Why does it work?** Why is squared error the "right" loss (probabilistically)?
-    5. **When to use it?** Name three situations where you'd pick it over XGBoost.
-    6. **When NOT to use it?** Name three assumption violations and their symptoms.
-    7. **Tradeoffs?** OLS vs Ridge vs Lasso; linear vs flexible models.
-    8. **How would you productionize it?** Pipeline, scaling, monitoring, retraining,
-       and (for a regulated domain) explainability.
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].scatter(validation_predictions, validation_residuals, color="tab:blue")
+    axes[0].axhline(0, color="black", linewidth=1)
+    axes[0].set_title("Validation residuals — fixed linear model")
+    axes[0].set_xlabel("predicted proline")
+    axes[0].set_ylabel("actual − predicted proline")
+
+    axes[1].barh(coefficient_table["feature"], coefficient_table["coefficient"], color="tab:purple")
+    axes[1].set_title("Fitted coefficients — associations, not causes")
+    axes[1].set_xlabel("coefficient in undocumented source units")
+
+    figure.tight_layout()
+    plt.show()
+
+    print("validation residual mean:", round(float(validation_residuals.mean()), 3))
     """),
 
-    # ============================================ 14. Exercises
     md(r"""
-    ## 14 · Exercises, Self-Check, and Solutions
+    Coefficient signs describe the fitted association after accounting for the other
+    included features. Different feature units make raw coefficient magnitudes
+    incomparable as “importance.” Correlated features can also share or exchange
+    coefficient weight.
 
-    **Worked example:** for points `(0,1)` and `(2,5)`, the line has slope 2 and
-    intercept 1. Predictions are `(1,5)`, residuals are zero, and MSE is zero.
-
-    **Guided practice (25 min):** calculate predictions, residuals, and MSE for
-    `x=[0,1,2]`, `y=[1,3,6]`, using `ŷ=1+2x`. Hint: make a three-column table.
-    Self-check: predictions are `[1,3,5]`; MSE is `1/3`.
-
-    **Independent practice (45 min):** split a small regression dataset once, fit a
-    mean-prediction baseline and sklearn `LinearRegression` on training data, then
-    report test MAE and RMSE. Explain whether the model earns its complexity.
-
-    **Challenge extension (60 min):** add one extreme outlier to training data only,
-    refit, and compare coefficients and test errors. Do not use k-fold CV, Lasso
-    coordinate descent, calibration, or fairness tooling yet; those belong to later
-    modules.
-
-    <details><summary><strong>Solution and scoring rubric</strong></summary>
-
-    The guided result is `residuals=[0,0,1]`, squared errors `[0,0,1]`, MSE `1/3`.
-    For the independent task, full credit requires split-before-fit, a baseline,
-    metrics on untouched test rows, and a plain-language conclusion. Award 3 points
-    for the calculation, 4 for leak-free code, and 3 for interpretation. Common
-    mistakes: evaluating on training data, fitting preprocessing before splitting,
-    and confusing residual with squared error. **Readiness threshold: 8/10.**
-    </details>
+    The validation residual plot can reveal curvature, changing spread, and extreme
+    misses. It cannot prove future stability or causation.
     """),
 
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    Linear regression is Section 01 made concrete: a linear model (FND-01) fit by minimizing
-    a Gaussian-NLL loss (FND-02), with Ridge/
-    Lasso as priors that trade a little bias for much less variance. It is the
-    interpretable, fast, regulation-friendly baseline against which every fancier
-    model must justify itself.
+    code(r"""
+    project_partition_manifest = pd.concat(
+        [
+            pd.DataFrame({"sample_id": id_train, "partition": "train"}),
+            pd.DataFrame({"sample_id": id_validation, "partition": "validation"}),
+            pd.DataFrame({"sample_id": id_test, "partition": "test"}),
+        ],
+        ignore_index=True,
+    )
 
-    **Next in the canonical route:** `FND-04 · Optimization and Gradient Descent` uses
-    this concrete squared-loss surface to derive iterative learning. Logistic
-    regression follows after optimization.
+    project_result = {
+        "target": project_target_column,
+        "features": project_feature_columns,
+        "training_mean_baseline": frozen_baseline_proline,
+        "validation_baseline_mse": validation_baseline_mse,
+        "validation_linear_mse": validation_linear_mse,
+        "pipeline": project_pipeline,
+        "partition_manifest": project_partition_manifest,
+        "test_status": "sealed — not transformed, predicted, or scored",
+    }
+
+    print("project target:", project_result["target"])
+    print("partition counts:\n", project_partition_manifest["partition"].value_counts())
+    print("test status:", project_result["test_status"])
+
+    assert project_partition_manifest["sample_id"].is_unique
+    assert len(project_partition_manifest) == len(wine_frame)
+    assert project_result["test_status"].startswith("sealed")
+
+    print("\nLinear-regression mini-project checks passed.")
+    """),
+
+    md(r"""
+    ## 14 · Exercises, self-check, and solutions
+
+    **Estimated practice time:** 2–3 hours.
+
+    ### Worked example
+
+    For the rule $\hat y=2+3x$ and one row $x=4, y=15$:
+
+    - prediction: $2+3(4)=14$;
+    - residual: $15-14=1$;
+    - squared residual: $1^2=1$.
+
+    The slope has target units per feature unit. The residual has target units. The
+    squared residual has squared target units.
+
+    ### Guided practice
+
+    1. For `x=[1,2,3]`, `y=[2,4,7]`, calculate the target mean and baseline MSE.
+    2. Using the candidate line $\hat y=-0.5+2.5x$, calculate every prediction,
+       residual, squared residual, and MSE.
+    3. Calculate the least-squares slope numerator and denominator for the same data.
+    4. Calculate the intercept and prove the fitted line passes through
+       $(\bar x,\bar y)$.
+    5. Fit the line with `fit_simple_linear_regression` and compare your hand values.
+
+    ### Independent practice
+
+    6. Create eight rows of advertising spend and sales. Keep units visible, fit a
+       training-mean baseline and a one-feature line, then compare validation MSE.
+    7. Add a second feature and explain every design-matrix shape and coefficient unit.
+    8. Draw a residual plot and identify one visible pattern the line cannot represent.
+    9. Make predictions just inside and far outside the training feature range. Label
+       interpolation and extrapolation and explain why arithmetic certainty is not
+       evidence certainty.
+
+    ### Challenge
+
+    Rebuild the Wine `proline` project without copying its code. Include:
+
+    - a written task frame and excluded-column explanation;
+    - disjoint training, validation, and sealed final-test partitions;
+    - a training-mean baseline;
+    - a Pipeline containing imputation and `LinearRegression`;
+    - validation MSE calculated with your own function;
+    - a residual table and plot;
+    - coefficient units and association caveats;
+    - a partition manifest and at least six assertions;
+    - no Ridge, Lasso, gradient descent, cross-validation, $R^2$, or test score.
+
+    ### Self-check before reading solutions
+
+    For every number, ask:
+
+    - Which rows taught it?
+    - What unit does it have?
+    - Is it an actual value, prediction, residual, squared residual, or average loss?
+    - Is the feature inside the observed range?
+    - Am I making a prediction claim or an unsupported causal claim?
+    """),
+
+    md(r"""
+    ### Solution and scoring rubric
+
+    1. The target mean is $13/3\approx4.333$. Calculate the baseline by subtracting
+       this training mean from every target, squaring, and averaging.
+    2. Predictions are `[2, 4.5, 7]`; residuals are `[0, -0.5, 0]`; squared residuals
+       are `[0, 0.25, 0]`; MSE is $0.25/3\approx0.0833$.
+    3. Centre both arrays first. The slope numerator is 5 and denominator is 2, so
+       the slope is 2.5.
+    4. The intercept is $\bar y-b_1\bar x=4.333-2.5(2)\approx-0.667$. Note that the
+       fitted intercept differs from the candidate line in Question 2.
+    5. The function should return intercept about −0.667 and slope 2.5. Its fitted
+       MSE is smaller than the candidate line's MSE.
+    6. Freeze the mean and line after fitting on training rows. Validation values must
+       not change either fit.
+    7. For shape `(n,2)`, two coefficients produce one prediction per row. State each
+       coefficient as target units per corresponding feature unit.
+    8. A curve or trend means the additive straight-line representation is incomplete.
+    9. Extrapolated arithmetic can be precise while the relationship is unsupported.
+
+    Challenge scoring:
+
+    | Skill | Points |
+    | --- | ---: |
+    | Correct task frame and feature availability | 2 |
+    | Manual baseline, predictions, residuals, and MSE | 3 |
+    | Manual slope and intercept calculation | 3 |
+    | Leak-free partitions and Pipeline | 3 |
+    | Honest validation comparison | 3 |
+    | Residual and extrapolation diagnosis | 2 |
+    | Coefficient units and causal caution | 2 |
+    | Assertions and sealed final test | 2 |
+
+    Maximum: 20 points.
+
+    **Common mistakes:** fitting before defining the target, learning the baseline from
+    validation, reversing the residual sign midway, forgetting to square residuals,
+    reporting MSE in target units rather than squared units, using a constant feature,
+    treating an identifier as a feature, comparing raw coefficient magnitudes across
+    different units, selecting choices from final-test results, and interpreting a
+    coefficient as causal.
+
+    **Readiness threshold:** 16/20, including correct hand calculations, a baseline,
+    split-before-fit code, a validation-only comparison, and a sealed final test.
+    """),
+
+    md(r"""
+    ## Ready to move on?
+
+    ### Quick check
+
+    You are ready for FND-04 when you can, without copying this notebook:
+
+    - distinguish a numerical regression target from a categorical target;
+    - define the prediction unit, feature, target, and prediction time;
+    - calculate and freeze a training-mean baseline;
+    - explain slope and intercept with units;
+    - calculate predictions, residuals, squared residuals, and MSE manually;
+    - derive the one-feature least-squares slope and intercept from centred values;
+    - explain why a constant feature cannot determine a slope;
+    - implement simple regression and reproduce it with sklearn;
+    - trace shapes through a multi-feature weighted sum;
+    - compare a fixed model with its baseline using validation data only;
+    - diagnose residual structure, outlier sensitivity, and extrapolation;
+    - explain why coefficients are associations rather than causal effects;
+    - complete the mini-project with at least 16/20 points.
+
+    ### Teach it back
+
+    Starting from the four delivery routes, explain the entire chain:
+
+    **training mean → baseline → line → prediction → residual → squared residual →
+    MSE → fitted slope and intercept → validation comparison.**
+
+    Explain the unit of every quantity and name exactly which rows are allowed to
+    determine it.
+
+    ### Memory aid
+
+    **Linear regression fits a weighted sum by choosing coefficients that make the
+    training squared residuals as small as possible.**
+
+    FND-04 will use this exact squared-loss objective to explain gradient descent.
     """),
 ]
+
 
 build("02_classical_ml/01_linear_regression.ipynb", cells)

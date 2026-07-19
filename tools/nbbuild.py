@@ -41,6 +41,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # without mutating the checked-in build artifacts.
 NB_DIR = os.environ.get("NB_OUTPUT_DIR", os.path.join(ROOT, "notebooks"))
 CURRICULUM_PATH = os.path.join(ROOT, "docs", "CURRICULUM_PATH.json")
+SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06"}
 
 
 def _curriculum_metadata(rel_path: str) -> dict:
@@ -183,30 +184,6 @@ def _student_lesson_companion_cell(title: str, module_id: str):
     4. Which assumption could make the result misleading?
     5. What simpler or safer alternative would you choose when that assumption fails?
 
-    ### Code walkthrough and expected-result contract
-
-    For the first implementation, annotate: inputs → shapes/units → initialization →
-    central computation → intermediate output → final output → verification. Before
-    execution, record the expected value, range, or shape and what it would mean.
-
-    Distinguish these outcomes:
-
-    | Outcome | Interpretation | Next action |
-    |---|---|---|
-    | Exception, non-finite value, impossible shape | Code or data-contract failure | Inspect the first violated boundary |
-    | Output has valid type/shape but weak metric | Experiment ran; method may be poor | Diagnose data, assumptions, and baseline comparison |
-    | Strong metric on training data only | Insufficient evidence | Evaluate with the declared validation design |
-    | Expected output on untouched data | Supports one scoped claim | Record limitations; do not generalize beyond evidence |
-
-    ### Debugging table
-
-    | Symptom | Likely cause | Inspect | Scoped fix |
-    |---|---|---|---|
-    | Shape/type error | Interface mismatch | Shapes, dtypes, feature names | Repair the boundary, not downstream symptoms |
-    | NaN/Inf or divergence | Invalid input or unstable update | Raw values, loss, gradients, learning rate | Clean/validate input or change one optimization control |
-    | Implausibly strong result | Leakage or invalid split | Fit boundaries, timestamps, duplicate entities | Rebuild the evaluation path before tuning |
-    | Different repeated result | Uncontrolled state | Seeds, data order, train/eval mode, versions | Record and control randomness intentionally |
-    | Plausible output but poor result | Wrong assumptions or representation | Baseline, slices, residuals/errors | Prefer a justified alternative; do not debug valid code as broken |
     """)
 
 
@@ -246,30 +223,6 @@ def _legacy_student_lesson_companion_cell(title: str):
     | Prefer instead | At least one simpler baseline and one alternative for a failed assumption |
     | Evidence | Metric, diagnostic, or constraint that supports the choice |
 
-    ### Code walkthrough and expected-result contract
-
-    For the first implementation, annotate: inputs → shapes/units → initialization →
-    central computation → intermediate output → final output → verification. Before
-    execution, record the expected value, range, or shape and what it would mean.
-
-    Distinguish these outcomes:
-
-    | Outcome | Interpretation | Next action |
-    |---|---|---|
-    | Exception, non-finite value, impossible shape | Code or data-contract failure | Inspect the first violated boundary |
-    | Output has valid type/shape but weak metric | Experiment ran; method may be poor | Diagnose data, assumptions, and baseline comparison |
-    | Strong metric on training data only | Insufficient evidence | Evaluate with the declared validation design |
-    | Expected output on untouched data | Supports one scoped claim | Record limitations; do not generalize beyond evidence |
-
-    ### Debugging table
-
-    | Symptom | Likely cause | Inspect | Scoped fix |
-    |---|---|---|---|
-    | Shape/type error | Interface mismatch | Shapes, dtypes, feature names | Repair the boundary, not downstream symptoms |
-    | NaN/Inf or divergence | Invalid input or unstable update | Raw values, loss, gradients, learning rate | Clean/validate input or change one optimization control |
-    | Implausibly strong result | Leakage or invalid split | Fit boundaries, timestamps, duplicate entities | Rebuild the evaluation path before tuning |
-    | Different repeated result | Uncontrolled state | Seeds, data order, train/eval mode, versions | Record and control randomness intentionally |
-    | Plausible output but poor result | Wrong assumptions or representation | Baseline, slices, residuals/errors | Prefer a justified alternative; do not debug valid code as broken |
     """)
 
 
@@ -389,44 +342,45 @@ def build(rel_path: str, cells, kernel: str = "python3") -> str:
     title = _lesson_title(cells)
     module_id = _curriculum_metadata(rel_path)["id"]
     cells.insert(1, _learner_navigation_cell(rel_path))
-    objective_index = next(
-        (index for index, cell in enumerate(cells) if cell.cell_type == "markdown" and "## 1" in cell.source),
-        1,
-    )
-    cells.insert(objective_index + 1, _student_lesson_companion_cell(title, module_id))
-    if not rel_path.startswith(("00_prerequisites/", "01_ml_foundations/")):
-        insert_at = 1
-        for index, cell in enumerate(cells):
-            if cell.cell_type == "markdown" and "## 1" in cell.source:
-                insert_at = index + 1
-                break
-        cells.insert(insert_at, _notation_support_cell())
-    if module_id in CORE_MASTERY:
-        foundation_index = next(
-            (
-                index
-                for index, cell in enumerate(cells)
-                if cell.cell_type == "markdown"
-                and ("## 4 ·" in cell.source or "## 4." in cell.source)
-            ),
-            objective_index + 2,
+    if module_id not in SELF_CONTAINED_LESSON_IDS:
+        objective_index = next(
+            (index for index, cell in enumerate(cells) if cell.cell_type == "markdown" and "## 1" in cell.source),
+            1,
         )
-        beginner_cells = [md(CORE_MASTERY[module_id])]
-        if module_id in CORE_CODE:
-            beginner_cells.append(code(CORE_CODE[module_id]))
-        if module_id in ADVANCED_SECTION_NOTES:
-            beginner_cells.append(
-                md(
-                    f"""
-                    > **Advanced-path boundary.** {ADVANCED_SECTION_NOTES[module_id]}
-                    > You may read the remaining derivations now, but they are not
-                    > required for the first mastery attempt.
-                    """
-                )
+        cells.insert(objective_index + 1, _student_lesson_companion_cell(title, module_id))
+        if not rel_path.startswith(("00_prerequisites/", "01_ml_foundations/")):
+            insert_at = 1
+            for index, cell in enumerate(cells):
+                if cell.cell_type == "markdown" and "## 1" in cell.source:
+                    insert_at = index + 1
+                    break
+            cells.insert(insert_at, _notation_support_cell())
+        if module_id in CORE_MASTERY:
+            foundation_index = next(
+                (
+                    index
+                    for index, cell in enumerate(cells)
+                    if cell.cell_type == "markdown"
+                    and ("## 4 ·" in cell.source or "## 4." in cell.source)
+                ),
+                objective_index + 2,
             )
-        cells[foundation_index:foundation_index] = beginner_cells
-    cells.append(_lesson_close_cell(title, module_id))
-    cells.append(_required_mastery_gate_cell(rel_path))
+            beginner_cells = [md(CORE_MASTERY[module_id])]
+            if module_id in CORE_CODE:
+                beginner_cells.append(code(CORE_CODE[module_id]))
+            if module_id in ADVANCED_SECTION_NOTES:
+                beginner_cells.append(
+                    md(
+                        f"""
+                        > **Advanced-path boundary.** {ADVANCED_SECTION_NOTES[module_id]}
+                        > You may read the remaining derivations now, but they are not
+                        > required for the first mastery attempt.
+                        """
+                    )
+                )
+            cells[foundation_index:foundation_index] = beginner_cells
+        cells.append(_lesson_close_cell(title, module_id))
+        cells.append(_required_mastery_gate_cell(rel_path))
     nb = new_notebook(cells=cells)
     nb.metadata.update(
         {

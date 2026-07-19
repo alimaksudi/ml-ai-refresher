@@ -4,7 +4,7 @@ This file is the **build tracker**. Each `/loop` iteration: read this file,
 build the next unchecked notebook(s), tick them off, update "Next up".
 
 - **Status:** COMPLETE
-- **Built:** 62 / 62
+- **Built:** 63 / 63
 - **Next up:** —
 
 Legend: `[x]` built & verified · `[~]` in progress · `[ ]` not started
@@ -17,8 +17,8 @@ the machine-validated teaching order is defined in
 
 The implemented Foundations → Classical ML path is:
 
-1. PRE-01 → PRE-02 → PRE-03 → PRE-04 → FND-01 → FND-02
-2. FND-03 Data workflow, problem framing, baseline, and first holdout
+1. PRE-01 → PRE-02 → PRE-03 → PRE-04 → PRE-06 → FND-01 → FND-02
+2. PRE-05 → FND-03 Data workflow, problem framing, baseline, and first holdout
 3. CML-01 Linear regression and squared loss
 4. FND-04 Optimization and gradient descent grounded in that loss
 5. CML-02 Logistic regression
@@ -26,7 +26,7 @@ The implemented Foundations → Classical ML path is:
 7. MLE-02 Cross-validation and leakage
 8. PROD-04 Experiment tracking and reproducibility discipline
 9. MLE-03 Feature engineering and leak-safe pipelines
-10. CML-03 → CML-04 → CML-05 Trees and ensembles
+10. CML-03 → CML-04 → CML-05 → CML-06 Trees and ensembles
 11. MLE-04 Imbalanced learning → MLE-05 Explainability → EVAL-01 advanced evaluation
 12. Wine classifier mastery checkpoint
 
@@ -49,8 +49,9 @@ The implemented Deep Learning path is:
 - [x] PRE-01 — Mathematical Language and Arithmetic → `notebooks/00_prerequisites/01_math_language_and_arithmetic.ipynb`
 - [x] PRE-02 — Algebra, Functions, and Graphs → `notebooks/00_prerequisites/02_algebra_functions_and_graphs.ipynb`
 - [x] PRE-03 — Python, NumPy, and Jupyter Foundations → `notebooks/00_prerequisites/03_python_numpy_and_jupyter.ipynb`
-- [x] PRE-04 — Calculus and Probability Intuition → `notebooks/00_prerequisites/04_calculus_and_probability.ipynb`
-- [x] PRE-05 — Practical Python, Pandas, Debugging, and Tests → `notebooks/00_prerequisites/05_python_pandas_and_debugging.ipynb`
+- [x] PRE-04 — Calculus, Exponentials, and Logarithms → `notebooks/00_prerequisites/04_calculus_exponentials_and_logarithms.ipynb`
+- [x] PRE-06 — Probability, Random Variables, and Statistics → `notebooks/00_prerequisites/05_probability_random_variables_and_statistics.ipynb`
+- [x] PRE-05 — Practical Python, Pandas, Debugging, and Tests → `notebooks/00_prerequisites/06_python_pandas_and_debugging.ipynb`
 
 ## Section 01 — Mathematical Foundations
 - [x] FND-01 — Linear Algebra Essentials → `notebooks/01_ml_foundations/01_linear_algebra_essentials.ipynb`
@@ -63,7 +64,8 @@ The implemented Deep Learning path is:
 - [x] CML-02 — Logistic Regression → `notebooks/02_classical_ml/02_logistic_regression.ipynb`
 - [x] CML-03 — Decision Trees → `notebooks/02_classical_ml/03_decision_trees.ipynb`
 - [x] CML-04 — Random Forest → `notebooks/02_classical_ml/04_random_forest.ipynb`
-- [x] CML-05 — Gradient Boosting and XGBoost → `notebooks/02_classical_ml/05_gradient_boosting_and_xgboost.ipynb`
+- [x] CML-05 — Gradient Boosting Foundations → `notebooks/02_classical_ml/05_gradient_boosting_foundations.ipynb`
+- [x] CML-06 — XGBoost Mechanics and Regularization → `notebooks/02_classical_ml/06_xgboost_mechanics_and_regularization.ipynb`
 
 ## Section 03 — ML Engineering Foundations
 - [x] MLE-01 — Evaluation Metrics → `notebooks/03_ml_engineering/01_evaluation_metrics.ipynb`

@@ -1,746 +1,1166 @@
-"""Builder for Lesson FND-04 — Optimization and Gradient Descent.
+"""Build FND-04: Optimization and Gradient Descent."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # FND-04 · Optimization and Gradient Descent
-    ### Section 01 — Mathematical Foundations · *ML/AI Senior Mastery Curriculum*
 
-    **Prerequisites:** PRE-01 through PRE-04, FND-01 through FND-03, and CML-01.
-    You should be able to read functions, vectors, derivatives, gradients,
-    expectations, and matrix condition numbers, and explain squared loss for a
-    linear model. **Estimated time:** 4–6 hours including exercises.
+    **Prerequisites:** FND-01, FND-02, and CML-01  
+    **Estimated study time:** 8–10 hours, including practice  
+    **Next lesson:** CML-02 · Logistic Regression
 
-    > Lesson CML-01 gave us a concrete quantity to minimize: squared loss for linear
-    > regression. This notebook generalizes *how* we minimize objectives. Gradient
-    > descent is the single algorithm running underneath linear regression,
-    > logistic regression, every neural network, and the training of every LLM in
-    > this curriculum. Understand it once, deeply, and you understand the engine of
-    > all of modern ML. We will also connect it back to Lesson FND-01: the
-    > **condition number** that governed numerical stability *also* governs how
-    > fast gradient descent converges.
+    CML-01 gave us a concrete objective: choose coefficients that make mean squared
+    error small. Its closed-form calculation worked for ordinary linear regression.
+    Many later models do not have a convenient direct solution.
+
+    This lesson builds the alternative one step at a time: measure the local slope of
+    loss, move parameters in the downhill direction, check the new loss, and repeat.
+
+    ### Scope boundary
+
+    The required core is plain gradient descent. We deliberately defer:
+
+    - momentum, RMSProp, Adam, AdamW, schedules, and gradient clipping to DL-04;
+    - logistic-loss gradients to CML-02;
+    - backpropagation through networks to DL-03;
+    - Hessians, eigenvalue convergence rates, and formal condition numbers to an
+      advanced numerical-optimization path.
+
+    Those topics are important, but they become understandable only after the basic
+    update rule is no longer mysterious.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - Why ML is *optimization*: we minimize a loss surface, almost always
-      **iteratively** (closed forms are the exception, not the rule).
-    - The gradient as the direction of **steepest ascent**, and the one-line Taylor
-      argument for *why* stepping along $-\nabla f$ decreases the loss.
-    - **Convexity**, local vs global minima, and why **saddle points** — not local
-      minima — are the real obstacle in high dimensions.
-    - The **learning rate**: the most important hyperparameter, and what too-small /
-      too-large does.
-    - **Batch vs stochastic vs mini-batch** gradient descent, and why SGD is what
-      actually scales.
-    - **Momentum** and **Adam**, derived and implemented from scratch.
-    - Why **feature scaling / conditioning** can matter more than the optimizer
-      (the Lesson FND-01 connection).
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - Training cost, stability, and convergence speed are optimization choices.
-    - "My model won't train" / "loss is NaN" / "loss plateaus" are optimization
-      diagnoses a senior engineer makes in seconds.
-    - LR schedules, warmup, and gradient clipping are the difference between a model
-      that trains and one that diverges at scale.
+    - distinguish a model, parameter, prediction, residual, loss, and optimizer;
+    - calculate a derivative and interpret its sign and unit;
+    - explain a partial derivative and gradient vector;
+    - derive the gradient-descent update from a local slope;
+    - perform several parameter updates manually;
+    - implement scalar gradient descent without a library;
+    - derive intercept and slope gradients for linear-regression MSE;
+    - fit the CML-01 delivery line with gradient descent;
+    - explain learning rates that are too small, useful, or too large;
+    - explain why feature scaling can make one learning rate easier to use;
+    - distinguish batch, stochastic, and mini-batch updates;
+    - explain convex and non-convex loss landscapes at beginner depth;
+    - stop using declared training and validation evidence;
+    - check a hand-derived gradient using finite differences;
+    - compare the manual implementation with `SGDRegressor`.
 
-    **Typical interview questions**
-    - "Derive the gradient-descent update and explain why we move against the
-      gradient."
-    - "Batch vs SGD vs mini-batch — tradeoffs?"
-    - "What does momentum do, and how does Adam differ from plain SGD?"
-    - "Your loss explodes to NaN. Walk me through the causes."
-    - "Why does feature scaling speed up training?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **Closed-form solutions don't scale or generalize.** Lesson CML-01 solved linear
-    regression *exactly* with the normal equations. But that requires forming and
-    factoring $A^\top A$ — $O(nd^2)$ time and $O(d^2)$ memory — and it only exists
-    for that one convex, linear problem. Logistic regression, neural nets, and LLMs
-    have **no closed form**. We need a general, scalable hammer.
-
-    **Gradient descent (Cauchy, 1847).** The oldest and most general idea: stand on
-    the loss surface, feel which way is downhill (the negative gradient), take a
-    step, repeat. It needs only that we can compute a gradient — which
-    *backpropagation* (Lesson DL-03) makes cheap for arbitrarily complex models.
-
-    **Stochastic gradient descent (Robbins–Monro, 1951).** Computing the gradient
-    over *all* data per step is wasteful when data is huge and redundant. Estimating
-    it from a small random sample is noisy but **far cheaper per step**, and the
-    noise even helps escape saddle points. SGD is *the* reason deep learning is
-    feasible on internet-scale data.
-
-    **Momentum (Polyak, 1964) and adaptive methods (AdaGrad 2011, RMSProp 2012,
-    Adam 2014).** Plain SGD crawls through ill-conditioned valleys (it zig-zags —
-    Section 6). Momentum adds inertia; adaptive methods give each parameter its own
-    effective learning rate. Adam became the default optimizer for deep learning
-    because it is robust to bad scaling and needs little tuning.
-
-    The arc: from *exact-but-narrow* (normal equations) to *approximate-but-
-    universal-and-scalable* (SGD + Adam) — the same arc as Lesson FND-01's move from
-    exact solving to robust computation.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The mountain-in-fog analogy.** You are on a foggy hillside and want the
-    lowest point. You can't see the valley, but you can feel the slope under your
-    feet. Strategy: step downhill (against the steepest slope), and repeat. The
-    *slope* is the **gradient**; your *step size* is the **learning rate**.
-
-    - **Too small a step:** you inch down forever — slow, expensive training.
-    - **Too large a step:** you overshoot the valley and bounce up the far side —
-      the loss oscillates or **diverges**.
-    - **Just right:** steady, fast descent.
-
-    **The loss surface's shape matters as much as the optimizer.** A round bowl
-    (well-conditioned) lets you walk straight to the bottom. A long narrow ravine
-    (ill-conditioned — high condition number from Lesson FND-01) makes naive descent
-    *zig-zag* across the walls while creeping along the floor. Feature scaling
-    reshapes the ravine into a bowl; momentum/Adam dampen the zig-zag.
-
-    **In high dimensions, local minima are rare; saddle points dominate.** A
-    critical point is a local min only if the surface curves up in *every*
-    direction — exponentially unlikely with thousands of parameters. Far more
-    common are **saddles** (up some ways, down others). Good optimizers slide off
-    them; the noise in SGD actively helps.
+    ### The complete loop
 
     ```mermaid
     flowchart LR
-        S["Start: random weights"] --> G["Compute gradient<br/>(slope of loss)"]
-        G --> U["Step against gradient<br/>w := w - lr * grad"]
-        U --> C{"Converged?<br/>(grad ~ 0 / loss flat)"}
-        C -->|no| G
-        C -->|yes| D["Done: minimum"]
+        A[Choose starting parameters] --> B[Make training predictions]
+        B --> C[Calculate training loss]
+        C --> D[Calculate gradient]
+        D --> E[Update parameters]
+        E --> F{Stop rule met?}
+        F -- No --> B
+        F -- Yes --> G[Freeze and evaluate]
     ```
 
-    Run the cells and watch fog turn into geometry.
+    The optimizer can only minimise the objective it receives. A falling loss does
+    not prove the target, features, split, or objective represents the real problem.
+    """),
+
+    md(r"""
+    ## 2 · The practical problem: find the delivery line iteratively
+
+    CML-01 used four routes:
+
+    | Distance $x$ (km) | Travel time $y$ (minutes) |
+    | ---: | ---: |
+    | 1 | 3 |
+    | 2 | 5 |
+    | 3 | 6 |
+    | 4 | 8 |
+
+    The model is:
+
+    $$
+    \hat y_i=b+wx_i
+    $$
+
+    The training objective is mean squared error:
+
+    $$
+    L(b,w)=\frac{1}{n}\sum_{i=1}^{n}(\hat y_i-y_i)^2
+    $$
+
+    **Symbols:** $b$ is the intercept in minutes; $w$ is the slope in minutes per
+    kilometre; $x_i$ and $y_i$ are route $i$'s feature and target; $\hat y_i$ is its
+    prediction; $n$ is the number of training routes; $L$ is loss.
+
+    CML-01 directly calculated $b=1.5$ and $w=1.6$. Our new question is:
+
+    > Can we start from poor coefficients and reach nearly the same line using only
+    > repeated local slope information?
+
+    Analogy: standing on a foggy hill, we cannot see the entire landscape. We can feel
+    the local slope and take a small downhill step. The analogy stops there: a model
+    may have millions of parameter directions, not two physical directions.
     """),
 
     code(r"""
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    route_distance_km = np.array([1.0, 2.0, 3.0, 4.0])
+    travel_time_minutes = np.array([3.0, 5.0, 6.0, 8.0])
+
+    def mean_squared_loss(actual_values, predicted_values):
+        '''Return mean squared error after validating matching shapes.'''
+        actual = np.asarray(actual_values, dtype=float)
+        predicted = np.asarray(predicted_values, dtype=float)
+        if actual.shape != predicted.shape:
+            raise ValueError("actual and predicted values must have matching shapes")
+        return float(np.mean((predicted - actual) ** 2))
+
+
+    starting_intercept = 0.0
+    starting_slope = 0.0
+    starting_predictions = starting_intercept + starting_slope * route_distance_km
+    starting_loss = mean_squared_loss(travel_time_minutes, starting_predictions)
+
+    print("starting predictions:", starting_predictions)
+    print("starting MSE:", starting_loss)
+
+    assert np.isclose(starting_loss, 33.5)
+    """),
+
+    md(r"""
+    ## 3 · Name every object before optimizing
+
+    | Object | Meaning | Delivery example |
+    | --- | --- | --- |
+    | Model | Rule that maps features to predictions | $\hat y=b+wx$ |
+    | Parameter | Value learned during fitting | $b$ and $w$ |
+    | Prediction | Model output for one row | Estimated minutes |
+    | Residual | Actual minus predicted | $y-\hat y$ |
+    | Per-row loss | Penalty from one row | $(\hat y-y)^2$ |
+    | Objective | Quantity minimised across training rows | Mean squared error |
+    | Gradient | Local loss slopes for all parameters | $[\partial L/\partial b,\partial L/\partial w]$ |
+    | Optimizer | Rule that updates parameters | Gradient descent |
+    | Learning rate | Size multiplier for an update | $\eta$ |
+
+    A metric and a loss can use the same formula while serving different roles.
+    Training MSE guides parameter updates. Validation MSE judges frozen parameters.
+    Validation values must not be used inside the update loop.
+
+    Optimization answers:
+
+    > Which parameter values make this declared training objective small?
+
+    It does not answer whether the objective is fair, causal, business-relevant, or
+    evaluated on an honest split.
+    """),
+
+    md(r"""
+    ## 4 · From one derivative to a gradient
+
+    ### 4.1 One parameter: a derivative is a local slope
+
+    Let:
+
+    $$
+    f(w)=(w-3)^2
+    $$
+
+    Its derivative is:
+
+    $$
+    \frac{df}{dw}=2(w-3)
+    $$
+
+    **Symbols:** $w$ is the parameter; $f(w)$ is its loss; $df/dw$ reads “the local
+    change in loss with respect to $w$.”
+
+    At $w=1$:
+
+    $$
+    \frac{df}{dw}=2(1-3)=-4
+    $$
+
+    The negative slope means increasing $w$ a little should reduce loss. At $w=5$,
+    the slope is positive 4, so decreasing $w$ should reduce loss.
+
+    ### 4.2 Several parameters: partial derivatives form a gradient
+
+    If loss depends on intercept $b$ and slope $w$, a **partial derivative** changes
+    one parameter while temporarily holding the other fixed. The gradient collects
+    both slopes:
+
+    $$
+    \nabla L(b,w)=
+    \begin{bmatrix}
+    \frac{\partial L}{\partial b}\\[4pt]
+    \frac{\partial L}{\partial w}
+    \end{bmatrix}
+    $$
+
+    **Symbols:** $\nabla$ reads “gradient”; $\partial$ marks a partial derivative.
+    The gradient has the same number of components as the parameter vector.
+
+    The gradient points toward steepest local increase. Its negative points toward
+    steepest local decrease.
     """),
 
     code(r"""
-    # Figure 1 — convex vs non-convex landscapes; minima and saddles.
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    def bowl_loss(parameter):
+        return (parameter - 3.0) ** 2
 
-    x = np.linspace(-3, 3, 400)
-    axes[0].plot(x, x**2, color="tab:blue")
-    axes[0].set_title("Convex: one global min\n(any descent finds it)")
 
-    f = 0.5 * x**4 - 2 * x**2 + 0.3 * x          # non-convex, two minima
-    axes[1].plot(x, f, color="tab:orange")
-    axes[1].set_title("Non-convex: local + global minima\n(start point matters)")
+    def bowl_derivative(parameter):
+        return 2.0 * (parameter - 3.0)
 
-    # a 2D saddle: up in x, down in y
-    xx = np.linspace(-2, 2, 200)
-    X, Y = np.meshgrid(xx, xx)
-    Z = X**2 - Y**2
-    cs = axes[2].contour(X, Y, Z, levels=20, cmap="coolwarm")
-    axes[2].plot(0, 0, "ko"); axes[2].annotate("saddle", (0.1, 0.1))
-    axes[2].set_title("Saddle point (the real enemy\nin high dimensions)")
-    axes[2].set_aspect("equal")
-    plt.suptitle("Figure 1 — The shapes of loss surfaces")
-    plt.tight_layout()
+
+    for parameter in [1.0, 3.0, 5.0]:
+        print(
+            f"w={parameter:.1f}, loss={bowl_loss(parameter):.1f}, "
+            f"derivative={bowl_derivative(parameter):.1f}"
+        )
+
+    assert bowl_derivative(1.0) == -4.0
+    assert bowl_derivative(3.0) == 0.0
+    assert bowl_derivative(5.0) == 4.0
+    """),
+
+    md(r"""
+    ## 5 · Derive one gradient-descent update by hand
+
+    Gradient descent updates one parameter with:
+
+    $$
+    w_{t+1}=w_t-\eta\frac{dL}{dw}(w_t)
+    $$
+
+    **Symbols:** $t$ is the current step; $t+1$ is the next step; $w_t$ is the current
+    parameter; $\eta$ (eta) is a positive learning rate; $dL/dw$ is the current slope.
+
+    Why subtract? If the derivative is positive, subtraction moves $w$ lower. If the
+    derivative is negative, subtracting a negative moves $w$ higher. Both move against
+    the local uphill direction.
+
+    Use $L(w)=(w-3)^2$, start at $w_0=1$, and choose $\eta=0.1$:
+
+    $$
+    \frac{dL}{dw}(1)=-4
+    $$
+
+    $$
+    w_1=1-0.1(-4)=1.4
+    $$
+
+    Check the loss:
+
+    $$
+    L(1)=4,
+    \qquad
+    L(1.4)=(1.4-3)^2=2.56
+    $$
+
+    One update helped. We verify rather than assuming every step helps.
+    """),
+
+    code(r"""
+    current_parameter = 1.0
+    learning_rate = 0.10
+
+    current_gradient = bowl_derivative(current_parameter)
+    next_parameter = current_parameter - learning_rate * current_gradient
+
+    print("current parameter:", current_parameter)
+    print("current gradient:", current_gradient)
+    print("update amount:", -learning_rate * current_gradient)
+    print("next parameter:", next_parameter)
+    print("loss before:", bowl_loss(current_parameter))
+    print("loss after:", bowl_loss(next_parameter))
+
+    assert np.isclose(next_parameter, 1.4)
+    assert bowl_loss(next_parameter) < bowl_loss(current_parameter)
+    """),
+
+    md(r"""
+    ## 6 · Repeat the update: scalar gradient descent from scratch
+
+    An implementation needs:
+
+    1. a derivative function;
+    2. a starting parameter;
+    3. a learning rate;
+    4. a maximum number of steps;
+    5. recorded parameter and loss history;
+    6. checks for non-finite values.
+
+    The first implementation stays deliberately small. It does not hide the loop
+    inside a class or optimizer framework.
+    """),
+
+    code(r"""
+    def scalar_gradient_descent(loss_function, derivative_function, start, learning_rate, steps):
+        '''Minimise a one-parameter loss and return an auditable history table.'''
+        if learning_rate <= 0:
+            raise ValueError("learning_rate must be positive")
+        if steps < 1:
+            raise ValueError("steps must be at least one")
+
+        parameter = float(start)
+        records = []
+
+        for step in range(steps + 1):
+            loss = float(loss_function(parameter))
+            gradient = float(derivative_function(parameter))
+            if not np.isfinite(loss) or not np.isfinite(gradient):
+                raise FloatingPointError("loss or gradient became non-finite")
+
+            records.append(
+                {"step": step, "parameter": parameter, "loss": loss, "gradient": gradient}
+            )
+            if step < steps:
+                parameter = parameter - learning_rate * gradient
+
+        return pd.DataFrame(records)
+
+
+    scalar_history = scalar_gradient_descent(
+        bowl_loss,
+        bowl_derivative,
+        start=1.0,
+        learning_rate=0.10,
+        steps=25,
+    )
+
+    print(scalar_history.head(4).to_string(index=False))
+    print("\nfinal row:\n", scalar_history.tail(1).to_string(index=False))
+
+    assert scalar_history.iloc[-1]["loss"] < scalar_history.iloc[0]["loss"]
+    assert abs(scalar_history.iloc[-1]["parameter"] - 3.0) < 0.01
+    """),
+
+    code(r"""
+    plotted_parameters = np.linspace(0, 6, 200)
+
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].plot(plotted_parameters, bowl_loss(plotted_parameters), color="tab:blue")
+    axes[0].scatter(
+        scalar_history["parameter"],
+        scalar_history["loss"],
+        color="tab:red",
+        s=22,
+        label="updates",
+    )
+    axes[0].set_xlabel("parameter w")
+    axes[0].set_ylabel("loss")
+    axes[0].set_title("Gradient descent walks down the loss curve")
+    axes[0].legend()
+
+    axes[1].plot(scalar_history["step"], scalar_history["loss"], color="tab:green")
+    axes[1].set_xlabel("update step")
+    axes[1].set_ylabel("loss")
+    axes[1].set_title("Loss history reveals progress")
+
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** A **convex** surface (left) has a single global minimum — gradient
-    descent provably finds it regardless of where you start; linear and logistic
-    regression live here. A **non-convex** surface (middle) has multiple minima, so
-    the starting point and optimizer matter — neural nets live here. The **saddle**
-    (right) curves *up* along one axis and *down* along another; its gradient is
-    zero at the center, so a naive method can stall there. In thousand-dimensional
-    networks, almost every zero-gradient point is a saddle, not a min — which is why
-    modern training mostly works despite non-convexity.
-    """),
+    ## 7 · Learning rate controls step size
 
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
+    The learning rate $\eta$ does not change the gradient. It changes how much of the
+    gradient becomes one parameter update.
 
-    **Notation bridge.** $f$ names an objective function, $\mathbf w$ is the vector
-    of parameters we can change, $t$ is an iteration number, $\nabla f$ is the
-    vector of local slopes, and Greek $\eta$ (eta) is the learning rate. Notebook
-    PRE-04 introduces derivatives and gradients; FND-01 introduces vectors,
-    norms, eigenvalues, and condition numbers.
+    | Learning rate behavior | Typical loss history |
+    | --- | --- |
+    | Too small | Falls safely but very slowly |
+    | Useful | Falls steadily toward a low value |
+    | Too large | Oscillates, increases, or becomes non-finite |
 
-    ### 4.1 The gradient and why we step against it
-    For $f:\mathbb R^d\to\mathbb R$, the **gradient** $\nabla f(\mathbf w)$ is the
-    vector of partial derivatives; it points in the direction of **steepest
-    ascent**, with length equal to that steepest slope. A first-order **Taylor
-    expansion** around $\mathbf w$ for a small step $\Delta\mathbf w$:
-    $$f(\mathbf w+\Delta\mathbf w)\approx f(\mathbf w)+\nabla f(\mathbf w)^\top\Delta\mathbf w.$$
-    **Read and symbols:** $f:\mathbb R^d\to\mathbb R$ means the function accepts a
-    vector of $d$ real values and returns one real value; $\Delta\mathbf w$ means a
-    small parameter change; $\approx$ means approximately equal; transpose $\top$
-    turns the dot product into one predicted change in $f$.
+    For $L(w)=(w-3)^2$, the update becomes:
 
-    Choosing $\Delta\mathbf w=-\eta\,\nabla f(\mathbf w)$ gives
-    $$f(\mathbf w-\eta\nabla f)\approx f(\mathbf w)-\eta\,\lVert\nabla f\rVert_2^2\le f(\mathbf w).$$
-    **Symbols and example:** $\eta>0$ is step size; the squared norm is never
-    negative; $\le$ means less than or equal. If local slope is `3` and $\eta=0.1$,
-    the first-order predicted loss change is `−0.1 × 3² = −0.9`. This approximation
-    is trustworthy only for a sufficiently small local step.
+    $$
+    w_{t+1}=w_t-2\eta(w_t-3)
+    $$
 
-    The update rule is:
-    $$\boxed{\ \mathbf w_{t+1}=\mathbf w_t-\eta\,\nabla f(\mathbf w_t)\ }$$
-    **Read and symbols:** “the next parameter vector equals the current vector minus
-    learning rate times current gradient.” Subscripts $t$ and $t+1$ label current
-    and next iteration.
+    With $\eta=1$, starting at 1 jumps to 5, then back to 1. The loss never improves:
 
-    ### 4.2 Convexity
-    $f$ is **convex** if its graph lies below its chords:
-    $f(\lambda a+(1-\lambda)b)\le\lambda f(a)+(1-\lambda)f(b)$. Here $\lambda$
-    is a mixing number between 0 and 1, while $a$ and $b$ are two inputs. For a
-    differentiable convex function, any stationary point ($\nabla f=0$) is a global
-    minimum. MSE and logistic loss are convex in linear-model weights; neural-network
-    losses are not.
+    $$
+    w_1=1-2(1)(1-3)=5
+    $$
 
-    ### 4.3 Convergence and the condition-number link
-    For a strongly convex, $L$-smooth quadratic with Hessian eigenvalues in
-    $[\mu,L]$, gradient descent using the optimal fixed learning rate contracts the
-    **objective error** each step by at most
-    $$\Big(\frac{\kappa-1}{\kappa+1}\Big)^2,\qquad \kappa=\frac{L}{\mu}.$$
-    **Read and symbols:** $L$ is largest curvature, $\mu$ (mu) is smallest positive
-    curvature, and $\kappa$ (kappa) is their ratio. The factor is between 0 and 1;
-    closer to zero means faster contraction. This rate assumes a quadratic and the
-    optimal constant step, so it is not universal for every optimizer or schedule.
-
-    A round bowl ($\kappa=1$) converges quickly; a ravine ($\kappa\gg1$) crawls.
-    For least squares, the Hessian is proportional to $X^\top X$, so
-    $\kappa(X^\top X)=\kappa(X)^2$. Poor conditioning in data becomes worse in the
-    quadratic objective. Feature scaling often improves both stability and speed,
-    but it cannot remove every source of bad curvature.
-
-    ### 4.4 Stochastic and mini-batch gradients
-    The training loss is an average over $n$ examples, so its gradient is too:
-    $\nabla f=\frac1n\sum_i \nabla f_i$. **Symbols:** $n$ is total example count;
-    $i$ selects an example; $f_i$ is that example's loss contribution; $B$ is
-    mini-batch size. Batch GD uses all $n$; SGD samples one $i$; mini-batch GD uses
-    $B$ examples. “Unbiased” means the stochastic gradient's average over repeated
-    sampling equals the full gradient.
-
-    ### 4.5 Momentum
-    Momentum accumulates velocity to reduce zig-zagging:
-    $$\mathbf v_{t+1}=\beta\mathbf v_t+\nabla f(\mathbf w_t),\qquad
-    \mathbf w_{t+1}=\mathbf w_t-\eta\,\mathbf v_{t+1},\quad \beta\approx 0.9.$$
-    **Symbols:** $\mathbf v_t$ is accumulated velocity; $\beta$ (beta) controls how
-    much previous velocity remains; $\eta$ controls the parameter step. With
-    $\beta=0$, this form reduces to plain gradient descent.
-
-    ### 4.6 Adam (adaptive moment estimation)
-    Adam tracks averages of the gradient and its square:
-    $$m_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad v_t=\beta_2 v_{t-1}+(1-\beta_2)g_t^2,$$
-    $$\hat m_t=\frac{m_t}{1-\beta_1^t},\quad \hat v_t=\frac{v_t}{1-\beta_2^t},\qquad
-    \mathbf w_{t+1}=\mathbf w_t-\eta\,\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}.$$
-    **Read and symbols:** $g_t$ is current gradient; $m_t$ averages gradients;
-    $v_t$ averages squared gradients; $\beta_1,\beta_2$ are decay factors; hats
-    mark bias correction; $\epsilon$ is a small positive number preventing division
-    by zero. Products, squares, roots, and divisions act component by component.
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    We build the optimizers from the bare update rules and watch them on a quadratic
-    bowl, then train **linear regression by gradient descent** and confirm it lands
-    on the FND-01 normal-equations solution.
+    Smaller is not always better, and larger is not always faster. We judge the loss
+    curve and final evidence.
     """),
 
     code(r"""
-    # 5.1 Generic first-order optimizers — just the update rules from Section 4.
-    def gradient_descent(grad, x0, lr, steps):
-        x = np.array(x0, float); traj = [x.copy()]
-        for _ in range(steps):
-            x = x - lr * grad(x); traj.append(x.copy())
-        return np.array(traj)
+    learning_rate_histories = {}
 
-    def momentum(grad, x0, lr, steps, beta=0.9):
-        x = np.array(x0, float); v = np.zeros_like(x); traj = [x.copy()]
-        for _ in range(steps):
-            v = beta * v + grad(x)
-            x = x - lr * v; traj.append(x.copy())
-        return np.array(traj)
+    for candidate_rate in [0.01, 0.10, 0.60, 1.00, 1.10]:
+        history = scalar_gradient_descent(
+            bowl_loss,
+            bowl_derivative,
+            start=1.0,
+            learning_rate=candidate_rate,
+            steps=18,
+        )
+        learning_rate_histories[candidate_rate] = history
 
-    def adam(grad, x0, lr, steps, b1=0.9, b2=0.999, eps=1e-8):
-        x = np.array(x0, float); m = np.zeros_like(x); v = np.zeros_like(x)
-        traj = [x.copy()]
-        for t in range(1, steps + 1):
-            g = grad(x)
-            m = b1 * m + (1 - b1) * g
-            v = b2 * v + (1 - b2) * g * g
-            mhat = m / (1 - b1**t); vhat = v / (1 - b2**t)
-            x = x - lr * mhat / (np.sqrt(vhat) + eps)
-            traj.append(x.copy())
-        return np.array(traj)
-
-    # An ILL-CONDITIONED quadratic bowl: f(x) = 0.5 x^T A x, A = diag([1, 20]).
-    A = np.diag([1.0, 20.0])
-    def f(x):    return 0.5 * x @ A @ x
-    def grad(x): return A @ x
-    kappa = np.linalg.cond(A)
-    print(f"condition number kappa = {kappa:.0f}  (a long, narrow ravine)")
-    """),
-
-    code(r"""
-    # 5.2 Train LINEAR REGRESSION by gradient descent; verify against the closed form.
-    n, d = 500, 3
-    X = rng.normal(size=(n, d))
-    Xb = np.hstack([np.ones((n, 1)), X])                 # bias column
-    true_w = np.array([1.5, -2.0, 0.5, 3.0])
-    y = Xb @ true_w + 0.1 * rng.normal(size=n)
-
-    def mse_grad(w):
-        return (2 / n) * Xb.T @ (Xb @ w - y)             # gradient of mean squared error
-
-    w_gd = gradient_descent(mse_grad, np.zeros(d + 1), lr=0.1, steps=2000)[-1]
-    w_closed = np.linalg.lstsq(Xb, y, rcond=None)[0]     # FND-01's solution
-    print("gradient descent :", w_gd.round(3))
-    print("closed form      :", w_closed.round(3))
-    print("true             :", true_w)
-    print("GD matches closed form:", np.allclose(w_gd, w_closed, atol=1e-3))
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    These figures are the heart of the notebook: *see* the learning rate, the
-    conditioning, the batch/stochastic tradeoff, and why momentum/Adam win.
-    """),
-
-    code(r"""
-    # Figure 2 — learning rate: too small crawls, too large diverges.
-    def quad(x): return x**2
-    def quad_grad(x): return 2 * x
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-    for ax, lr, label in [(axes[0], 0.01, "too small"),
-                          (axes[1], 0.6, "good"),
-                          (axes[2], 1.01, "too large (diverges)")]:
-        xs = np.linspace(-11, 11, 200)
-        ax.plot(xs, quad(xs), color="lightgray")
-        traj = gradient_descent(lambda v: np.array([quad_grad(v[0])]), [10.0], lr, 12)[:, 0]
-        ax.plot(traj, quad(traj), "o-", ms=4, color="tab:red")
-        ax.set_title(f"lr={lr} ({label})"); ax.set_ylim(-5, 130)
-    plt.suptitle("Figure 2 — The learning rate is the master hyperparameter")
-    plt.tight_layout()
+    figure, axis = plt.subplots(figsize=(8, 4))
+    for candidate_rate, history in learning_rate_histories.items():
+        axis.plot(history["step"], history["loss"], label=f"eta={candidate_rate}")
+    axis.set_yscale("log")
+    axis.set_xlabel("update step")
+    axis.set_ylabel("loss — logarithmic scale")
+    axis.set_title("The same loss with five learning rates")
+    axis.legend()
+    figure.tight_layout()
     plt.show()
+
+    print("eta=0.01 final loss:", learning_rate_histories[0.01].iloc[-1]["loss"])
+    print("eta=0.10 final loss:", learning_rate_histories[0.10].iloc[-1]["loss"])
+    print("eta=1.00 final loss:", learning_rate_histories[1.00].iloc[-1]["loss"])
+    print("eta=1.10 final loss:", learning_rate_histories[1.10].iloc[-1]["loss"])
+
+    assert learning_rate_histories[0.10].iloc[-1]["loss"] < learning_rate_histories[0.01].iloc[-1]["loss"]
+    assert np.isclose(learning_rate_histories[1.00].iloc[-1]["loss"], 4.0)
+    assert learning_rate_histories[1.10].iloc[-1]["loss"] > 4.0
     """),
 
     md(r"""
-    **Figure 2.** On the simple bowl $f(x)=x^2$: a tiny LR (left) takes many timid
-    steps; a good LR (middle) descends fast and smooth; an LR past the stability
-    threshold (right) makes each step overshoot *farther* than the last — the loss
-    **diverges**. There is no universally "correct" LR; it depends on the curvature
-    of your loss, which is exactly why adaptive methods and LR schedules exist.
+    ## 8 · Derive the linear-regression gradient
+
+    Return to:
+
+    $$
+    \hat y_i=b+wx_i
+    $$
+
+    Define prediction error inside the loss as:
+
+    $$
+    e_i=\hat y_i-y_i
+    $$
+
+    This is the negative of CML-01's residual, but squaring makes the loss identical.
+    Keeping one sign convention throughout the derivation prevents mistakes.
+
+    The MSE is:
+
+    $$
+    L(b,w)=\frac{1}{n}\sum_{i=1}^{n}e_i^2
+    $$
+
+    Apply the chain rule:
+
+    $$
+    \frac{\partial L}{\partial b}=\frac{2}{n}\sum_{i=1}^{n}e_i
+    $$
+
+    $$
+    \frac{\partial L}{\partial w}=\frac{2}{n}\sum_{i=1}^{n}e_ix_i
+    $$
+
+    **Why:** changing $b$ changes every prediction by 1; changing $w$ changes
+    prediction $i$ by $x_i$.
+
+    At $b=0,w=0$, predictions are all zero and errors are $[-3,-5,-6,-8]$:
+
+    $$
+    \frac{\partial L}{\partial b}
+    =\frac{2}{4}(-3-5-6-8)=-11
+    $$
+
+    $$
+    \frac{\partial L}{\partial w}
+    =\frac{2}{4}\left[(-3)(1)+(-5)(2)+(-6)(3)+(-8)(4)\right]
+    =-31.5
+    $$
+
+    With $\eta=0.01$, the first update is $b=0.11$ and $w=0.315$.
     """),
 
     code(r"""
-    # Figure 3 — conditioning: GD zig-zags in a ravine; Adam adapts per-dimension.
-    def contour(ax, title):
-        u = np.linspace(-10, 10, 200); v = np.linspace(-3, 3, 200)
-        U, V = np.meshgrid(u, v)
-        ax.contour(U, V, 0.5 * (U**2 + 20 * V**2), levels=30, cmap="Blues", alpha=0.6)
-        ax.set_title(title); ax.set_aspect("auto")
+    def linear_regression_loss_and_gradient(features, targets, intercept, slope):
+        '''Calculate MSE and gradients for one-feature linear regression.'''
+        feature_array = np.asarray(features, dtype=float)
+        target_array = np.asarray(targets, dtype=float)
+        if feature_array.ndim != 1 or target_array.ndim != 1:
+            raise ValueError("features and targets must be one-dimensional")
+        if feature_array.shape != target_array.shape:
+            raise ValueError("features and targets must have matching shapes")
 
-    x0 = [-9.0, 2.5]
-    fig, axes = plt.subplots(1, 3, figsize=(16, 4))
-    for ax, (name, traj) in zip(
-        axes,
-        [("GD (lr=0.09)", gradient_descent(grad, x0, 0.09, 60)),
-         ("Momentum (lr=0.02)", momentum(grad, x0, 0.02, 60)),
-         ("Adam (lr=0.5)", adam(grad, x0, 0.5, 60))],
+        predictions = intercept + slope * feature_array
+        errors = predictions - target_array
+        loss = np.mean(errors**2)
+        intercept_gradient = 2 * np.mean(errors)
+        slope_gradient = 2 * np.mean(errors * feature_array)
+        gradient = np.array([intercept_gradient, slope_gradient])
+        return float(loss), gradient, predictions
+
+
+    initial_loss, initial_gradient, initial_predictions = linear_regression_loss_and_gradient(
+        route_distance_km,
+        travel_time_minutes,
+        intercept=0.0,
+        slope=0.0,
+    )
+
+    first_parameters = np.array([0.0, 0.0]) - 0.01 * initial_gradient
+
+    print("initial predictions:", initial_predictions)
+    print("initial loss:", initial_loss)
+    print("gradient [intercept, slope]:", initial_gradient)
+    print("first parameters [intercept, slope]:", first_parameters)
+
+    assert np.allclose(initial_gradient, [-11.0, -31.5])
+    assert np.allclose(first_parameters, [0.11, 0.315])
+    """),
+
+    md(r"""
+    ## 9 · Fit the CML-01 line with gradient descent
+
+    We now repeat the two-parameter update. The history stores parameters, training
+    loss, and gradient size so the run can be inspected rather than trusted blindly.
+
+    Gradient size uses the Euclidean norm from FND-01:
+
+    $$
+    \lVert\nabla L\rVert_2
+    =\sqrt{\left(\frac{\partial L}{\partial b}\right)^2
+    +\left(\frac{\partial L}{\partial w}\right)^2}
+    $$
+
+    A small gradient means the local surface is flat. It does not by itself prove
+    useful validation performance.
+    """),
+
+    code(r"""
+    def fit_linear_regression_with_gradient_descent(
+        features,
+        targets,
+        learning_rate=0.05,
+        steps=1_000,
+        start=(0.0, 0.0),
     ):
-        contour(ax, name)
-        ax.plot(traj[:, 0], traj[:, 1], "o-", ms=3, color="tab:red")
-        ax.plot(0, 0, "g*", ms=15)
-    plt.suptitle("Figure 3 — Same ill-conditioned ravine (kappa=20): optimizer matters")
-    plt.tight_layout()
+        '''Fit intercept and slope with full-batch gradient descent.'''
+        parameters = np.asarray(start, dtype=float).copy()
+        if parameters.shape != (2,):
+            raise ValueError("start must contain [intercept, slope]")
+        if learning_rate <= 0 or steps < 1:
+            raise ValueError("learning_rate and steps must be positive")
+
+        records = []
+        for step in range(steps + 1):
+            loss, gradient, _ = linear_regression_loss_and_gradient(
+                features,
+                targets,
+                intercept=parameters[0],
+                slope=parameters[1],
+            )
+            if not np.isfinite(loss) or not np.all(np.isfinite(gradient)):
+                raise FloatingPointError("optimization became non-finite")
+
+            records.append(
+                {
+                    "step": step,
+                    "intercept": parameters[0],
+                    "slope": parameters[1],
+                    "training_mse": loss,
+                    "gradient_norm": np.linalg.norm(gradient),
+                }
+            )
+            if step < steps:
+                parameters = parameters - learning_rate * gradient
+
+        return parameters, pd.DataFrame(records)
+
+
+    gradient_parameters, regression_history = fit_linear_regression_with_gradient_descent(
+        route_distance_km,
+        travel_time_minutes,
+        learning_rate=0.05,
+        steps=1_000,
+    )
+
+    closed_form_parameters = np.array([1.5, 1.6])
+
+    print("gradient-descent [intercept, slope]:", gradient_parameters)
+    print("closed-form [intercept, slope]:", closed_form_parameters)
+    print("final training MSE:", regression_history.iloc[-1]["training_mse"])
+
+    assert np.allclose(gradient_parameters, closed_form_parameters, atol=1e-4)
+    assert regression_history.iloc[-1]["training_mse"] < starting_loss
+    """),
+
+    code(r"""
+    figure, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].plot(regression_history["step"], regression_history["training_mse"])
+    axes[0].set_yscale("log")
+    axes[0].set_xlabel("step")
+    axes[0].set_ylabel("training MSE — log scale")
+    axes[0].set_title("Training loss falls during fitting")
+
+    axes[1].scatter(route_distance_km, travel_time_minutes, label="training routes")
+    axes[1].plot(
+        route_distance_km,
+        gradient_parameters[0] + gradient_parameters[1] * route_distance_km,
+        color="tab:red",
+        label="gradient-descent line",
+    )
+    axes[1].set_xlabel("distance (km)")
+    axes[1].set_ylabel("travel time (minutes)")
+    axes[1].set_title("The iterative solution matches CML-01")
+    axes[1].legend()
+
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 3.** All three start at the same point on a ravine 20× steeper across
-    than along. **Plain GD** (left) bounces between the steep walls, making little
-    progress along the floor — the condition-number penalty from Section 4.3 made
-    visible. **Momentum** (middle) averages out the cross-valley bouncing and rolls
-    down the floor. **Adam** (right) gives the steep direction a small effective
-    step and the flat direction a large one, walking almost straight to the minimum.
-    The lesson: when training is slow, suspect *conditioning*, and fix it with
-    scaling or an adaptive optimizer — not just by cranking the LR.
+    ## 10 · Feature scale changes optimization geometry
+
+    Suppose one feature uses kilometres and another uses metres. The represented
+    information may be equivalent, but a one-unit coefficient change has very
+    different effects on predictions. Gradient components can then have very
+    different sizes.
+
+    Standardization uses training mean and standard deviation:
+
+    $$
+    z_{ij}=\frac{x_{ij}-\mu_j}{\sigma_j}
+    $$
+
+    **Symbols:** $x_{ij}$ is row $i$, feature $j$; $\mu_j$ and $\sigma_j$ are that
+    feature's training mean and standard deviation; $z_{ij}$ is the standardized value.
+
+    Scaling does not add information, repair invalid data, or guarantee better
+    predictions. It can make one learning rate behave more similarly across parameter
+    directions. Learn scaling values from training data only.
     """),
 
     code(r"""
-    # Figure 4 — batch vs mini-batch vs SGD on linear-regression loss.
-    def loss(w): return np.mean((Xb @ w - y) ** 2)
+    distance_km = np.array([1.0, 2.0, 3.0, 4.0])
+    distance_m = 1_000 * distance_km
+    target = travel_time_minutes
 
-    def train(batch_size, lr, epochs=40):
-        w = np.zeros(d + 1); history = [loss(w)]
+    _, km_gradient, _ = linear_regression_loss_and_gradient(
+        distance_km, target, intercept=0.0, slope=0.0
+    )
+    _, metre_gradient, _ = linear_regression_loss_and_gradient(
+        distance_m, target, intercept=0.0, slope=0.0
+    )
+
+    training_mean = distance_m.mean()
+    training_std = distance_m.std(ddof=0)
+    standardized_distance = (distance_m - training_mean) / training_std
+    _, standardized_gradient, _ = linear_regression_loss_and_gradient(
+        standardized_distance, target, intercept=0.0, slope=0.0
+    )
+
+    print("gradient using kilometres:", km_gradient)
+    print("gradient using metres:", metre_gradient)
+    print("gradient after standardization:", standardized_gradient)
+
+    assert abs(metre_gradient[1]) > 100 * abs(km_gradient[1])
+    assert np.isclose(standardized_distance.mean(), 0.0)
+    assert np.isclose(standardized_distance.std(ddof=0), 1.0)
+    """),
+
+    md(r"""
+    ## 11 · Batch, stochastic, and mini-batch gradients
+
+    The gradient formulas average row contributions. We can choose how many rows
+    contribute to one update:
+
+    | Method | Rows per update | Behavior |
+    | --- | --- | --- |
+    | Batch gradient descent | All training rows | Stable update; expensive on huge data |
+    | Stochastic gradient descent | One row | Cheap, frequent, noisy updates |
+    | Mini-batch gradient descent | A small group | Common balance of speed and noise |
+
+    An **epoch** is one pass through all training rows. With four rows, batch gradient
+    descent makes one update per epoch; mini-batches of two make two updates; stochastic
+    descent makes four.
+
+    “Noisy” means a mini-batch gradient may point differently from the full gradient.
+    Across well-shuffled representative batches, it still provides useful progress.
+    """),
+
+    code(r"""
+    def fit_with_mini_batches(features, targets, learning_rate, epochs, batch_size, seed=7):
+        '''Fit one-feature regression with shuffled mini-batch updates.'''
+        feature_array = np.asarray(features, dtype=float)
+        target_array = np.asarray(targets, dtype=float)
+        if not 1 <= batch_size <= len(feature_array):
+            raise ValueError("batch_size must lie between 1 and the training row count")
+
+        generator = np.random.default_rng(seed)
+        parameters = np.zeros(2, dtype=float)
+        epoch_losses = []
+
         for _ in range(epochs):
-            order = rng.permutation(n)
-            for start in range(0, n, batch_size):
-                idx = order[start:start + batch_size]
-                g = (2 / len(idx)) * Xb[idx].T @ (Xb[idx] @ w - y[idx])
-                w = w - lr * g
-            history.append(loss(w))
-        return history
+            shuffled_indices = generator.permutation(len(feature_array))
+            for start_index in range(0, len(feature_array), batch_size):
+                batch_indices = shuffled_indices[start_index:start_index + batch_size]
+                _, gradient, _ = linear_regression_loss_and_gradient(
+                    feature_array[batch_indices],
+                    target_array[batch_indices],
+                    intercept=parameters[0],
+                    slope=parameters[1],
+                )
+                parameters = parameters - learning_rate * gradient
 
-    fig, ax = plt.subplots()
-    ax.plot(train(n, 0.1), label="batch (n=500)")
-    ax.plot(train(32, 0.05), label="mini-batch (B=32)")
-    ax.plot(train(1, 0.02), label="SGD (B=1)")
-    ax.set_yscale("log"); ax.set_xlabel("epoch"); ax.set_ylabel("MSE (log)")
-    ax.set_title("Figure 4 — Batch is smooth; SGD is noisy but cheap per step")
-    ax.legend()
+            epoch_predictions = parameters[0] + parameters[1] * feature_array
+            epoch_losses.append(mean_squared_loss(target_array, epoch_predictions))
+
+        return parameters, np.array(epoch_losses)
+
+
+    batch_parameters, batch_losses = fit_with_mini_batches(
+        route_distance_km, travel_time_minutes, learning_rate=0.05, epochs=300, batch_size=4
+    )
+    mini_parameters, mini_losses = fit_with_mini_batches(
+        route_distance_km, travel_time_minutes, learning_rate=0.02, epochs=300, batch_size=2
+    )
+    stochastic_parameters, stochastic_losses = fit_with_mini_batches(
+        route_distance_km, travel_time_minutes, learning_rate=0.01, epochs=300, batch_size=1
+    )
+
+    print("batch parameters:", batch_parameters.round(3))
+    print("mini-batch parameters:", mini_parameters.round(3))
+    print("stochastic parameters:", stochastic_parameters.round(3))
+
+    assert batch_losses[-1] < batch_losses[0]
+    assert mini_losses[-1] < mini_losses[0]
+    assert stochastic_losses[-1] < stochastic_losses[0]
+    """),
+
+    md(r"""
+    ## 12 · Loss landscapes, stopping, and failure modes
+
+    ### Convex and non-convex at beginner depth
+
+    A convex bowl has no misleading local valley: any local minimum is also global.
+    Linear-regression MSE is convex in its coefficients. Neural-network loss is
+    generally non-convex, so starting point and optimization path can matter.
+
+    Convex does not mean every learning rate works, and non-convex does not mean
+    learning is impossible.
+
+    ### Stop rules
+
+    Use more than one safeguard:
+
+    - a maximum number of steps or epochs;
+    - non-finite loss/gradient checks;
+    - loss improvement smaller than a declared tolerance;
+    - gradient norm smaller than a declared tolerance;
+    - validation loss that stops improving.
+
+    Training loss normally falls during optimization. Validation loss estimates how
+    the frozen parameters behave on unseen development rows. If training improves
+    while validation worsens, continuing to optimize training loss is not useful
+    evidence of generalisation.
+
+    ### Common failure patterns
+
+    | Symptom | Likely cause | First check |
+    | --- | --- | --- |
+    | Loss rises immediately | Learning rate too large or gradient sign reversed | Print first gradient and update |
+    | Loss falls extremely slowly | Learning rate too small or feature scales differ greatly | Compare gradient components and scaled inputs |
+    | Loss becomes NaN/Inf | Invalid input, overflow, or unstable step | Validate inputs and inspect first non-finite step |
+    | Gradient is always zero | Wrong derivative, constant feature, or flat point | Compare with finite differences |
+    | Training falls, validation rises | Overfitting or distribution mismatch | Stop using validation evidence; inspect split |
+    | Different result each run | Random batches or start not controlled | Record seed, shuffle, and initialization |
+    """),
+
+    code(r"""
+    landscape_x = np.linspace(-3, 3, 400)
+    convex_loss = landscape_x**2
+    nonconvex_loss = 0.2 * landscape_x**4 - landscape_x**2 + 1
+
+    figure, axes = plt.subplots(1, 2, figsize=(11, 4))
+    axes[0].plot(landscape_x, convex_loss)
+    axes[0].set_title("Convex bowl: one global minimum")
+    axes[0].set_xlabel("parameter")
+    axes[0].set_ylabel("loss")
+
+    axes[1].plot(landscape_x, nonconvex_loss, color="tab:orange")
+    axes[1].set_title("Non-convex example: several valleys")
+    axes[1].set_xlabel("parameter")
+    axes[1].set_ylabel("loss")
+
+    figure.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 4.** **Batch GD** gives a smooth, monotone curve but pays for the full
-    dataset every step. **SGD** updates after every single example — its curve is
-    noisy (each step uses a rough gradient estimate) but it makes far more updates
-    per pass and scales to data that doesn't fit in memory. **Mini-batch** sits in
-    between and is what everyone actually uses: enough averaging to be stable,
-    small enough to be fast, and the right shape for GPU/BLAS throughput.
-    """),
+    ## 13 · Check the gradient, then use a library
 
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
+    ### 13.1 Finite-difference gradient check
 
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Divergence** | Loss ↑ or NaN/Inf within a few steps | Learning rate above the stability threshold | Lower LR; LR warmup; gradient clipping |
-    | **Crawling / plateau** | Loss barely moves | LR too small, or ill-conditioned surface | Scale features; raise LR; use Adam; LR schedule |
-    | **Zig-zagging** | Oscillates across a valley, slow along it | High condition number $\kappa$ | Feature scaling; momentum; adaptive methods |
-    | **Vanishing gradients** | Early layers stop learning | Saturating activations / deep chains (DL-03) | ReLU, residual connections, normalization |
-    | **Exploding gradients** | Sudden NaN spikes (esp. RNNs) | Repeated multiplication of large Jacobians | Gradient clipping; normalization |
-    | **Stuck on a saddle** | Gradient ~0 but not optimal | Flat saddle region | SGD noise; momentum; perturbations |
-    | **Overfitting via over-training** | Train loss ↓, val loss ↑ | Optimizing too long without regularization | Early stopping; weight decay (FND-02's prior) |
+    A centred finite difference approximates a derivative:
 
-    The cell below reproduces **divergence** and the **scaling fix** so you can
-    recognize both instantly.
+    $$
+    \frac{dL}{dw}
+    \approx
+    \frac{L(w+h)-L(w-h)}{2h}
+    $$
+
+    **Symbols:** $h$ is a small positive change. If the analytical and numerical
+    slopes disagree substantially, inspect the derivation and code before training.
+
+    Very large $h$ is not local. Extremely tiny $h$ can suffer floating-point
+    cancellation. Values around $10^{-5}$ are often useful for small checks.
     """),
 
     code(r"""
-    # (a) Divergence when LR exceeds the stability threshold (here ~1.0 for f=x^2).
-    for lr in [0.5, 1.0, 1.05]:
-        traj = gradient_descent(lambda v: np.array([2 * v[0]]), [1.0], lr, 30)[:, 0]
-        final = traj[-1]
-        tag = "DIVERGED" if not np.isfinite(final) or abs(final) > 1e6 else f"-> {final:.2e}"
-        print(f"lr={lr:<5}: {tag}")
+    def finite_difference_gradient(function, parameters, step_size=1e-5):
+        '''Approximate each partial derivative with a centred finite difference.'''
+        parameter_array = np.asarray(parameters, dtype=float)
+        numerical_gradient = np.zeros_like(parameter_array)
 
-    # (b) Feature scaling slashes the condition number, so the SAME optimizer trains faster.
-    Xbad = X * np.array([1.0, 100.0, 0.01])              # wildly different feature scales
-    Xbad_b = np.hstack([np.ones((n, 1)), Xbad])
-    Xstd = (Xbad - Xbad.mean(0)) / Xbad.std(0)           # standardize
-    Xstd_b = np.hstack([np.ones((n, 1)), Xstd])
-    print("\\ncond(X^T X) unscaled  :", f"{np.linalg.cond(Xbad_b.T @ Xbad_b):.1e}")
-    print("cond(X^T X) standardized:", f"{np.linalg.cond(Xstd_b.T @ Xstd_b):.1e}")
-    print("=> standardizing turns a near-singular ravine into a trainable bowl.")
+        for position in range(parameter_array.size):
+            plus = parameter_array.copy()
+            minus = parameter_array.copy()
+            plus[position] += step_size
+            minus[position] -= step_size
+            numerical_gradient[position] = (function(plus) - function(minus)) / (2 * step_size)
+
+        return numerical_gradient
+
+
+    check_parameters = np.array([0.7, 1.2])
+    analytical_loss, analytical_gradient, _ = linear_regression_loss_and_gradient(
+        route_distance_km,
+        travel_time_minutes,
+        intercept=check_parameters[0],
+        slope=check_parameters[1],
+    )
+
+    def loss_from_parameter_vector(parameters):
+        predictions = parameters[0] + parameters[1] * route_distance_km
+        return mean_squared_loss(travel_time_minutes, predictions)
+
+
+    numerical_gradient = finite_difference_gradient(
+        loss_from_parameter_vector,
+        check_parameters,
+    )
+
+    print("loss:", analytical_loss)
+    print("analytical gradient:", analytical_gradient)
+    print("finite-difference gradient:", numerical_gradient)
+    print("absolute difference:", np.abs(analytical_gradient - numerical_gradient))
+
+    assert np.allclose(analytical_gradient, numerical_gradient, atol=1e-7)
     """),
 
-    # ============================================ 8. Production Library
     md(r"""
-    ## 8 · Production Library Implementation
+    ### 13.2 Scikit-learn version
 
-    In practice you (1) get gradients automatically from **autodiff**
-    (`torch.autograd`, Lesson DL-03) instead of deriving them, and (2) call a tuned
-    optimizer (`torch.optim.SGD`, `Adam`, `AdamW`) instead of writing the update.
-    What the framework adds: automatic differentiation through arbitrary models,
-    fused GPU kernels, **LR schedulers** (warmup, cosine decay), **gradient
-    clipping**, weight decay, and mixed-precision. Below we use scikit-learn's
-    `SGDRegressor` (which *is* mini-batch/stochastic GD under the hood) and confirm
-    it lands on the same solution our scratch code found.
+    `SGDRegressor` packages iterative linear-regression training. We still control
+    scaling, random state, learning-rate behavior, and training boundaries. The
+    library removes loop bookkeeping; it does not remove the reasoning.
     """),
 
     code(r"""
     from sklearn.linear_model import SGDRegressor
+    from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
 
-    Xs = StandardScaler().fit_transform(X)               # scaling matters for SGD!
-    sgd = SGDRegressor(loss="squared_error", penalty=None, learning_rate="invscaling",
-                       eta0=0.01, max_iter=2000, tol=1e-6, random_state=0)
-    sgd.fit(Xs, y)
-    # Map sklearn's standardized-space coefficients back is fiddly; just compare predictions.
-    closed_pred = Xb @ w_closed
-    sgd_pred = sgd.predict(Xs)
-    corr = np.corrcoef(closed_pred, sgd_pred)[0, 1]
-    print(f"correlation(closed-form preds, SGDRegressor preds) = {corr:.4f}")
-    print("sklearn's SGD reaches essentially the same fit our scratch GD did.")
+    feature_table = route_distance_km.reshape(-1, 1)
+    sgd_pipeline = Pipeline(
+        steps=[
+            ("standard_scaler", StandardScaler()),
+            (
+                "sgd_regression",
+                SGDRegressor(
+                    loss="squared_error",
+                    penalty=None,
+                    learning_rate="constant",
+                    eta0=0.01,
+                    max_iter=20_000,
+                    tol=1e-10,
+                    random_state=42,
+                ),
+            ),
+        ]
+    )
+
+    sgd_pipeline.fit(feature_table, travel_time_minutes)
+    library_predictions = sgd_pipeline.predict(feature_table)
+    library_training_mse = mean_squared_loss(travel_time_minutes, library_predictions)
+
+    print("library predictions:", library_predictions.round(3))
+    print("library training MSE:", round(library_training_mse, 6))
+    print("manual gradient-descent MSE:", round(regression_history.iloc[-1]["training_mse"], 6))
+
+    assert library_training_mse < starting_loss
+    assert np.allclose(library_predictions, [3.1, 4.7, 6.3, 7.9], atol=0.05)
     """),
 
     md(r"""
-    **Scratch vs production.** Our loop and sklearn's `SGDRegressor` implement the
-    *same mathematics*; the library adds learning-rate schedules, convergence
-    checks, regularization, and C-level speed. For deep models the bigger win is
-    **autodiff**: you specify the forward computation and the framework computes
-    $\nabla f$ exactly via backprop, so you never hand-derive gradients for a
-    100-layer network. Your job: choose the optimizer, set the LR/schedule, scale
-    inputs, and read the loss curve.
+    ## 14 · Mini-project, practice, and mastery checkpoint
+
+    ### Mini-project: optimize a delivery-time model with a validation stop rule
+
+    **Goal:** fit a one-feature line iteratively while keeping validation rows outside
+    parameter updates.
+
+    **Dataset columns:**
+
+    | Column | Meaning | Role |
+    | --- | --- | --- |
+    | `route_id` | Stable route label | Identifier |
+    | `distance_km` | Known route distance | Feature |
+    | `travel_minutes` | Observed duration | Numerical target |
+    | `partition` | `train` or `validation` | Evidence boundary |
+
+    **Required workflow:** validate the schema; calculate a frozen training-mean
+    baseline; fit intercept and slope from training rows only; record training and
+    validation MSE; preserve the best validation parameters; compare with the baseline;
+    report the update settings and limitations.
     """),
 
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — Training Under a Compute Budget
+    code(r"""
+    project_data = pd.DataFrame(
+        {
+            "route_id": ["A", "B", "C", "D", "E", "F", "G", "H"],
+            "distance_km": [1.0, 2.0, 3.0, 4.0, 1.5, 2.5, 3.5, 4.5],
+            "travel_minutes": [3.0, 5.0, 6.0, 8.0, 4.0, 5.5, 7.0, 9.0],
+            "partition": ["train"] * 4 + ["validation"] * 4,
+        }
+    )
 
-    **Scenario.** A team retrains a large recommender (hundreds of millions of
-    rows, billions of parameters) **nightly**. The full pipeline must finish inside
-    a **6-hour** window on a fixed GPU cluster, or the morning model is stale.
+    expected_columns = {"route_id", "distance_km", "travel_minutes", "partition"}
+    if set(project_data.columns) != expected_columns:
+        raise ValueError("project columns do not match the declared schema")
+    if project_data["route_id"].duplicated().any():
+        raise ValueError("route_id must be unique")
+    if set(project_data["partition"]) != {"train", "validation"}:
+        raise ValueError("both train and validation partitions are required")
 
-    **Business objectives:** ship a fresh, accurate model every day within the time
-    and cost budget.
+    train_rows = project_data[project_data["partition"] == "train"]
+    validation_rows = project_data[project_data["partition"] == "validation"]
 
-    **Cost of mistakes**
-    - **Diverged run** (LR too high, no clipping): wasted hours of cluster time and
-      a missed model — directly costly.
-    - **Under-converged run** (LR too low / too few steps): a weaker model →
-      measurable drop in engagement/revenue.
-    - **Over-training**: wasted compute and overfitting.
+    project_baseline = float(train_rows["travel_minutes"].mean())
+    baseline_validation_predictions = np.full(len(validation_rows), project_baseline)
+    baseline_validation_mse = mean_squared_loss(
+        validation_rows["travel_minutes"],
+        baseline_validation_predictions,
+    )
 
-    **Optimization decisions that move the needle**
-    - **Mini-batch SGD**, batch size tuned to saturate the GPUs (throughput) without
-      blowing memory.
-    - **Adam/AdamW** for robustness to feature scaling across heterogeneous inputs.
-    - **LR warmup + cosine decay** to start stable and finish fine-grained — the
-      single biggest stability lever at scale.
-    - **Gradient clipping** as insurance against rare exploding-gradient spikes that
-      would NaN the run and cost the whole window.
-    - **Early stopping** on a validation metric to avoid burning the budget past the
-      point of diminishing returns.
+    parameters = np.zeros(2, dtype=float)
+    best_parameters = parameters.copy()
+    best_validation_mse = np.inf
+    project_records = []
+    project_learning_rate = 0.05
 
-    **Constraints:** fixed wall-clock and GPU budget; data too large for memory
-    (hence stochastic, streaming gradients).
+    for step in range(501):
+        training_loss, training_gradient, _ = linear_regression_loss_and_gradient(
+            train_rows["distance_km"],
+            train_rows["travel_minutes"],
+            intercept=parameters[0],
+            slope=parameters[1],
+        )
+        validation_predictions = (
+            parameters[0] + parameters[1] * validation_rows["distance_km"].to_numpy()
+        )
+        validation_mse = mean_squared_loss(
+            validation_rows["travel_minutes"],
+            validation_predictions,
+        )
+        project_records.append(
+            {
+                "step": step,
+                "training_mse": training_loss,
+                "validation_mse": validation_mse,
+                "intercept": parameters[0],
+                "slope": parameters[1],
+            }
+        )
+        if validation_mse < best_validation_mse:
+            best_validation_mse = validation_mse
+            best_parameters = parameters.copy()
+        if step < 500:
+            parameters = parameters - project_learning_rate * training_gradient
 
-    **KPIs:** time-to-convergence, final validation loss, run reliability (fraction
-    of nightly runs that complete without diverging), and $/training-run.
+    project_history = pd.DataFrame(project_records)
+
+    print("training-mean baseline:", project_baseline)
+    print("baseline validation MSE:", round(baseline_validation_mse, 4))
+    print("best [intercept, slope]:", best_parameters.round(4))
+    print("best validation MSE:", round(best_validation_mse, 4))
+    print("learning rate:", project_learning_rate)
+
+    assert len(train_rows) == 4 and len(validation_rows) == 4
+    assert best_validation_mse < baseline_validation_mse
+    assert np.all(np.isfinite(best_parameters))
+    assert project_history["training_mse"].iloc[-1] < project_history["training_mse"].iloc[0]
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ### Worked example
 
-    - **Learning-rate schedules** (warmup → decay) are usually higher-leverage than
-      the optimizer choice. Warmup prevents early divergence; decay sharpens the
-      final solution.
-    - **Gradient clipping** caps the update norm — cheap insurance against NaN-ing a
-      long, expensive run on a rare bad batch (essential for RNNs/Transformers).
-    - **Batch size interacts with LR.** Larger batches → less gradient noise →
-      typically need a larger LR (linear-scaling rule) and warmup.
-    - **Monitor the loss curve, not just the final number.** Spikes, plateaus, and a
-      train/val gap each point to a specific cause (LR, conditioning, overfitting).
-    - **Reproducibility & checkpointing.** Seed everything; checkpoint often so a
-      crash near hour 5 doesn't cost the whole window.
-    - **Mixed precision** speeds training and cuts memory but can underflow
-      gradients — use loss scaling.
-    - **Feature scaling / normalization** (BatchNorm, LayerNorm) is an *optimization*
-      tool: it conditions the loss surface so training is faster and more stable.
+    For $L(w)=(w-4)^2$, start at $w=1$ with $\eta=0.25$:
+
+    $$
+    \frac{dL}{dw}=2(w-4)=2(1-4)=-6
+    $$
+
+    $$
+    w_1=1-0.25(-6)=2.5
+    $$
+
+    Loss falls from 9 to $(2.5-4)^2=2.25$.
+
+    ### Guided practice
+
+    1. For $L(w)=(w-5)^2$, calculate the derivative at $w=2$.
+    2. Use learning rate 0.1 to calculate two updates manually.
+    3. Explain why subtracting a negative gradient increases the parameter.
+    4. At $b=0,w=0$, calculate both regression gradients for two rows
+       $(x,y)=(1,2),(2,4)$.
+    5. Predict the shape of a gradient for seven parameters.
+
+    ### Independent practice
+
+    6. Rebuild scalar gradient descent and record step, parameter, loss, and gradient.
+    7. Compare three learning rates on one loss and explain their curves.
+    8. Derive and implement the intercept and slope gradients without copying.
+    9. Compare batch sizes 1, 2, and all rows using a fixed seed.
+    10. Standardize a training feature manually and explain why validation uses the
+        frozen training mean and standard deviation.
+    11. Break one analytical gradient deliberately and prove the finite-difference
+        check detects it.
+
+    ### Challenge
+
+    Rebuild the mini-project without copying its code. Add:
+
+    - a maximum-step rule;
+    - a non-finite-value rule;
+    - a small-improvement patience rule;
+    - a gradient-norm rule;
+    - recorded learning rate and starting parameters;
+    - plots of training and validation loss;
+    - comparison with the frozen baseline and `SGDRegressor`;
+    - at least eight meaningful assertions.
+
+    ### Self-check
+
+    Before trusting an optimization run, answer:
+
+    - What exact quantity is being minimized?
+    - Which rows contribute to each update?
+    - Does the gradient shape match the parameter shape?
+    - What does the first gradient sign predict?
+    - Did the first update lower training loss?
+    - Is validation used only for evidence and stopping?
+    - Which stop rule ended the run?
+    - Could a falling loss still optimize the wrong problem?
     """),
 
-    # ============================================ 11. Tradeoff Analysis
     md(r"""
-    ## 11 · Tradeoff Analysis
+    ### Solution and scoring rubric
 
-    **Batch vs mini-batch vs SGD:**
+    1. $dL/dw=2(2-5)=-6$.
+    2. First update: $2-0.1(-6)=2.6$. New gradient is $2(2.6-5)=-4.8$;
+       second update is $2.6-0.1(-4.8)=3.08$.
+    3. Subtracting a negative value is addition, which moves toward a locally lower loss.
+    4. Errors are $[-2,-4]$. Intercept gradient is $2(-3)=-6$; slope gradient is
+       $2[(-2)(1)+(-4)(2)]/2=-10$.
+    5. The gradient has seven components, one local slope per parameter.
+    6. A valid history shows loss decreasing for a useful rate and records the starting row.
+    7. A tiny rate crawls; a useful rate falls steadily; a large rate oscillates or grows.
+    8. The implementation should reach approximately $b=1.5,w=1.6$ on the delivery rows.
+    9. Smaller batches create noisier paths but should reduce loss with suitable rates.
+    10. Validation must use training statistics because it may not teach preprocessing.
+    11. The analytical and numerical gradients should disagree after the deliberate error.
 
-    | Dimension | Batch GD | Mini-batch | SGD (B=1) |
-    |---|---|---|---|
-    | Gradient quality | Exact | Low-variance estimate | Noisy estimate |
-    | Cost per step | High ($O(n)$) | Moderate | Low |
-    | Scales to huge data | No | **Yes** | Yes |
-    | Convergence path | Smooth | Slightly noisy | Very noisy |
-    | Escapes saddles | Poorly | Well | Best |
-    | Hardware fit | Poor | **Best (GPU)** | Underutilizes |
+    Challenge scoring:
 
-    **Optimizers:**
+    | Skill | Points |
+    | --- | ---: |
+    | Manual derivative and two updates | 3 |
+    | Correct regression gradient derivation | 4 |
+    | Auditable implementation and stop rules | 4 |
+    | Learning-rate and scaling explanation | 3 |
+    | Batch comparison and reproducibility | 2 |
+    | Validation boundary and baseline | 2 |
+    | Gradient check and assertions | 2 |
+    | **Total** | **20** |
 
-    | Dimension | SGD | SGD + Momentum | Adam / AdamW |
-    |---|---|---|---|
-    | Tuning needed | High (LR-sensitive) | Moderate | **Low** (robust) |
-    | Handles bad conditioning | Poorly | Better | **Well** (per-dim scaling) |
-    | Memory | Lowest | +1 buffer | +2 buffers |
-    | Generalization | Often best (vision) | Strong | Sometimes slightly worse* |
-    | Default for | Well-conditioned/CNNs | CNNs | **Transformers/LLMs** |
+    ### Common mistakes
 
-    *AdamW (decoupled weight decay) narrows the generalization gap; it's the de
-    facto default for large language models.
+    - Optimizing before defining the loss.
+    - Reversing actual-minus-predicted and predicted-minus-actual during one derivation.
+    - Adding the gradient instead of stepping against it.
+    - Forgetting the chain-rule factor $x_i$ in the slope gradient.
+    - Comparing gradients whose parameter order differs.
+    - Choosing a learning rate without checking the loss history.
+    - Treating a small gradient as proof of good validation performance.
+    - Learning scaling values from validation or test rows.
+    - Using validation rows inside gradient updates.
+    - Reporting only the final loss and hiding divergence or oscillation.
+    - Assuming a library optimizer repairs invalid data or a dishonest split.
+    - Jumping to Adam before plain gradient descent can be explained manually.
 
-    **First-order vs second-order (Newton):**
+    ### Readiness threshold
 
-    | Dimension | First-order (GD/Adam) | Second-order (Newton) |
-    |---|---|---|
-    | Uses curvature | No (Adam approximates) | Yes (Hessian) |
-    | Cost per step | $O(d)$ | $O(d^2)$–$O(d^3)$ |
-    | Scales to deep nets | **Yes** | No (Hessian too big) |
-    | Convergence (near min) | Linear | Quadratic |
+    Score at least **16/20**, including correct manual updates, regression gradients,
+    validation boundaries, and a passing finite-difference gradient check.
     """),
 
-    # ============================================ 12. Interview Prep
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## Ready to move on?
 
-    **Common questions**
-    - *Why move against the gradient?* → Taylor: $f(\mathbf w-\eta\nabla f)\approx
-      f-\eta\lVert\nabla f\rVert^2$, which decreases for small $\eta$ (Section 4.1).
-    - *What does the learning rate control?* → Step size; too small = slow, too
-      large = overshoot/diverge.
+    ### Quick check
 
-    **Deep-dive questions**
-    - *Batch vs SGD vs mini-batch tradeoffs?* (Section 11 table — say *why* mini-
-      batch is the default: variance/cost/hardware.)
-    - *Derive Adam's update and explain the $\sqrt{\hat v}$ term.* (Section 4.6 —
-      per-parameter adaptive step ≈ auto-conditioning.)
-    - *Why does feature scaling speed up training?* → Lowers the condition number;
-      connect to the $(\kappa-1)/(\kappa+1)$ rate and Lesson FND-01.
+    1. What is the difference between loss and optimizer?
+    2. What does the sign of a derivative tell us?
+    3. Why does gradient descent subtract the gradient?
+    4. What does the learning rate control?
+    5. Why does the slope gradient contain $x_i$?
+    6. Why can scaled features be easier to optimize?
+    7. How do batch, stochastic, and mini-batch updates differ?
+    8. Why can training loss fall while validation loss rises?
+    9. What does a finite-difference check test?
+    10. Why can successful optimization still solve the wrong problem?
 
-    **Whiteboard questions**
-    - "Implement gradient descent for linear regression." (Section 5.2.)
-    - "Implement momentum / Adam from the update rules." (Section 5.1.)
+    ### Teach it back
 
-    **Strong vs weak answers**
-    - *"Your training loss is NaN. What happened?"*
-      - **Weak:** "Bad data."
-      - **Strong:** "Most likely the LR is above the stability threshold so updates
-        diverge; I'd lower it, add warmup and gradient clipping, check for exploding
-        gradients and unscaled features, and confirm no inf/NaN in the inputs."
-    - *"Adam or SGD?"*
-      - **Weak:** "Adam, always."
-      - **Strong:** "Adam for fast, robust convergence on ill-conditioned problems
-        like Transformers; tuned SGD+momentum often generalizes better on vision.
-        I'd default to AdamW for LLMs and benchmark both with a proper LR schedule."
+    Starting from the CML-01 delivery MSE, explain:
 
-    **Follow-ups:** "Now batch size is 10×—what do you change?" (scale LR, add
-    warmup). "Loss plateaus at epoch 20—debug it." (LR decay vs raise, conditioning,
-    saddle, data).
+    **prediction → error → loss → partial derivatives → gradient → learning-rate
+    update → repeated training steps → frozen validation evidence.**
 
-    **Common mistakes:** assuming a single best LR; ignoring feature scaling;
-    confusing local minima with saddles; claiming GD finds the global min of a
-    non-convex loss; forgetting that batch size and LR are coupled.
-    """),
+    Calculate the first intercept and slope update without code. Then point to the
+    exact place where validation data must remain outside the learning loop.
 
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    ### Memory aid
 
-    1. **What is it?** Define gradient descent and its update rule.
-    2. **Why was it invented?** Why iterative optimization over closed-form solving?
-    3. **How does it work?** Give the Taylor argument for stepping against the
-       gradient.
-    4. **Why does it work?** Why does it find the global min for convex losses but
-       only a local/critical point otherwise — and why is that usually fine?
-    5. **When to use it?** Batch vs mini-batch vs SGD — pick one and justify it.
-    6. **When NOT to use it?** When would you prefer a closed form or second-order
-       method?
-    7. **Tradeoffs?** SGD vs momentum vs Adam.
-    8. **How would you productionize it?** Describe LR schedule, clipping, batch
-       size, monitoring, and checkpointing for a large nightly training job.
-    """),
+    **Define the loss, measure its local slopes, step against them, and verify both
+    training progress and validation evidence.**
 
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises
+    ### Next dependency
 
-    **Estimated time:** 90–150 minutes. The first two derivations now have explicit
-    self-checks; use them only after making your own attempt.
-
-    **Beginner (conceptual)**
-    1. Derive the gradient-descent update from a first-order Taylor expansion and
-       state the condition on $\eta$ for the loss to decrease.
-    2. For $f(x)=x^2$, find the largest stable learning rate analytically, then
-       verify it numerically with the divergence cell.
-
-    **Beginner → Intermediate (coding)**
-    3. Add **RMSProp** to the Section 5.1 optimizers and compare its trajectory to
-       Adam's on the ill-conditioned bowl.
-    4. Train **logistic regression** by gradient descent on a 2-class synthetic
-       dataset (you'll derive its gradient in Lesson CML-02); plot the loss curve.
-
-    **Intermediate (analysis)**
-    5. Empirically measure GD's convergence rate on quadratics with $\kappa\in\{1,
-       5,20,100\}$ and compare to the $((\kappa-1)/(\kappa+1))^2$ prediction.
-    6. Implement an LR **warmup + cosine-decay** schedule and show it trains a
-       poorly-scaled problem more reliably than a constant LR.
-
-    **Senior (interview + production design)**
-    7. *Whiteboard:* explain, with the condition number, why standardizing features
-       can speed training more than switching optimizers — and when it can't.
-    8. *Design:* a nightly training job must finish in 6 hours or ship a stale
-       model. Specify optimizer, batch size, LR schedule, clipping, early-stopping
-       criterion, checkpointing cadence, and the metrics you'd alert on.
-    9. *Debug:* given a loss curve that descends, then spikes to NaN at step 4000,
-       list the three most likely causes in order and the experiment you'd run to
-       confirm each.
-
-    <details>
-    <summary><strong>Hints, expected results, and scoring rubric</strong></summary>
-
-    1. Substitute $\Delta\mathbf w=-\eta\nabla f$ into the Taylor approximation.
-       The predicted change is $-\eta\lVert\nabla f\rVert^2$, negative for positive
-       $\eta$ and non-zero gradient when the local approximation is valid.
-    2. For $x_{t+1}=(1-2\eta)x_t$, shrinking requires $|1-2\eta|<1$, giving
-       $0<\eta<1$. At exactly 1 the values oscillate without shrinking.
-    3. RMSProp keeps the squared-gradient moving average but not momentum's first
-       moment. Compare methods using the same start and step budget.
-    4. Loss should decrease and accuracy should exceed chance. Verify the gradient
-       shape before training.
-    5. Use the optimal fixed step for each quadratic before comparing measured
-       objective-error ratios with theory.
-    6. Plot learning rate and loss together and compare multiple random seeds.
-    7. Award points for connecting scaling to Hessian eigenvalues, noting remaining
-       correlation/non-convexity, and naming a case where adaptation still helps.
-    8. Full credit includes a measurable deadline policy, recovery from checkpoint,
-       and alert thresholds—not only optimizer names.
-    9. Strong diagnoses test learning-rate instability, gradient overflow, and bad
-       input batches independently instead of changing every variable at once.
-
-    A score of 12/15 across Questions 7–9 indicates senior-level readiness.
-    </details>
-    """),
-
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    Gradient descent is the universal engine of ML: estimate the downhill direction
-    ($-\nabla f$), take a step sized by the learning rate, repeat. Conditioning
-    (Lesson FND-01) sets the speed; stochasticity (Lesson FND-02's sampling) makes it
-    scale; momentum and Adam tame ill-conditioned ravines; and schedules, clipping,
-    and scaling are what keep big training runs alive.
-
-    **The optimization bridge is complete.** You can now connect the loss introduced
-    in CML-01 with the iterative fitting used by classifiers and later neural models.
-
-    **Next lesson:** `CML-02 · Logistic Regression` — we reuse gradients to fit a
-    probability model for binary outcomes.
+    CML-02 will define a classification loss before deriving its gradient. The update
+    mechanism stays the same; only the prediction rule and loss derivative change.
     """),
 ]
+
 
 build("01_ml_foundations/04_optimization_and_gradient_descent.ipynb", cells)

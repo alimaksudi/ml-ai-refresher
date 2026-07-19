@@ -31,6 +31,7 @@ BUILDERS = sorted((ROOT / "tools" / "builders").rglob("*.py"))
 NOTEBOOKS = sorted((ROOT / "notebooks").rglob("*.ipynb"))
 
 FOUNDATION_PREFIXES = ("00_prerequisites/", "01_ml_foundations/")
+SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06"}
 FORMULA_CUE = re.compile(
     r"(?i)\b(symbols?|where|means?|represents?|denotes?|read(?:s)? as|in words)\b"
 )
@@ -64,18 +65,7 @@ def validate_notebook(path: Path) -> list[Finding]:
             Finding("ERROR", rel, "curriculum metadata differs from canonical path")
         )
 
-    mastery_cues = (
-        "## Student Lesson Companion",
-        "### Practical problem before history",
-        "### Concept, analogy, and analogy limit",
-        "### Use / avoid / alternatives",
-        "### Code walkthrough and expected-result contract",
-        "### Debugging table",
-        "## Lesson Close · Summary, Student Check, and Memory Aid",
-        "### Five short student checks",
-        "### Plain-language summary",
-        "### One-sentence memory aid",
-        "## Required Core Mastery Gate",
+    shared_mastery_cues = (
         "Worked example",
         "Guided practice",
         "Independent practice",
@@ -85,6 +75,25 @@ def validate_notebook(path: Path) -> list[Finding]:
         "Common mistakes",
         "Readiness threshold",
     )
+    if actual_metadata and actual_metadata.get("id") in SELF_CONTAINED_LESSON_IDS:
+        mastery_cues = shared_mastery_cues + (
+            "## Ready to move on?",
+            "### Quick check",
+            "### Teach it back",
+            "### Memory aid",
+        )
+    else:
+        mastery_cues = shared_mastery_cues + (
+            "## Student Lesson Companion",
+            "### Practical problem before history",
+            "### Concept, analogy, and analogy limit",
+            "### Use / avoid / alternatives",
+            "## Lesson Close · Summary, Student Check, and Memory Aid",
+            "### Five short student checks",
+            "### Plain-language summary",
+            "### One-sentence memory aid",
+            "## Required Core Mastery Gate",
+        )
     for cue in mastery_cues:
         if cue not in markdown:
             findings.append(Finding("ERROR", rel, f"missing mastery-gate cue: {cue}"))
@@ -269,7 +278,7 @@ def execute_notebooks(scope: str) -> list[Finding]:
         ]
     elif scope == "classical":
         modules = json.loads(CURRICULUM_PATH.read_text(encoding="utf-8"))["modules"]
-        cutoff = next(index for index, item in enumerate(modules) if item["id"] == "CML-05")
+        cutoff = next(index for index, item in enumerate(modules) if item["id"] == "CML-06")
         classical_paths = {
             module["path"]
             for module in modules[: cutoff + 1]
