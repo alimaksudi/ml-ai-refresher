@@ -41,7 +41,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # without mutating the checked-in build artifacts.
 NB_DIR = os.environ.get("NB_OUTPUT_DIR", os.path.join(ROOT, "notebooks"))
 CURRICULUM_PATH = os.path.join(ROOT, "docs", "CURRICULUM_PATH.json")
-SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06", "MLE-04", "MLE-05"}
+SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06", "MLE-04", "MLE-05", "EVAL-01"}
 
 
 def _curriculum_metadata(rel_path: str) -> dict:
