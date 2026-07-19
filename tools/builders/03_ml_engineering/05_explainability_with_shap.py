@@ -1,672 +1,909 @@
-"""Builder for Lesson MLE-05 — Explainability (SHAP).
+"""Build MLE-05: beginner-first model interpretability and SHAP."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
-    # MLE-05 · Explainability (SHAP)
-    ### Section 03 — ML Engineering Foundations · *ML/AI Senior Mastery Curriculum*
+    # MLE-05 · Model Interpretability and SHAP
 
-    > The models that win on tabular data — Random Forests and gradient boosting
-    > (Lessons CML-04 and CML-05) — are **black boxes**: accurate, but they don't hand you the
-    > signed, auditable coefficients that made linear/logistic regression so
-    > trustworthy (Lessons CML-01 and CML-02). In regulated, high-stakes, or simply
-    > *debuggable* systems that's a problem. **SHAP** (SHapley Additive exPlanations)
-    > closes the gap: it borrows a 1950s result from **cooperative game theory** —
-    > the **Shapley value** — to fairly attribute a single prediction to its features,
-    > with provable guarantees no other method has. This notebook derives it from the
-    > axioms, implements exact Shapley attributions from scratch, builds force,
-    > summary, and beeswarm visualizations by hand, and — crucially — teaches the
-    > caveats that separate "I ran `shap.plots`" from genuine understanding.
+    **Prerequisites:** CML-01 through CML-06, MLE-01, MLE-02, and MLE-03  
+    **Estimated study time:** 10–12 hours, including practice  
+    **Next lesson:** EVAL-01 · Classical ML Evaluation
+
+    A model can score well and still rely on the wrong signal. Interpretability helps
+    us ask what the fitted model learned, where it behaves strangely, and why one
+    prediction differs from a reference prediction.
+
+    We will not begin with SHAP. That would be like learning an aircraft dashboard
+    before learning what speed and direction mean. We first build an interpretation
+    ladder, then use SHAP for the question it is designed to answer.
+
+    ### Scope boundary
+
+    This lesson focuses on supervised tabular models. It covers coefficients, tree
+    impurity importance, permutation importance, PDP, ICE, exact small Shapley values,
+    and TreeSHAP. It defers causal inference, formal fairness assessment, counterfactual
+    recourse, image attribution, and explanation monitoring.
+
+    An explanation describes a fitted model. It does not prove that the model is good,
+    fair, causal, or legally compliant.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The **Shapley value** from cooperative game theory and the **four axioms**
-      (efficiency, symmetry, dummy, additivity) that make it the *unique* fair
-      attribution.
-    - Casting a prediction as a "game": features are players, the payout is the
-      prediction minus a baseline; **exact Shapley feature attributions from scratch**.
-    - **KernelSHAP** (model-agnostic, weighted regression) and **TreeSHAP**
-      (exact, polynomial-time for trees) — what they are and when to use each.
-    - **Local** explanations (force / waterfall) and **global** ones (summary /
-      beeswarm), built by hand in matplotlib.
-    - SHAP vs **permutation importance** (Lesson CML-04) vs **LIME** — and the
-      **correlated-features** trap and the **explainability ≠ causality** distinction.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - **Regulation & trust:** "right to explanation" (credit, insurance, healthcare)
-      demands per-decision reasons; SHAP provides defensible ones for any model.
-    - **Debugging:** SHAP exposes leakage (a feature dominating absurdly — Notebook
-      10), bias, and spurious signal faster than any metric.
-    - **Stakeholder communication:** turning a boosted-tree score into "these three
-      factors drove this decision" is a core senior deliverable.
+    - decide whether a global, effect-shape, or local question is being asked;
+    - explain a standardized linear coefficient without calling it causal;
+    - describe how tree impurity importance is accumulated and why it can mislead;
+    - calculate validation permutation importance manually;
+    - build and read partial-dependence and ICE curves;
+    - calculate a two-feature Shapley allocation by hand;
+    - explain every symbol in the general Shapley formula;
+    - implement exact interventional Shapley values for a tiny model;
+    - explain how background data, correlation, and output scale change meaning;
+    - use TreeSHAP and verify its additive reconstruction;
+    - explain a frozen model without reopening test-based model selection.
 
-    **Typical interview questions**
-    - "What is a Shapley value and why is it 'fair'?"
-    - "How does SHAP differ from feature importance / permutation importance?"
-    - "Why is exact SHAP expensive, and how does TreeSHAP make it tractable?"
-    - "What does a SHAP value actually mean — is it causal?"
-    - "What goes wrong with SHAP under correlated features?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The accuracy–interpretability tension.** Linear/logistic regression (Notebooks
-    CML-01 and CML-02) are transparent: each coefficient is a signed, global effect. But they
-    underfit complex tabular data, where ensembles (CML-04 and CML-05) win — at the cost of
-    interpretability. For years, practitioners had only crude, *global*, and often
-    *misleading* tools: tree "feature importance" (biased toward high-cardinality
-    features, Lesson CML-04) and permutation importance (breaks under correlation). None
-    explained an **individual** prediction, which is what a denied applicant, a
-    flagged transaction, or a debugging engineer actually needs.
-
-    **Shapley values (Lloyd Shapley, 1953).** Game theory asked: in a cooperative game
-    where players form coalitions to produce value, how do you **fairly** split the
-    total payout among players who contributed unequally and interact? Shapley proved
-    there is **exactly one** allocation satisfying four reasonable fairness axioms —
-    the *Shapley value* — averaging each player's marginal contribution over all
-    possible orders of joining. (He shared the 2012 Nobel for related work.)
-
-    **LIME (2016) and SHAP (Lundberg & Lee, 2017).** LIME explained a single
-    prediction by fitting a simple local surrogate model — intuitive but unstable and
-    without guarantees. SHAP's breakthrough was to (1) frame feature attribution as
-    that 1953 cooperative game (features = players, prediction = payout) and (2) prove
-    that the Shapley value is the **unique** attribution satisfying local accuracy,
-    consistency, and missingness — *unifying* LIME, DeepLIFT, and others as special
-    cases of one principled framework. Then they made it **practical**: KernelSHAP
-    (model-agnostic) and **TreeSHAP** (exact, fast for tree ensembles) turned an
-    exponential-cost ideal into a production tool.
-
-    **Why it matters now.** SHAP is the de facto standard for explaining tabular
-    models in industry, and the conceptual framework (fair credit assignment over
-    interacting components) recurs far beyond ML.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The team-bonus analogy.** A team ships a project and earns a bonus. How do you
-    split it fairly among members who contributed different amounts and whose
-    contributions *interact* (A is only valuable if B did their part)? Shapley's
-    answer: for each member, imagine every possible order in which the team could have
-    assembled; measure how much that member *adds* when they join (the jump in value);
-    average those marginal contributions over all orders. That average is their fair
-    share.
-
-    **The ML translation.** The "team" is the set of features; the "bonus" is the
-    prediction *relative to a baseline* (the average prediction). A feature's **SHAP
-    value** is its fair share of the gap between this prediction and the average — how
-    much *this* feature's *this* value pushed the output up or down. The defining
-    guarantee (**efficiency / local accuracy**): the SHAP values **add up exactly** to
-    the prediction:
-    $$f(x) = \underbrace{\mathbb E[f]}_{\text{baseline}} + \sum_i \phi_i.$$
-    So an explanation is a complete, additive decomposition — not a vague "importance
-    score."
-
-    **Local vs global.** One prediction's SHAP values are a **local** explanation
-    ("for *this* customer, high debt added +0.3 to risk"). Averaging $|\phi_i|$ over
-    many predictions gives a **global** importance ranking — but built from honest,
-    locally-accurate pieces, unlike raw tree importance.
+    ### Learning path
 
     ```mermaid
     flowchart LR
-        B["Baseline E[f]<br/>(avg prediction)"] --> A1["+ phi_1 (feature 1)"]
-        A1 --> A2["+ phi_2 (feature 2)"]
-        A2 --> A3["+ ... phi_M"]
-        A3 --> P["= f(x), this prediction"]
+        A[Validate model] --> B[Coefficients]
+        B --> C[Tree importance]
+        C --> D[Permutation importance]
+        D --> E[PDP and ICE]
+        E --> F[Two-feature game]
+        F --> G[Exact Shapley]
+        G --> H[Background and dependence]
+        H --> I[TreeSHAP]
+        I --> J[One held-out explanation]
     ```
 
-    Run the cells: we'll define the "game," compute exact Shapley values by brute
-    force, and verify they sum to the prediction.
+    Validation  
+    → required before interpretation  
+    → because a faithful explanation of a broken model is still misleading.
+
+    Global importance  
+    → required before local attribution  
+    → because students should separate “what matters overall?” from “why this row?”.
+
+    Background distributions  
+    → required before SHAP  
+    → because an attribution is always relative to a reference.
+    """),
+
+    md(r"""
+    ## 2 · Start with a validated model and a precise question
+
+    A delivery company predicts arrival time from distance, traffic, rain, driver
+    experience, a correlated distance estimate, and a random tracking signal.
+
+    Before explaining anything, ask:
+
+    1. **Global reliance:** which features affect performance across many rows?
+    2. **Effect shape:** how does prediction usually change as one feature changes?
+    3. **Local attribution:** why is this prediction above or below a reference?
+
+    These are different questions and need different tools.
+
+    We create training, validation, and sealed-test partitions. Validation confirms
+    that the model has useful predictive evidence. Test remains sealed until the mini
+    project. Interpretation never repairs leakage or weak evaluation.
     """),
 
     code(r"""
     import itertools
     from math import factorial
-    import numpy as np
+
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
-    """),
-
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
-
-    ### 4.1 The Shapley value
-    A cooperative game is a value function $v(S)$ giving the payout of any coalition
-    $S\subseteq\{1,\dots,M\}$ of players. The **Shapley value** of player $i$ is the
-    weighted average of its **marginal contribution** $v(S\cup\{i\})-v(S)$ over all
-    coalitions $S$ not containing $i$:
-    $$\boxed{\ \phi_i=\sum_{S\subseteq N\setminus\{i\}}\frac{|S|!\,(M-|S|-1)!}{M!}\big[v(S\cup\{i\})-v(S)\big]\ }$$
-    The combinatorial weight is exactly the probability of seeing coalition $S$ before
-    $i$ if players join in a uniformly random order — so $\phi_i$ is $i$'s *average
-    marginal contribution across all $M!$ orderings*.
-
-    ### 4.2 The four axioms (why it's the unique fair split)
-    Shapley proved his value is the **only** attribution satisfying all four:
-    - **Efficiency:** $\sum_i\phi_i=v(N)-v(\varnothing)$. The shares add up to the
-      total (→ "local accuracy": SHAP values sum to $f(x)-\mathbb E[f]$).
-    - **Symmetry:** two players with identical marginal contributions get equal
-      shares.
-    - **Dummy/Null:** a player that never changes the payout gets $\phi_i=0$.
-    - **Additivity/Linearity:** for a sum of games, values add — which is what makes
-      TreeSHAP over an *ensemble* equal the sum of per-tree explanations.
-
-    ### 4.3 Turning a prediction into a game
-    Players = features. The value of a coalition $S$ is the model's expected output
-    when **only the features in $S$ are known** and the rest are marginalized out over
-    a **background distribution** $D$:
-    $$v(S)=\mathbb E_{x_{\bar S}\sim D}\big[f(x_S,\,x_{\bar S})\big].$$
-    Then $v(\varnothing)=\mathbb E[f]$ (baseline) and $v(N)=f(x)$ (this prediction), so
-    efficiency gives the additive decomposition of §3. *Choice of background matters*
-    (e.g., a all-data mean vs a relevant reference) — it defines "what would the
-    feature have been if unknown."
-
-    ### 4.4 Why exact SHAP is hard, and the two practical estimators
-    Exact computation sums over all $2^M$ coalitions — exponential in the number of
-    features. Two tractable routes:
-    - **KernelSHAP** (model-agnostic): sample coalitions, evaluate the model, and solve
-      a **weighted linear regression** with the *Shapley kernel*; its solution
-      provably equals the Shapley values. Works for any model but needs many model
-      calls (slow).
-    - **TreeSHAP** (Lundberg 2018): for tree ensembles, a clever dynamic program
-      computes **exact** Shapley values in **polynomial time** ($O(TLD^2)$: trees ×
-      leaves × depth²) by tracking how subsets flow down each tree. This is why SHAP
-      is fast and exact for XGBoost/RF — the production default.
-
-    ### 4.5 SHAP vs permutation importance vs LIME
-    - **Permutation importance** (Lesson CML-04): *global*, measures error increase when
-      a feature is shuffled; cheap but breaks under correlation and gives no
-      per-prediction or signed local attribution.
-    - **LIME**: local surrogate model; intuitive but unstable (depends on sampling/
-      kernel) and lacks SHAP's consistency guarantee.
-    - **SHAP**: local *and* global, signed, additive, and uniquely fair — but
-      semantically about the *model*, not the *world* (next point).
-
-    ### 4.6 The two caveats that matter most
-    - **Correlated features** split credit. If two features are near-duplicates, SHAP
-      divides their joint contribution between them (or, with an interventional
-      background, can attribute to unrealistic off-manifold combinations). Importance
-      of a *group* is more meaningful than either alone.
-    - **Explainability ≠ causality.** A SHAP value says how a feature moved *the
-      model's output*, given how the model learned to use it — **not** the real-world
-      causal effect of changing that feature. A leaked or confounded feature gets large
-      SHAP values precisely because the model relies on it (Lesson MLE-02). SHAP explains
-      the model; causal claims require causal inference.
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    We implement the **exact Shapley value** by brute force over all coalitions, with
-    the value function marginalizing absent features over a background sample. We
-    verify the **efficiency axiom** (values sum to $f(x)-\mathbb E[f]$) and, for a
-    linear model, the closed form $\phi_i = w_i(x_i-\bar x_i)$.
-    """),
-
-    code(r"""
-    # 5.1 Value function v(S): present features fixed to x, absent ones averaged over background.
-    def value_function(f, x, S, background):
-        # S: tuple/list of present feature indices
-        Xtmp = background.copy().astype(float)
-        if len(S):
-            Xtmp[:, list(S)] = x[list(S)]          # overwrite present features with x's values
-        return f(Xtmp).mean()                       # marginalize absent features over background
-
-    def exact_shapley(f, x, background):
-        M = len(x)
-        others = list(range(M))
-        phi = np.zeros(M)
-        for i in range(M):
-            rest = [j for j in others if j != i]
-            for r in range(len(rest) + 1):
-                for S in itertools.combinations(rest, r):
-                    w = factorial(len(S)) * factorial(M - len(S) - 1) / factorial(M)
-                    phi[i] += w * (value_function(f, x, tuple(S) + (i,), background)
-                                   - value_function(f, x, S, background))
-        return phi
-    """),
-
-    code(r"""
-    # 5.2 Verify on a known model: linear with one interaction term.
-    w = np.array([2.0, -1.5, 1.0, 0.5, -0.8, 1.2])
-    def model(X):
-        return X @ w + 0.7 * X[:, 0] * X[:, 1]      # last term is a feature interaction
-
-    M = len(w)
-    background = rng.normal(0, 1, (200, M))          # reference distribution
-    x = rng.normal(0, 1, M)                          # the instance to explain
-
-    phi = exact_shapley(model, x, background)
-    baseline = model(background).mean()
-    fx = model(x.reshape(1, -1))[0]
-
-    print("SHAP values phi:", phi.round(3))
-    print(f"\\nEFFICIENCY axiom check:")
-    print(f"  baseline E[f]      = {baseline:.3f}")
-    print(f"  sum(phi)           = {phi.sum():.3f}")
-    print(f"  baseline + sum(phi)= {baseline + phi.sum():.3f}")
-    print(f"  f(x)               = {fx:.3f}   <- must match (local accuracy)")
-    print(f"  match: {np.isclose(baseline + phi.sum(), fx)}")
-    """),
-
-    code(r"""
-    # 5.3 For a PURELY linear model, SHAP has a closed form: phi_i = w_i * (x_i - mean_i). Verify.
-    def linear_model(X):
-        return X @ w
-
-    phi_lin = exact_shapley(linear_model, x, background)
-    closed_form = w * (x - background.mean(axis=0))
-    print("exact Shapley (brute force):", phi_lin.round(3))
-    print("closed form w_i*(x_i-mean):", closed_form.round(3))
-    print("match:", np.allclose(phi_lin, closed_form, atol=1e-2))
-    print("\\n-> Confirms our brute-force Shapley is correct; for linear models it reduces")
-    print("   to the intuitive 'coefficient times deviation from the mean'.")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    We build the three canonical SHAP plots **by hand** in matplotlib so you
-    understand what they show: a **waterfall** (one prediction), a **global
-    importance** bar (mean $|\phi|$), and a **beeswarm** (per-feature SHAP across many
-    instances, colored by feature value).
-    """),
-
-    code(r"""
-    # Figure 1 — WATERFALL: how features move this prediction from baseline to f(x).
-    order = np.argsort(-np.abs(phi))                  # largest-impact features first
-    fig, ax = plt.subplots(figsize=(9, 5))
-    cum = baseline
-    ax.axvline(baseline, color="gray", ls="--", label=f"baseline E[f] = {baseline:.2f}")
-    for rank, i in enumerate(order):
-        color = "tab:red" if phi[i] > 0 else "tab:blue"
-        ax.barh(rank, phi[i], left=cum, color=color)
-        ax.text(cum + phi[i] / 2, rank, f"x{i}: {phi[i]:+.2f}", ha="center", va="center", fontsize=9)
-        cum += phi[i]
-    ax.axvline(fx, color="black", lw=2, label=f"f(x) = {fx:.2f}")
-    ax.set_yticks(range(M)); ax.set_yticklabels([f"feature {i}" for i in order])
-    ax.set_xlabel("model output"); ax.invert_yaxis()
-    ax.set_title("Figure 1 — Waterfall: red pushes up, blue pushes down, ending at f(x)")
-    ax.legend()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 1.** The explanation starts at the **baseline** (average prediction, gray)
-    and each feature's SHAP value nudges the output up (red) or down (blue) until it
-    lands **exactly** at this prediction $f(x)$ (black) — the efficiency axiom made
-    visual. For a loan applicant this reads as "your prediction is 0.7 above average:
-    high debt (+0.4) and low income (+0.2) pushed it up, long tenure (−0.1) pulled it
-    down." This per-decision, signed, additive story is what regulators and
-    stakeholders want and what raw feature importance cannot give.
-    """),
-
-    code(r"""
-    # Compute SHAP values for MANY instances (vectorized model -> fast) for global plots.
-    N = 80
-    instances = rng.normal(0, 1, (N, M))
-    phis = np.array([exact_shapley(model, instances[k], background) for k in range(N)])
-    print("computed SHAP matrix:", phis.shape, "(instances x features)")
-    """),
-
-    code(r"""
-    # Figure 2 — GLOBAL importance: mean(|SHAP|) per feature.
-    global_imp = np.abs(phis).mean(axis=0)
-    order_g = np.argsort(global_imp)
-    fig, ax = plt.subplots()
-    ax.barh([f"feature {i}" for i in order_g], global_imp[order_g], color="tab:purple")
-    ax.set_xlabel("mean(|SHAP value|)")
-    ax.set_title("Figure 2 — Global importance from averaged local attributions")
-    plt.show()
-    print("Features 0 and 1 dominate (they carry the interaction term w0*x0*x1).")
-    """),
-
-    md(r"""
-    **Figure 2.** Averaging $|\phi_i|$ over many instances yields a **global** feature
-    importance — but unlike a tree's built-in importance (biased, Lesson CML-04), every
-    bar is built from locally-accurate, axiomatically-fair pieces. Features 0 and 1
-    rank highest because they carry both linear weight *and* the interaction term. This
-    is the honest way to answer "which features matter overall?" for a black-box model.
-    """),
-
-    code(r"""
-    # Figure 3 — BEESWARM: distribution of SHAP values per feature, colored by feature value.
-    fig, ax = plt.subplots(figsize=(9, 5))
-    for row, i in enumerate(order_g):
-        yvals = row + (rng.random(N) - 0.5) * 0.6      # vertical jitter
-        fv = instances[:, i]
-        norm = (fv - fv.min()) / (np.ptp(fv) + 1e-9)     # color by feature value
-        ax.scatter(phis[:, i], yvals, c=norm, cmap="coolwarm", s=18, alpha=0.8)
-    ax.axvline(0, color="k", lw=0.8)
-    ax.set_yticks(range(M)); ax.set_yticklabels([f"feature {i}" for i in order_g])
-    ax.set_xlabel("SHAP value (impact on prediction)")
-    ax.set_title("Figure 3 — Beeswarm: each dot = one instance; color = feature value (red high)")
-    sm = plt.cm.ScalarMappable(cmap="coolwarm"); sm.set_array([])
-    plt.colorbar(sm, ax=ax, label="feature value (low -> high)")
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** The beeswarm is the most information-dense SHAP plot. Each dot is one
-    instance's SHAP value for that feature; horizontal spread shows impact magnitude
-    and **direction**, and the color (feature value) reveals the *relationship*. For a
-    feature with positive weight you'll see **red dots (high values) on the right**
-    (push prediction up) and blue on the left — a clean monotone effect. A feature
-    whose color is scrambled left-to-right has a nonmonotone or interaction-driven
-    effect. This single plot conveys importance, direction, and interaction at a glance.
-    """),
-
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Correlated features** | Two near-duplicate features split importance; either alone looks weak | Shapley divides joint credit | Group correlated features; report group importance; cluster |
-    | **Off-manifold backgrounds** | Implausible attribution; unstable values | Interventional SHAP evaluates unrealistic feature combos | Choose a sensible background; conditional/TreeSHAP path-dependent options |
-    | **Causal misreading** | "Reduce feature X to change outcome" | Treating SHAP as causal effect | State it explains the *model*, not the world; use causal inference for interventions |
-    | **Exponential cost** | KernelSHAP too slow on many features | $2^M$ coalitions | TreeSHAP for trees; sample coalitions; explain a subset |
-    | **Baseline dependence** | Explanations change with reference | Different $E[f]$ / background | Fix and document the background; choose meaningful reference |
-    | **Over-trust** | Acting on a single noisy local explanation | Sampling variance in KernelSHAP | Aggregate; check stability; prefer exact TreeSHAP |
-    | **Explaining a broken model** | Beautiful SHAP for a leaky model | SHAP faithfully explains a wrong model | SHAP is a *diagnostic*, not a fix — combine with validation (MLE-02) |
-
-    The cell shows the **correlated-features** trap: duplicate a strong feature and
-    watch its importance get split between the copies.
-    """),
-
-    code(r"""
-    # Correlated features split SHAP credit: a single strong signal duplicated looks 'half as important' each.
-    def model_corr(X):
-        # only X[:,0] truly drives the output; X[:,1] will be made a near-copy of it
-        return 3.0 * X[:, 0]
-
-    bg = rng.normal(0, 1, (150, 3))
-    bg[:, 1] = bg[:, 0] + 0.01 * rng.normal(0, 1, 150)   # feature 1 ~ feature 0 (correlated)
-    xi = np.array([2.0, 2.0, 0.5])
-    phi_c = exact_shapley(model_corr, xi, bg)
-    print("SHAP values with correlated copy:", phi_c.round(3))
-    print("-> The true driver (feature 0) and its near-duplicate (feature 1) SPLIT the credit,")
-    print("   so each looks ~half as important as feature 0 really is. Group them before ranking.")
-    """),
-
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
-
-    The `shap` library provides `TreeExplainer` (exact, fast TreeSHAP for RF/XGBoost/
-    LightGBM), `KernelExplainer` (model-agnostic), `LinearExplainer`, and rich plots
-    (`waterfall`, `beeswarm`, `bar`, `force`). We verify the library's TreeSHAP values
-    satisfy the same efficiency axiom our scratch code did. The import is wrapped so
-    the notebook runs even without `shap`.
-    """),
-
-    code(r"""
     from sklearn.ensemble import RandomForestRegressor
-    from sklearn.datasets import make_regression
+    from sklearn.inspection import permutation_importance
+    from sklearn.linear_model import Ridge
+    from sklearn.metrics import mean_squared_error, r2_score
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
 
-    Xr, yr = make_regression(n_samples=600, n_features=6, n_informative=4,
-                             noise=10.0, random_state=0)
-    rf = RandomForestRegressor(n_estimators=200, max_depth=6, random_state=0).fit(Xr, yr)
+    random_generator = np.random.default_rng(42)
+    number_of_rows = 900
 
-    try:
-        import shap
-        explainer = shap.TreeExplainer(rf)
-        sv = explainer.shap_values(Xr[:100])
-        # efficiency: baseline + sum(shap) == model prediction
-        recon = explainer.expected_value + sv.sum(axis=1)
-        pred = rf.predict(Xr[:100])
-        print(f"shap version: {shap.__version__}")
-        print(f"TreeSHAP efficiency holds: {np.allclose(recon, pred, atol=1e-3)}")
-        print(f"global importance (mean|SHAP|): {np.abs(sv).mean(0).round(2)}")
-    except Exception as e:
-        # Fallback: our scratch KernelSHAP-style exact attribution on the RF predict fn.
-        print(f"[shap not available: {type(e).__name__}] using scratch exact Shapley on RF.")
-        bg2 = Xr[:80]
-        phi_rf = exact_shapley(lambda Z: rf.predict(Z), Xr[0], bg2)
-        base = rf.predict(bg2).mean()
-        print(f"efficiency: base+sum(phi)={base + phi_rf.sum():.2f} vs f(x)={rf.predict(Xr[:1])[0]:.2f}")
+    distance_km = random_generator.uniform(1, 30, number_of_rows)
+    traffic_index = random_generator.uniform(0, 10, number_of_rows)
+    rain_flag = random_generator.binomial(1, 0.28, number_of_rows)
+    driver_experience_years = random_generator.uniform(0, 12, number_of_rows)
+    distance_estimate_km = distance_km + random_generator.normal(0, 0.8, number_of_rows)
+    random_tracking_signal = random_generator.normal(0, 1, number_of_rows)
+
+    delivery_features = pd.DataFrame(
+        {
+            "distance_km": distance_km,
+            "traffic_index": traffic_index,
+            "rain_flag": rain_flag,
+            "driver_experience_years": driver_experience_years,
+            "distance_estimate_km": distance_estimate_km,
+            "random_tracking_signal": random_tracking_signal,
+        }
+    )
+    delivery_minutes = (
+        12
+        + 1.8 * distance_km
+        + 3.8 * traffic_index
+        + 7.0 * rain_flag
+        - 0.7 * driver_experience_years
+        + 0.20 * distance_km * traffic_index
+        + random_generator.normal(0, 4, number_of_rows)
+    )
+
+    development_features, sealed_test_features, development_target, sealed_test_target = train_test_split(
+        delivery_features,
+        delivery_minutes,
+        test_size=0.20,
+        random_state=42,
+    )
+    train_features, validation_features, train_target, validation_target = train_test_split(
+        development_features,
+        development_target,
+        test_size=0.25,
+        random_state=42,
+    )
+
+    delivery_model = RandomForestRegressor(
+        n_estimators=250,
+        min_samples_leaf=4,
+        random_state=42,
+        n_jobs=1,
+    )
+    delivery_model.fit(train_features, train_target)
+    validation_predictions = delivery_model.predict(validation_features)
+    validation_rmse = mean_squared_error(
+        validation_target,
+        validation_predictions,
+    ) ** 0.5
+
+    print("training rows:", len(train_features))
+    print("validation rows:", len(validation_features))
+    print("sealed test rows:", len(sealed_test_features))
+    print("validation RMSE in minutes:", round(validation_rmse, 2))
+    print("validation R-squared:", round(r2_score(validation_target, validation_predictions), 3))
+    print("test status: sealed")
+
+    assert validation_rmse < np.std(validation_target)
+    assert list(train_features.columns) == list(validation_features.columns)
     """),
 
     md(r"""
-    **Scratch vs production.** Our brute-force Shapley is $O(2^M)$ — fine for teaching
-    on 6 features, hopeless for 100. The `shap` library's **TreeSHAP** computes the
-    *same exact values* in polynomial time by exploiting tree structure, so it scales
-    to real models and datasets, and adds polished, interaction-aware plots. The key
-    check it preserves is the one we verified by hand: **efficiency** (baseline +
-    SHAP values = prediction). For non-tree models use `KernelExplainer` (sampled
-    coalitions) or model-specific explainers; for deep nets, `DeepExplainer`/
-    `GradientExplainer` (Lesson DL-03's gradients reused for attribution).
+    ## 3 · Coefficients are the transparent starting point
+
+    A linear model predicts with a weighted sum:
+
+    $$
+    \hat y=b+w_1x_1+w_2x_2+\cdots+w_px_p
+    $$
+
+    **Symbols:** $\hat y$ is the prediction; $b$ is the intercept; $x_j$ is feature
+    $j$; $w_j$ is its fitted coefficient; and $p$ is the number of features.
+
+    If inputs are standardized, a coefficient describes the prediction change
+    associated with a one-standard-deviation increase while other model inputs remain
+    fixed. It is global and signed, but correlation makes individual coefficients
+    unstable and observational data does not make them causal.
+
+    Example: coefficient `+8` means the model adds about eight predicted minutes for
+    a one-standard-deviation increase, all else fixed. It does not mean changing that
+    feature will cause eight extra minutes.
     """),
 
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — Explaining Credit Decisions (Adverse Action)
+    code(r"""
+    standardized_ridge_model = Pipeline(
+        steps=[
+            ("scale", StandardScaler()),
+            ("ridge", Ridge(alpha=1.0)),
+        ]
+    )
+    standardized_ridge_model.fit(train_features, train_target)
 
-    **Scenario.** A lender uses a gradient-boosted model (Lesson CML-05) for credit
-    decisions because it out-predicts logistic regression. But fair-lending law (e.g.
-    ECOA/Reg B in the US) requires **adverse-action notices**: a denied applicant must
-    receive the *specific principal reasons* for the decision. A raw boosted-tree score
-    can't satisfy that — SHAP can.
+    standardized_coefficients = pd.Series(
+        standardized_ridge_model.named_steps["ridge"].coef_,
+        index=train_features.columns,
+        name="standardized_coefficient",
+    ).sort_values(key=np.abs, ascending=False)
 
-    **Why SHAP is the right tool:**
-    - **Per-decision, signed reasons:** SHAP yields, for *this* applicant, the
-      features that pushed their risk up the most ("high credit utilization: +0.18;
-      recent delinquency: +0.12") — exactly the adverse-action format.
-    - **Model-agnostic + exact for trees:** works on the boosted model the business
-      actually wants to ship (TreeSHAP, fast).
-    - **Auditability:** global SHAP summaries document overall model behavior for
-      regulators; local ones document each decision.
+    ridge_validation_predictions = standardized_ridge_model.predict(validation_features)
+    ridge_validation_rmse = mean_squared_error(
+        validation_target,
+        ridge_validation_predictions,
+    ) ** 0.5
 
-    **Business objectives:** keep the boosted model's accuracy *and* satisfy
-    explainability/fairness obligations; build customer and regulator trust.
+    print(standardized_coefficients.round(2))
+    print("ridge validation RMSE:", round(ridge_validation_rmse, 2))
+    print("distance correlation:", round(train_features["distance_km"].corr(train_features["distance_estimate_km"]), 3))
 
-    **Cost of mistakes:**
-    - **Wrong/again-st-the-record explanations** → legal liability, fines.
-    - **No explanation** → can't deploy the model at all in this domain.
-    - **Mistaking SHAP for causality** → telling a customer "do X to get approved" when
-      X isn't causal → misleading guidance and legal exposure (§4.6).
-
-    **Constraints:** explanations must be stable, fast (real-time decisions), and use a
-    documented, fixed background; protected attributes and their proxies audited via
-    SHAP for disparate impact.
-
-    **KPIs:** explanation fidelity (efficiency holds), latency of explanation
-    generation, regulator/audit sign-off, and fairness metrics computed from SHAP
-    across protected groups — all while preserving the model's PR-AUC (Lesson MLE-01).
+    assert len(standardized_coefficients) == train_features.shape[1]
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ## 4 · Tree impurity importance is fast but not a verdict
 
-    - **Use TreeSHAP for tree models** — exact and fast enough for real-time; reserve
-      KernelSHAP (slow, sampled) for genuinely model-agnostic needs and precompute
-      where possible.
-    - **Fix and document the background dataset.** Explanations are *relative* to a
-      baseline; a drifting or ill-chosen background silently changes every
-      explanation. Version it like a model artifact.
-    - **Latency & cost.** Per-prediction explanations add compute; cache global
-      summaries, batch local explanations, and consider explaining only flagged/
-      contested decisions.
-    - **Monitoring with SHAP.** Track global SHAP importance over time — a sudden
-      reshuffle signals **drift** or a broken feature pipeline (MLE-02 and PROD-05). A
-      single feature with runaway SHAP often means **leakage**.
-    - **Communicate the limits.** Train stakeholders that SHAP explains the *model*,
-      not the *world*; never present SHAP as a recipe for changing outcomes without
-      causal evidence (§4.6).
-    - **Stability.** Prefer exact TreeSHAP over sampled KernelSHAP for regulated
-      decisions; if sampling, report/aggregate to control variance.
-    - **Privacy/security.** Explanations can leak information about the model/training
-      data; gate access appropriately.
+    Every tree split reduces squared error. Scikit-learn's impurity importance adds a
+    feature's weighted reductions across all trees and normalizes the totals.
+
+    It is cheap because it is produced during fitting. But it reports how the training
+    algorithm used splits—not how much a feature improves held-out predictions.
+    Continuous or high-cardinality features have more candidate split points, and
+    correlated features can divide or substitute for one another.
+
+    Use it as a quick diagnostic, never as proof of business importance, causality, or
+    data quality.
     """),
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    code(r"""
+    impurity_importance = pd.Series(
+        delivery_model.feature_importances_,
+        index=train_features.columns,
+        name="impurity_importance",
+    ).sort_values(ascending=False)
 
-    **Explainability methods:**
+    print(impurity_importance.round(3))
+    print("importance sum:", round(impurity_importance.sum(), 6))
 
-    | Method | Scope | Guarantees | Cost | Handles correlation | Best for |
-    |---|---|---|---|---|---|
-    | Tree feature_importances_ | Global | None (biased) | Free | Poorly | Quick global glance |
-    | Permutation importance | Global | Model-agnostic | Moderate | Poorly | Global, any model (CML-04) |
-    | **LIME** | Local | None (unstable) | Moderate | Poorly | Quick local intuition |
-    | **KernelSHAP** | Local+global | Shapley axioms | **High** ($2^M$/sampled) | Caveats | Any model, exactness matters |
-    | **TreeSHAP** | Local+global | Shapley, **exact** | **Low** (poly-time) | Caveats | **Tree ensembles (default)** |
-    | Linear coefficients | Global | Exact (linear only) | Free | Multicollinearity issues | Linear models (CML-01) |
-
-    **SHAP value function (background) choice:**
-
-    | Background | Pros | Cons |
-    |---|---|---|
-    | Interventional (marginal) | Fast, model-faithful (TreeSHAP default) | Can evaluate off-manifold combos |
-    | Conditional/observational | Respects feature correlations | Expensive, harder to estimate |
-
-    **Senior lesson:** SHAP is the gold standard for *fair, additive, per-decision*
-    attribution — but it explains the **model**, costs compute, and has real
-    correlated-feature and causal caveats. Match the explainer to the model (TreeSHAP
-    for trees), fix the background, and never oversell it as causal.
+    assert np.isclose(impurity_importance.sum(), 1.0)
+    assert (impurity_importance >= 0).all()
     """),
 
-    # ============================================ 12. Interview Prep
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## 5 · Permutation importance asks a held-out performance question
 
-    **Common questions**
-    - *What is a Shapley value?* → Average marginal contribution of a feature over all
-      coalitions/orderings (Section 4.1); the unique fair attribution.
-    - *How does SHAP differ from feature importance?* → SHAP is *local* (per
-      prediction), signed, additive, and axiomatically fair; tree importance is global
-      and biased; permutation importance breaks under correlation.
+    Permutation importance breaks one validation column by shuffling it. If validation
+    error rises, the fitted model relied on that column for those rows.
 
-    **Deep-dive questions**
-    - *State and explain the four axioms.* → Efficiency, symmetry, dummy, additivity
-      (Section 4.2); efficiency → local accuracy.
-    - *Why is exact SHAP expensive and how does TreeSHAP fix it?* → $2^M$ coalitions;
-      TreeSHAP is exact in poly-time via a tree-structure DP (Section 4.4).
-    - *Is a SHAP value causal?* → No — it explains the model's reliance on a feature,
-      not the world's response to changing it (Section 4.6).
+    For feature $j$:
 
-    **Whiteboard questions**
-    - "Write the Shapley value formula and implement brute-force attribution."
-      (Sections 4.1, 5.)
-    - "Verify the efficiency axiom for an explanation." (baseline + Σφ = f(x).)
+    $$
+    I_j=\operatorname{RMSE}_{\text{shuffled }j}-\operatorname{RMSE}_{\text{original}}
+    $$
 
-    **Strong vs weak answers**
-    - *"How do you explain an XGBoost credit model?"*
-      - **Weak:** "Use feature_importances_."
-      - **Strong:** "TreeSHAP for exact, fast per-decision attributions — signed
-        reasons that satisfy adverse-action requirements, summing to the prediction.
-        I'd fix the background, audit for fairness across groups via SHAP, and clearly
-        flag that SHAP explains the model, not causality."
-    - *"Two features have low importance individually but matter together."*
-      - **Weak:** "Then they're unimportant."
-      - **Strong:** "If they're correlated, SHAP splits their joint credit, so each
-        looks weak — I'd report *group* importance or decorrelate before ranking."
+    **Symbols:** $I_j$ is importance in minutes; $j$ identifies one feature; and RMSE
+    is root mean squared error. Positive values mean shuffling harmed performance.
 
-    **Follow-ups:** "KernelSHAP vs TreeSHAP?" (model-agnostic+slow vs tree-exact+fast).
-    "How choose the background?" (fixed, meaningful reference; document it). "SHAP for
-    a neural net?" (DeepExplainer / gradient-based).
-
-    **Common mistakes:** treating SHAP as causal; using KernelSHAP when TreeSHAP
-    applies; ignoring correlated-feature credit-splitting; forgetting the background
-    dependence; explaining a leaky model and trusting the explanation instead of
-    fixing the leak.
+    We repeat shuffles because one random ordering can be lucky. Correlated substitutes
+    can make each feature look weak: breaking one leaves the other available.
     """),
 
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    code(r"""
+    def manual_permutation_importance(
+        fitted_model,
+        feature_table,
+        actual_target,
+        repeats=10,
+        random_seed=0,
+    ):
+        '''Measure validation RMSE increase after independently shuffling each column.'''
+        random_generator_local = np.random.default_rng(random_seed)
+        baseline_predictions = fitted_model.predict(feature_table)
+        baseline_rmse = mean_squared_error(actual_target, baseline_predictions) ** 0.5
+        records = []
 
-    1. **What is it?** Define the Shapley value and what a SHAP value attributes.
-    2. **Why was it invented?** What gap (over importance/LIME) did SHAP fill, and
-       what 1953 result does it borrow?
-    3. **How does it work?** Explain the value function (coalitions, background) and
-       the averaging over orderings.
-    4. **Why does it work?** State the four axioms and why efficiency gives "local
-       accuracy."
-    5. **When to use it?** TreeSHAP vs KernelSHAP — pick by model type.
-    6. **When NOT to use it?** Name the correlated-features and causality caveats.
-    7. **Tradeoffs?** SHAP vs permutation importance vs LIME; exactness vs cost.
-    8. **How would you productionize it?** Per-decision explanations for a regulated
-       model — explainer choice, background, latency, monitoring, and limits.
+        for feature_name in feature_table.columns:
+            repeated_increases = []
+            for _ in range(repeats):
+                shuffled_table = feature_table.copy()
+                shuffled_table[feature_name] = random_generator_local.permutation(
+                    shuffled_table[feature_name].to_numpy()
+                )
+                shuffled_predictions = fitted_model.predict(shuffled_table)
+                shuffled_rmse = mean_squared_error(actual_target, shuffled_predictions) ** 0.5
+                repeated_increases.append(shuffled_rmse - baseline_rmse)
+
+            records.append(
+                {
+                    "feature": feature_name,
+                    "mean_rmse_increase": np.mean(repeated_increases),
+                    "standard_deviation": np.std(repeated_increases),
+                }
+            )
+
+        return pd.DataFrame(records).sort_values("mean_rmse_increase", ascending=False)
+
+
+    manual_importance = manual_permutation_importance(
+        delivery_model,
+        validation_features,
+        validation_target,
+        repeats=12,
+        random_seed=42,
+    )
+
+    sklearn_importance_result = permutation_importance(
+        delivery_model,
+        validation_features,
+        validation_target,
+        scoring="neg_root_mean_squared_error",
+        n_repeats=12,
+        random_state=42,
+        n_jobs=1,
+    )
+    sklearn_importance = pd.Series(
+        sklearn_importance_result.importances_mean,
+        index=validation_features.columns,
+    ).sort_values(ascending=False)
+
+    print("manual validation importance in RMSE minutes:")
+    print(manual_importance.round(3).to_string(index=False))
+    print("\nsklearn result:")
+    print(sklearn_importance.round(3))
+
+    assert manual_importance.iloc[0]["mean_rmse_increase"] > 0
     """),
 
-    # ============================================ 14. Exercises
     md(r"""
-    ## 14 · Exercises
+    ## 6 · PDP and ICE show prediction shape, not causal effect
 
-    **Beginner (conceptual)**
-    1. For a 3-feature game, list all coalitions and compute one feature's Shapley
-       value by hand from a given value table; verify efficiency.
-    2. Explain in two sentences why a SHAP value is not a causal effect.
+    Permutation asks whether the model relies on a feature. Partial dependence asks
+    how predictions change on average when we replace that feature with values on a
+    grid:
 
-    **Beginner → Intermediate (coding)**
-    3. Extend the scratch explainer to output a **force-plot**-style single-row
-       visualization and reproduce it for three different instances.
-    4. Implement **KernelSHAP** (sample coalitions, weighted linear regression with the
-       Shapley kernel) and show it converges to the brute-force values.
+    $$
+    \widehat f_{PDP}(z)=\frac{1}{n}\sum_{i=1}^{n}f(z,x_{i,-j})
+    $$
 
-    **Intermediate (analysis)**
-    5. Reproduce the correlated-features experiment (§7) and show how grouping the
-       correlated pair recovers the true importance; vary the correlation strength.
-    6. Train an XGBoost model with a deliberately **leaked** feature (Lesson MLE-02) and
-       show SHAP exposes it as dominant — demonstrating SHAP as a leakage detector.
+    **Symbols:** $z$ is one chosen value for feature $j$; $n$ is the number of rows;
+    $x_{i,-j}$ means all other features from row $i$; and $f$ is the fitted model.
 
-    **Senior (interview + production design)**
-    7. *Whiteboard:* prove the efficiency axiom implies SHAP values sum to
-       $f(x)-\mathbb E[f]$, and explain why that makes waterfall plots exact.
-    8. *Design:* build the adverse-action explanation system of §9 — TreeSHAP at
-       serving, fixed background, top-k reason extraction, fairness auditing across
-       protected groups, latency budget, and the disclaimer about causality.
-    9. *Diagnose:* a stakeholder wants to tell customers "increase feature X by 10% to
-       get approved," citing its large SHAP value. Explain why this may be wrong and
-       what evidence would justify (or refute) the advice.
+    An ICE curve keeps each row separate. PDP averages those ICE curves. If the curves
+    differ, an interaction may be hiding behind the average.
+
+    Analogy: PDP is the class average; ICE is every student's score line. The analogy
+    stops because replacing one feature may create combinations that never occur in
+    reality, especially when features are correlated.
     """),
 
-    # ---------------------------------------------------------------- Footer
+    code(r"""
+    traffic_grid = np.linspace(
+        validation_features["traffic_index"].quantile(0.05),
+        validation_features["traffic_index"].quantile(0.95),
+        25,
+    )
+    ice_row_indices = [0, 1, 2, 3, 4]
+    ice_predictions = np.empty((len(ice_row_indices), len(traffic_grid)))
+    partial_dependence_predictions = []
+
+    for grid_index, traffic_value in enumerate(traffic_grid):
+        changed_validation = validation_features.copy()
+        changed_validation["traffic_index"] = traffic_value
+        grid_predictions = delivery_model.predict(changed_validation)
+        partial_dependence_predictions.append(grid_predictions.mean())
+        ice_predictions[:, grid_index] = grid_predictions[ice_row_indices]
+
+    fig, axis = plt.subplots(figsize=(8, 5))
+    for row_predictions in ice_predictions:
+        axis.plot(traffic_grid, row_predictions, color="tab:blue", alpha=0.35)
+    axis.plot(
+        traffic_grid,
+        partial_dependence_predictions,
+        color="black",
+        linewidth=3,
+        label="PDP: average prediction",
+    )
+    axis.set_xlabel("traffic index inserted into each validation row")
+    axis.set_ylabel("predicted delivery minutes")
+    axis.set_title("ICE curves and their PDP average")
+    axis.legend()
+    plt.show()
+
+    assert len(partial_dependence_predictions) == len(traffic_grid)
+    """),
+
     md(r"""
-    ---
-    ### Summary
-    SHAP brings the **black-box ensembles of Section 02** up to the interpretability of
-    **linear models** by borrowing the **Shapley value** — the unique attribution
-    satisfying efficiency, symmetry, dummy, and additivity. Framing a prediction as a
-    cooperative game (features = players, payout = prediction − baseline) yields
-    **signed, additive, per-decision** explanations that sum exactly to the output.
-    **TreeSHAP** makes it exact and fast for tree ensembles; **KernelSHAP** makes it
-    model-agnostic. The senior caveats: it explains the **model not the world**
-    (not causal), and **correlated features split credit**.
+    ## 7 · Calculate a two-feature Shapley value before the general formula
 
-    **Section 03 is complete** — you can now *measure* models honestly (MLE-01), *validate*
-    them without leakage (MLE-02), *engineer* their inputs (MLE-03), handle *imbalance*
-    (MLE-04), and *explain* their decisions (MLE-05). That is the ML-engineering discipline that
-    surrounds the algorithms.
+    Imagine two signals helping predict delay: traffic $T$ and rain $R$.
 
-    **Related lesson:** `DL-02 · Neural Networks from Scratch` — Section 04 begins. We leave classical
-    ML for representation learning, building a multilayer perceptron and its training
-    loop from NumPy, setting up backpropagation, CNNs, RNNs, attention, and transformers.
+    | Known signals | Model value |
+    |---|---:|
+    | neither | 10 |
+    | traffic only | 14 |
+    | rain only | 13 |
+    | both | 20 |
+
+    Traffic can join first or second:
+
+    - traffic first: $14-10=4$;
+    - traffic after rain: $20-13=7$;
+    - average traffic contribution: $(4+7)/2=5.5$.
+
+    Rain contributes $(3+6)/2=4.5$. The baseline is 10 and the contributions sum to
+    10, so $10+5.5+4.5=20$.
+
+    The word **fair** here has a narrow mathematical meaning: average marginal credit
+    under the declared game. It does not mean social fairness or causal responsibility.
+    """),
+
+    code(r"""
+    two_feature_values = {
+        frozenset(): 10.0,
+        frozenset({"traffic"}): 14.0,
+        frozenset({"rain"}): 13.0,
+        frozenset({"traffic", "rain"}): 20.0,
+    }
+
+    traffic_shapley = ((14 - 10) + (20 - 13)) / 2
+    rain_shapley = ((13 - 10) + (20 - 14)) / 2
+
+    print("baseline:", two_feature_values[frozenset()])
+    print("traffic contribution:", traffic_shapley)
+    print("rain contribution:", rain_shapley)
+    print("reconstructed value:", 10 + traffic_shapley + rain_shapley)
+
+    assert np.isclose(traffic_shapley, 5.5)
+    assert np.isclose(rain_shapley, 4.5)
+    """),
+
+    md(r"""
+    ## 8 · Generalize the calculation carefully
+
+    For feature $i$ among $M$ features:
+
+    $$
+    \phi_i=\sum_{S\subseteq N\setminus\{i\}}
+    \frac{|S|!(M-|S|-1)!}{M!}
+    \left[v(S\cup\{i\})-v(S)\right]
+    $$
+
+    **Symbol reference:**
+
+    | Symbol | Meaning |
+    |---|---|
+    | $N$ | set of all feature positions |
+    | $M$ | total number of features |
+    | $i$ | feature receiving credit |
+    | $S$ | one subset that does not contain $i$ |
+    | $v(S)$ | model value when features in $S$ are treated as known |
+    | $v(S\cup\{i\})-v(S)$ | contribution from adding feature $i$ |
+    | $\phi_i$ | average weighted contribution assigned to feature $i$ |
+    | $!$ | factorial; for example, $3!=3\times2\times1$ |
+
+    The weight is the probability that subset $S$ appears before feature $i$ in a
+    random feature ordering. Exact enumeration grows exponentially, so it is only a
+    teaching method for a small feature count.
+
+    Classical Shapley allocation is characterized by efficiency, symmetry, dummy,
+    and additivity. SHAP applies related additive-attribution ideas to model outputs;
+    its meaning still depends on how “unknown” features are represented.
+    """),
+
+    md(r"""
+    ## 9 · Implement exact interventional Shapley values
+
+    For an interventional explanation, absent columns retain values from background
+    rows while present columns are replaced by the row being explained. This can make
+    unrealistic combinations, but the operation is explicit and testable.
+
+    We use only three features so every coalition remains visible. The implementation
+    is exact for this empirical value function—not a universal truth about the world.
+    """),
+
+    code(r"""
+    def empirical_coalition_value(predict_function, explained_row, present_features, background_rows):
+        '''Average predictions after inserting the declared present feature values.'''
+        evaluation_rows = np.asarray(background_rows, dtype=float).copy()
+        explained_row = np.asarray(explained_row, dtype=float)
+        if present_features:
+            present_indices = list(present_features)
+            evaluation_rows[:, present_indices] = explained_row[present_indices]
+        return float(np.mean(predict_function(evaluation_rows)))
+
+
+    def exact_interventional_shapley(predict_function, explained_row, background_rows):
+        '''Enumerate every coalition for a small educational feature set.'''
+        number_of_features = len(explained_row)
+        all_feature_indices = tuple(range(number_of_features))
+        shapley_values = np.zeros(number_of_features)
+
+        for feature_index in all_feature_indices:
+            remaining_features = [
+                index for index in all_feature_indices if index != feature_index
+            ]
+            for subset_size in range(len(remaining_features) + 1):
+                for subset in itertools.combinations(remaining_features, subset_size):
+                    coalition_weight = (
+                        factorial(len(subset))
+                        * factorial(number_of_features - len(subset) - 1)
+                        / factorial(number_of_features)
+                    )
+                    value_without_feature = empirical_coalition_value(
+                        predict_function,
+                        explained_row,
+                        subset,
+                        background_rows,
+                    )
+                    value_with_feature = empirical_coalition_value(
+                        predict_function,
+                        explained_row,
+                        subset + (feature_index,),
+                        background_rows,
+                    )
+                    shapley_values[feature_index] += coalition_weight * (
+                        value_with_feature - value_without_feature
+                    )
+
+        return shapley_values
+
+
+    def small_delivery_rule(feature_matrix):
+        '''Return minutes from distance, traffic, and rain, including one interaction.'''
+        distance = feature_matrix[:, 0]
+        traffic = feature_matrix[:, 1]
+        rain = feature_matrix[:, 2]
+        return 10 + 2 * distance + 3 * traffic + 5 * rain + 0.4 * distance * traffic
+
+
+    small_background = train_features[
+        ["distance_km", "traffic_index", "rain_flag"]
+    ].iloc[:80].to_numpy()
+    small_explained_row = validation_features[
+        ["distance_km", "traffic_index", "rain_flag"]
+    ].iloc[0].to_numpy()
+
+    exact_values = exact_interventional_shapley(
+        small_delivery_rule,
+        small_explained_row,
+        small_background,
+    )
+    exact_baseline = small_delivery_rule(small_background).mean()
+    exact_prediction = small_delivery_rule(small_explained_row.reshape(1, -1))[0]
+
+    print("background prediction:", round(exact_baseline, 3))
+    print("Shapley values:", exact_values.round(3))
+    print("reconstructed prediction:", round(exact_baseline + exact_values.sum(), 3))
+    print("actual prediction:", round(exact_prediction, 3))
+
+    assert np.isclose(exact_baseline + exact_values.sum(), exact_prediction)
+    """),
+
+    md(r"""
+    ## 10 · Background choice and correlation change the question
+
+    A SHAP value is not just “the contribution.” It is a contribution relative to:
+
+    - a fitted model;
+    - one explained row;
+    - a model-output scale;
+    - a value function;
+    - a background population.
+
+    A city-wide background answers “different from a typical city-wide delivery.” A
+    rainy-day background answers “different from a typical rainy-day delivery.” Both
+    can be valid, but they answer different questions.
+
+    Correlated features are also substitutes. Permuting one distance column leaves the
+    other available, so individual importance may be diluted. Permuting them together
+    measures their grouped reliance. Credit does not always split equally; the result
+    depends on the model and dependence assumption.
+    """),
+
+    code(r"""
+    def grouped_permutation_rmse_increase(
+        fitted_model,
+        feature_table,
+        actual_target,
+        grouped_columns,
+        random_seed=0,
+    ):
+        '''Shuffle related columns with one shared row order and measure RMSE change.'''
+        baseline_rmse = mean_squared_error(
+            actual_target,
+            fitted_model.predict(feature_table),
+        ) ** 0.5
+        random_generator_local = np.random.default_rng(random_seed)
+        shared_order = random_generator_local.permutation(len(feature_table))
+        shuffled_table = feature_table.copy()
+        shuffled_table.loc[:, grouped_columns] = feature_table[grouped_columns].to_numpy()[shared_order]
+        shuffled_rmse = mean_squared_error(
+            actual_target,
+            fitted_model.predict(shuffled_table),
+        ) ** 0.5
+        return shuffled_rmse - baseline_rmse
+
+
+    grouped_distance_increase = grouped_permutation_rmse_increase(
+        delivery_model,
+        validation_features,
+        validation_target,
+        ["distance_km", "distance_estimate_km"],
+        random_seed=42,
+    )
+
+    all_background = small_background
+    rainy_background = train_features.loc[
+        train_features["rain_flag"].eq(1),
+        ["distance_km", "traffic_index", "rain_flag"],
+    ].iloc[:80].to_numpy()
+    values_all_background = exact_interventional_shapley(
+        small_delivery_rule,
+        small_explained_row,
+        all_background,
+    )
+    values_rainy_background = exact_interventional_shapley(
+        small_delivery_rule,
+        small_explained_row,
+        rainy_background,
+    )
+
+    print("grouped distance RMSE increase:", round(grouped_distance_increase, 3))
+    print("all-delivery baseline:", round(small_delivery_rule(all_background).mean(), 3))
+    print("rainy-delivery baseline:", round(small_delivery_rule(rainy_background).mean(), 3))
+    print("values using all deliveries:", values_all_background.round(3))
+    print("values using rainy deliveries:", values_rainy_background.round(3))
+
+    assert not np.isclose(
+        small_delivery_rule(all_background).mean(),
+        small_delivery_rule(rainy_background).mean(),
+    )
+    """),
+
+    md(r"""
+    ## 11 · Use TreeSHAP and verify what it adds up to
+
+    TreeSHAP exploits tree structure instead of enumerating every coalition. We state
+    the contract explicitly:
+
+    - model: the frozen random forest;
+    - explained rows: validation rows;
+    - background: 100 training rows;
+    - dependence rule: interventional;
+    - output: raw regression prediction in minutes.
+
+    For classification, raw output may be a margin or log-odds rather than probability.
+    Always inspect `model_output` and verify reconstruction before interpreting signs.
+    """),
+
+    code(r"""
+    import shap
+
+    explanation_background = train_features.sample(n=100, random_state=42)
+    explained_validation_rows = validation_features.iloc[:80]
+
+    tree_explainer = shap.TreeExplainer(
+        delivery_model,
+        data=explanation_background,
+        feature_perturbation="interventional",
+        model_output="raw",
+    )
+    validation_explanations = tree_explainer(explained_validation_rows)
+
+    reconstructed_predictions = (
+        np.asarray(validation_explanations.base_values)
+        + np.asarray(validation_explanations.values).sum(axis=1)
+    )
+    direct_predictions = delivery_model.predict(explained_validation_rows)
+
+    print("SHAP version:", shap.__version__)
+    print("explanation matrix shape:", validation_explanations.values.shape)
+    print("maximum reconstruction difference:", round(float(np.max(np.abs(reconstructed_predictions - direct_predictions))), 8))
+
+    assert validation_explanations.values.shape == explained_validation_rows.shape
+    assert np.allclose(reconstructed_predictions, direct_predictions, atol=1e-5)
+    """),
+
+    md(r"""
+    A local waterfall begins at the background prediction and adds signed feature
+    attributions until it reaches one row's prediction. A global bar chart averages
+    absolute local magnitudes; it loses sign. A beeswarm keeps sign, magnitude, and
+    feature value, but it still does not establish causality.
+    """),
+
+    code(r"""
+    shap.plots.waterfall(validation_explanations[0], max_display=8, show=False)
+    plt.title("One validation delivery: contributions relative to training background")
+    plt.tight_layout()
+    plt.show()
+
+    shap.plots.bar(validation_explanations, max_display=8, show=False)
+    plt.title("Global magnitude across explained validation deliveries")
+    plt.tight_layout()
+    plt.show()
+
+    shap.plots.beeswarm(validation_explanations, max_display=8, show=False)
+    plt.title("Direction and magnitude across validation deliveries")
+    plt.tight_layout()
+    plt.show()
+    """),
+
+    md(r"""
+    ## 12 · Choose the smallest tool that answers the question
+
+    | Method | Main question | Strength | Main limitation |
+    |---|---|---|---|
+    | Standardized coefficient | Which direction globally? | Simple and signed | Linear form; correlation |
+    | Impurity importance | Which columns created tree splits? | Nearly free | Training-based split bias |
+    | Permutation importance | What hurts held-out performance? | Model-agnostic | Correlated substitutes |
+    | PDP | What is average prediction shape? | Easy global curve | Can create unrealistic rows |
+    | ICE | Do rows have different shapes? | Reveals heterogeneity | Visually crowded |
+    | SHAP | Why this prediction relative to a background? | Local, signed, additive | Background and dependence sensitive |
+
+    **Use SHAP when:** a validated model needs local diagnostic attribution and the
+    reference population can be documented.
+
+    **Do not use SHAP when:** the real question is causal effect, fairness, guaranteed
+    recourse, or whether the model generalizes. Use experiments or causal methods for
+    interventions, group fairness metrics for fairness, counterfactual methods plus
+    feasibility rules for recourse, and held-out evaluation for generalization.
+
+    In regulated credit, an attribution can support investigation, but it does not
+    automatically become a compliant adverse-action reason. Reasons must accurately
+    reflect the factors the decision process actually considered, and legal review is
+    part of the system—not an optional chart caption.
+    """),
+
+    md(r"""
+    ## 13 · Mini-project: explain one frozen delivery model
+
+    **Goal:** evaluate the already-frozen model once on sealed test rows, then explain
+    one test prediction relative to the already-fixed training background.
+
+    **Columns:** distance, traffic, rain, driver experience, correlated distance
+    estimate, and a random tracking signal.
+
+    **Workflow:**
+
+    1. keep the fitted model and background unchanged;
+    2. calculate one final test RMSE;
+    3. choose the first test row by position, not by interesting outcome;
+    4. calculate its TreeSHAP explanation;
+    5. verify baseline plus attributions equals prediction;
+    6. report association, reference, output scale, and limitations.
+
+    The explanation is not used to retune the model or choose a new background.
+    """),
+
+    code(r"""
+    final_test_predictions = delivery_model.predict(sealed_test_features)
+    final_test_rmse = mean_squared_error(
+        sealed_test_target,
+        final_test_predictions,
+    ) ** 0.5
+
+    selected_test_row = sealed_test_features.iloc[[0]]
+    selected_test_explanation = tree_explainer(selected_test_row)
+    selected_test_prediction = delivery_model.predict(selected_test_row)[0]
+    selected_test_reconstruction = (
+        float(np.asarray(selected_test_explanation.base_values).reshape(-1)[0])
+        + float(np.asarray(selected_test_explanation.values).sum())
+    )
+
+    local_report = pd.DataFrame(
+        {
+            "feature": selected_test_row.columns,
+            "value": selected_test_row.iloc[0].to_numpy(),
+            "shap_minutes": selected_test_explanation.values[0],
+        }
+    ).sort_values("shap_minutes", key=np.abs, ascending=False)
+
+    print("final sealed-test RMSE:", round(final_test_rmse, 2))
+    print("selected test prediction:", round(selected_test_prediction, 2))
+    print("reconstructed prediction:", round(selected_test_reconstruction, 2))
+    print(local_report.round(3).to_string(index=False))
+    print("interpretation: model attribution relative to fixed training background; not causal advice")
+
+    assert np.isclose(selected_test_reconstruction, selected_test_prediction, atol=1e-5)
+    """),
+
+    md(r"""
+    ## 14 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    Original validation RMSE is 5 minutes. Shuffling traffic produces RMSE values 9,
+    10, and 8. The increases are 4, 5, and 3; mean permutation importance is 4 minutes.
+
+    ### Guided practice
+
+    1. Explain the difference between global reliance and local attribution.
+    2. Calculate the rain Shapley value from the two-feature table.
+    3. Explain why absolute SHAP values remove direction.
+    4. Name every part of a SHAP explanation contract.
+    5. Explain why a validated model must come before interpretation.
+
+    ### Independent practice
+
+    6. Implement grouped permutation for traffic and a noisy traffic copy.
+    7. Build PDP and ICE for driver experience and describe their limits.
+    8. Compare explanations under two documented training backgrounds.
+    9. Explain a classification model on raw-margin and probability scales.
+    10. Add repeated explanation-stability checks without inspecting test outcomes.
+
+    ### Challenge
+
+    Rebuild the delivery project without copying. Include a model card paragraph,
+    coefficient baseline, impurity warning, manual permutation importance, PDP/ICE,
+    hand-calculated Shapley game, exact implementation, TreeSHAP reconstruction, and
+    one sealed-test explanation.
+
+    ### Self-check
+
+    1. Can impurity importance prove held-out usefulness?
+    2. Why can correlated substitutes have low individual permutation importance?
+    3. What does PDP average?
+    4. How does ICE differ from PDP?
+    5. What is the baseline in a local SHAP explanation?
+    6. Why does background choice change attributions?
+    7. Does mathematical allocation fairness prove social fairness?
+    8. Does SHAP prove causality or legal compliance?
+
+    ### Solution and scoring rubric
+
+    1. Global reliance concerns many rows; local attribution concerns one prediction.
+    2. Rain is $(3+6)/2=4.5$.
+    3. Magnitude remains, but positive and negative directions disappear.
+    4. Model, row, output scale, value function, dependence rule, and background.
+    5. Interpretation can faithfully describe leakage or a model that does not generalize.
+
+    Award two points for each self-check and four points for the challenge explanation.
+    Full credit requires correct boundaries, not just correct plotting code.
+
+    ### Common mistakes
+
+    - Explaining a model before validating it.
+    - Treating impurity importance as held-out evidence.
+    - Permuting test data repeatedly during method development.
+    - Reading PDP or SHAP as causal effect.
+    - Ignoring correlated substitutes.
+    - Hiding the background population.
+    - Mixing raw margins, log-odds, and probabilities.
+    - Calling mathematical credit allocation socially fair.
+    - Using SHAP as a fairness metric or compliance certificate.
+    - Silently catching every library exception.
+
+    ### Readiness threshold
+
+    Score at least **16/20** and correctly explain validation, correlation, background,
+    output scale, additive reconstruction, and the causal boundary.
+    """),
+
+    md(r"""
+    ## Ready to move on?
+
+    ### Quick check
+
+    Explain this chain without notes:
+
+    validated model  
+    → transparent coefficient baseline  
+    → held-out permutation importance  
+    → PDP and ICE  
+    → two-feature Shapley calculation  
+    → declared background and output scale  
+    → verified TreeSHAP reconstruction.
+
+    ### Teach it back
+
+    Explain why permutation importance, PDP, and SHAP answer different questions. Then
+    explain why a beautiful local explanation cannot prove causality, fairness, or
+    generalization.
+
+    ### Memory aid
+
+    **Validate first, name the question, declare the reference, and explain only what
+    the model—not the world—has shown.**
+
+    ### Next dependency
+
+    Validated predictions and bounded explanations  
+    → required before integrated classical-ML evaluation  
+    → because model selection must combine performance, robustness, and interpretation
+    without confusing their evidence.
     """),
 ]
+
 
 build("03_ml_engineering/05_explainability_with_shap.ipynb", cells)
