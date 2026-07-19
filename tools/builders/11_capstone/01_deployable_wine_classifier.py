@@ -17,7 +17,7 @@ cells = [
     records monitoring diagnostics, and verifies contracts with tests.
 
     **Estimated time:** 5–8 hours including project exercises.
-    **Prerequisites:** FND-03, CML-01 through CML-05, MLE-01 through MLE-05,
+    **Prerequisites:** FND-03, CML-01 through CML-06, MLE-01 through MLE-05,
     and the production and system-design sections.
     """),
 

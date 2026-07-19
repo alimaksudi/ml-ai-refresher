@@ -218,7 +218,7 @@ cells = [
     """),
 
     md(r"""
-    ### Code walkthrough and expected-result contract
+    ### Reading the measured result
 
     1. Load one committed artifact rather than rebuilding retrieval inside the lesson.
     2. Verify three hashes before comparing experiments.

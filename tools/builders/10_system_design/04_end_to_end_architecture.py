@@ -91,7 +91,7 @@ md(r"""
 |-------|----------|
 | Data | FND-02 (Probability), MLE-02 (Validation), PROD-03 (Feature Stores) |
 | Feature Engineering | MLE-03 (Feature Engineering), PROD-03 (Feature Stores) |
-| Training | CML-01 through CML-05, DL-01 through DL-08, PROD-04, PROD-01 |
+| Training | CML-01 through CML-06, DL-01 through DL-08, PROD-04, PROD-01 |
 | Serving | SYS-01 (Scalable ML), PROD-02 (LLMOps), SYS-02 (Production RAG) |
 | Evaluation | EVAL-01 through EVAL-05, including EVAL-03 for RAG |
 | Monitoring | PROD-05 (Drift), PROD-06 (Retraining), SYS-03 (Reliability) |
@@ -790,9 +790,9 @@ the full workflow in a deployable vertical slice.
 
 | Section | Topic | Lesson IDs |
 |---------|-------|------------|
-| 00 | Prerequisites | PRE-01 through PRE-05 |
+| 00 | Prerequisites | PRE-01 through PRE-06 |
 | 01 | ML Foundations | FND-01 through FND-04 |
-| 02 | Classical Machine Learning | CML-01 through CML-05 |
+| 02 | Classical Machine Learning | CML-01 through CML-06 |
 | 03 | ML Engineering | MLE-01 through MLE-06 |
 | 04 | Deep Learning | DL-01 through DL-08 |
 | 05 | NLP and LLMs | NLP-01 through NLP-05 |
