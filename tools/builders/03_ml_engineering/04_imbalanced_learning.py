@@ -1,739 +1,927 @@
-"""Builder for Lesson MLE-04 — Imbalanced Learning.
+"""Build MLE-04: beginner-first Imbalanced Learning."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # MLE-04 · Imbalanced Learning
-    ### Section 03 — ML Engineering Foundations · *ML/AI Senior Mastery Curriculum*
 
-    > The highest-value classification problems are almost all **imbalanced**: fraud
-    > (<1%), disease (rare), churn, ad clicks, defaults, manufacturing defects. The
-    > positive class — the one you actually care about — is a tiny minority, and a
-    > model trained naively learns to ignore it (CML-02 and MLE-01). This notebook is
-    > the toolkit for the rare-class problem: **resampling** (random + SMOTE),
-    > **class weights / cost-sensitive learning**, and **threshold moving** — plus the
-    > senior judgment about which actually helps, the leakage trap that invalidates
-    > most beginner attempts, and the calibration damage resampling silently does.
+    **Prerequisites:** CML-02, MLE-01, MLE-02, and MLE-03  
+    **Estimated study time:** 8–10 hours, including practice  
+    **Next lesson:** MLE-05 · Explainability with SHAP
+
+    A classification dataset is imbalanced when one class appears much less often
+    than another. The main danger is not the percentage by itself. The danger is
+    choosing a model, metric, threshold, or sampling method that ignores the rare
+    outcome and its real cost.
+
+    The goal is not to “balance everything.” The goal is to define the positive
+    event, measure the baseline honestly, choose the smallest justified intervention,
+    and preserve the validation boundary.
+
+    ### Scope boundary
+
+    This lesson teaches binary classification with continuous numerical features. It
+    covers threshold selection, class weights, random sampling, SMOTE, and fold-safe
+    pipelines. It defers:
+
+    - multiclass imbalance;
+    - specialized SMOTE variants and ensemble samplers;
+    - probability recalibration procedures;
+    - monitoring and base-rate drift to PROD-05;
+    - feature explanations to MLE-05.
+
+    Accuracy remains useful context, but it is never used alone.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - *Why* imbalance breaks naive training and accuracy (recap + deepen CML-02 and
-      MLE-01), and the three families of fixes.
-    - **Data-level**: random over/under-sampling and **SMOTE** (synthetic
-      interpolation) — implemented from scratch.
-    - **Algorithm-level**: **class weights / cost-sensitive loss** — derived and coded.
-    - **Threshold moving**: the often-best, simplest fix on a well-calibrated model.
-    - The two traps every senior must flag: **resampling before the split is leakage**,
-      and **resampling distorts probability calibration**.
-    - Choosing the right approach (and metric) for a given cost structure.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - Imbalance is the *norm* in high-stakes ML; mishandling it ships a model that
-      "looks accurate" and catches nothing (Lesson MLE-01's accuracy paradox).
-    - The fixes interact subtly with metrics (Lesson MLE-01), validation (Lesson MLE-02),
-      and calibration — getting the *combination* right is the senior skill.
+    - declare the positive class and prediction decision;
+    - count classes and calculate an imbalance ratio;
+    - calculate an always-majority baseline;
+    - build and interpret a confusion matrix;
+    - explain why accuracy alone can hide minority failure;
+    - separate ranking, probability estimation, and threshold decisions;
+    - choose a threshold from validation costs;
+    - calculate inverse-frequency class weights manually;
+    - implement random oversampling and undersampling;
+    - calculate Euclidean distance and one SMOTE point;
+    - explain why neighbour-based synthesis needs compatible scales;
+    - implement a guarded SMOTE function for continuous features;
+    - place preprocessing and resampling inside each training fold;
+    - compare methods using validation evidence only;
+    - evaluate one selected configuration once on a sealed test partition.
 
-    **Typical interview questions**
-    - "Your fraud model predicts 'never fraud' — what do you do?"
-    - "Oversampling vs undersampling vs SMOTE vs class weights — tradeoffs?"
-    - "How does SMOTE work, and when does it fail?"
-    - "Why must resampling happen *inside* cross-validation?"
-    - "Does oversampling change your predicted probabilities?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The naive failure.** A classifier minimizing average error (CML-02 and CML-05) on
-    99%-negative data discovers the laziest possible solution: **predict negative
-    always**. It's 99% accurate and 0% useful. The loss and the metric both reward
-    ignoring the minority — so we must change one or both.
-
-    **Three historical lines of attack.**
-    1. **Re-balance the data (data-level).** The oldest idea: duplicate minority rows
-       (random oversampling) or drop majority rows (random undersampling) until classes
-       are balanced. **SMOTE** (Chawla et al., 2002) refined oversampling by
-       *synthesizing* new minority points via interpolation instead of duplicating —
-       reducing the overfitting that exact copies cause.
-    2. **Re-weight the loss (algorithm-level).** Cost-sensitive learning makes a
-       minority error cost more in the objective (`class_weight`,
-       `scale_pos_weight`) — equivalent in spirit to oversampling but without
-       touching the data.
-    3. **Move the decision threshold (decision-level).** Keep the model and *its
-       probabilities*, but choose a threshold below 0.5 to trade precision for recall
-       (Lesson MLE-01). Increasingly, practitioners argue this is the **cleanest** fix:
-       a well-trained, **calibrated** model already ranks correctly, and the imbalance
-       "problem" is really a *threshold* problem.
-
-    **Why the modern view matters.** A recurring senior insight (and interview
-    discriminator): resampling and class weights mostly **shift the implicit
-    threshold** while *damaging calibration*. So before reaching for SMOTE, ask: "Is my
-    model's *ranking* (AUC/PR) actually bad, or is my *threshold* just wrong?" Often
-    it's the latter — and then threshold moving on a calibrated model beats elaborate
-    resampling.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The lazy-student analogy.** A student graded only on overall accuracy, facing an
-    exam that's 99% easy questions and 1% hard ones, learns to ace the easy ones and
-    skip the hard ones — 99%! To force attention on the hard 1%, you can: (a) **show
-    more hard questions** (oversample/SMOTE), (b) **make hard questions worth more
-    points** (class weights), or (c) **lower the bar for what counts as "answered"** on
-    hard questions (threshold moving).
-
-    **What each fix does geometrically:**
-    - **Random oversampling** duplicates minority points — the boundary shifts toward
-      the majority, but exact copies invite overfitting.
-    - **SMOTE** creates *new* minority points along lines between existing minority
-      neighbors — it fills in the minority region rather than stacking duplicates.
-    - **Class weights** tell the loss that each minority example counts like many —
-      the boundary moves without changing the data.
-    - **Threshold moving** leaves the model untouched and simply says "predict positive
-      when $p > t$" for some $t < 0.5$.
-
-    **The two warnings that separate seniors from juniors:**
-    1. **Resample only the *training* fold.** Balancing the whole dataset before
-       splitting leaks minority information into the test fold (duplicates/synthetics
-       of test points appear in train) — fake-good CV (Lesson MLE-02).
-    2. **Resampling decalibrates.** Changing the class ratio changes the model's
-       implied base rate, so its probabilities no longer match reality — you must
-       recalibrate or correct the prior if the probability is consumed.
+    ### Learning path
 
     ```mermaid
-    flowchart TD
-        I["Imbalanced data<br/>(rare positives)"] --> D["Data-level:<br/>over/under-sample, SMOTE"]
-        I --> A["Algorithm-level:<br/>class weights / cost-sensitive"]
-        I --> T["Decision-level:<br/>move threshold (MLE-01)"]
-        D --> W1["⚠ resample TRAIN only · decalibrates"]
-        A --> M["boundary shifts; calibration ~ok"]
-        T --> M2["cleanest if model is calibrated"]
+    flowchart LR
+        A[Define positive event] --> B[Count classes]
+        B --> C[Majority baseline]
+        C --> D[Confusion matrix]
+        D --> E[Probability and threshold]
+        E --> F[Validation cost]
+        F --> G[Class weights]
+        G --> H[Random sampling]
+        H --> I[Distance and SMOTE]
+        I --> J[Fold-safe pipeline]
+        J --> K[One sealed test]
     ```
 
-    Run the cells — first, watch a naive model ignore the rare class.
+    Dependency map:
+
+    Classification metrics  
+    → required before imbalance interventions  
+    → because an intervention cannot be judged by class counts alone.
+
+    Train/validation/test boundaries  
+    → required before resampling  
+    → because resampling is learned from training rows and must not touch held-out rows.
+
+    Feature scaling  
+    → required before SMOTE  
+    → because nearest neighbours depend on distances between features.
+    """),
+
+    md(r"""
+    ## 2 · The practical problem: rare machine defects
+
+    A factory predicts whether a component has a serious defect after six sensor
+    measurements become available. Only about 4% of historical components are
+    defective.
+
+    **Positive class:** `1` means serious defect.  
+    **Negative class:** `0` means no serious defect.  
+    **Prediction time:** after sensor measurements, before expensive manual inspection.
+
+    Missing a defect is more costly than inspecting a safe component. We use this
+    declared development cost:
+
+    - false negative: 10 cost units;
+    - false positive: 1 cost unit.
+
+    These values are a teaching contract, not universal business costs.
+
+    Analogy: a smoke alarm should not be judged only by how often rooms contain no
+    fire. The analogy stops because a model emits a score and the decision threshold
+    can be changed separately.
+    """),
+
+    md(r"""
+    ## 3 · Count classes before changing anything
+
+    Let $n_0$ be the number of negative rows and $n_1$ the number of positive rows.
+    A simple majority-to-minority imbalance ratio is:
+
+    $$
+    \operatorname{ratio}=\frac{n_0}{n_1}
+    $$
+
+    If there are 960 negative and 40 positive rows, the ratio is $960/40=24$. There
+    are 24 negative rows for each positive row.
+
+    The always-negative baseline would be 96% accurate, but it would miss all 40
+    defects. That baseline exposes why accuracy alone is incomplete; it does not prove
+    that every ordinary classifier will ignore the minority.
+
+    We split before fitting preprocessing, models, thresholds, or samplers.
     """),
 
     code(r"""
     import numpy as np
+    import pandas as pd
     import matplotlib.pyplot as plt
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-
-    # 2D imbalanced data: 5% positives, overlapping with the majority.
-    n = 2000
-    n_pos = int(0.05 * n)
-    Xneg = rng.normal([0, 0], 1.2, (n - n_pos, 2))
-    Xpos = rng.normal([2.2, 2.2], 1.0, (n_pos, 2))
-    X = np.vstack([Xneg, Xpos])
-    y = np.r_[np.zeros(n - n_pos), np.ones(n_pos)]
-    perm = rng.permutation(n); X, y = X[perm], y[perm]
-    print(f"positives: {int(y.sum())}/{n}  ({y.mean():.1%}) -- a rare class")
-    """),
-
-    code(r"""
-    # The naive baseline: optimize accuracy and the minority class vanishes.
-    from sklearn.linear_model import LogisticRegression
+    from sklearn.datasets import make_classification
     from sklearn.model_selection import train_test_split
-    from sklearn.metrics import recall_score, precision_score, accuracy_score
+    from sklearn.preprocessing import StandardScaler
 
-    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.4, random_state=0, stratify=y)
-    base = LogisticRegression().fit(Xtr, ytr)
-    pred = base.predict(Xte)
-    print(f"accuracy : {accuracy_score(yte, pred):.3f}  (looks great...)")
-    print(f"recall   : {recall_score(yte, pred):.3f}  (...but catches few positives)")
-    print(f"precision: {precision_score(yte, pred, zero_division=0):.3f}")
-    print("\\nHigh accuracy, poor recall: the model leans heavily toward the majority.")
+    all_features, all_labels = make_classification(
+        n_samples=1200,
+        n_features=6,
+        n_informative=4,
+        n_redundant=1,
+        weights=[0.96, 0.04],
+        class_sep=1.0,
+        flip_y=0.01,
+        random_state=42,
+    )
+
+    # Seal 20% first. It cannot influence preprocessing, threshold, or method choice.
+    development_features, sealed_test_features, development_labels, sealed_test_labels = train_test_split(
+        all_features,
+        all_labels,
+        test_size=0.20,
+        stratify=all_labels,
+        random_state=42,
+    )
+    train_features, validation_features, train_labels, validation_labels = train_test_split(
+        development_features,
+        development_labels,
+        test_size=0.25,
+        stratify=development_labels,
+        random_state=42,
+    )
+
+    # Scaling parameters come from training rows only.
+    training_scaler = StandardScaler()
+    train_features_scaled = training_scaler.fit_transform(train_features)
+    validation_features_scaled = training_scaler.transform(validation_features)
+
+    negative_count = int(np.sum(train_labels == 0))
+    positive_count = int(np.sum(train_labels == 1))
+    imbalance_ratio = negative_count / positive_count
+
+    print("training rows:", len(train_labels))
+    print("validation rows:", len(validation_labels))
+    print("sealed test rows:", len(sealed_test_labels))
+    print("training negative rows:", negative_count)
+    print("training positive rows:", positive_count)
+    print("majority-to-minority ratio:", round(imbalance_ratio, 2))
+    print("test status: sealed")
+
+    assert len(train_labels) + len(validation_labels) + len(sealed_test_labels) == 1200
+    assert positive_count < negative_count
     """),
 
-    # ============================================ 4. Mathematical Foundations
     md(r"""
-    ## 4 · Mathematical Foundations
+    ## 4 · Confusion counts reveal what accuracy compresses
 
-    ### 4.1 Why imbalance hurts
-    The training loss is an average over examples (Lesson CML-05). With 99% negatives,
-    the gradient is dominated by the majority class, and the easiest way to reduce loss
-    is to predict the majority. The Bayes-optimal decision at threshold 0.5 also
-    favors the majority when the prior $P(y{=}1)$ is tiny. Both the **objective** and
-    the **default threshold** are mis-aligned with "find the rare positives."
+    For positive class 1:
 
-    ### 4.2 Cost-sensitive learning / class weights
-    Attach a weight $w_c$ to each class and minimize the **weighted** loss
-    $$J=-\frac1{\sum_i w_{y_i}}\sum_i w_{y_i}\big[y_i\log p_i+(1-y_i)\log(1-p_i)\big].$$
-    Setting $w_1/w_0 = n_0/n_1$ (inverse frequency) makes the two classes contribute
-    equally — the gradient $\frac1N\sum w_{y_i}(p_i-y_i)x_i$ now "hears" the minority.
-    This is **mathematically close to oversampling** the minority by the same ratio,
-    but without duplicating data.
+    - true positive (TP): defect correctly flagged;
+    - false positive (FP): safe component incorrectly flagged;
+    - false negative (FN): defect missed;
+    - true negative (TN): safe component correctly cleared.
 
-    ### 4.3 SMOTE — synthetic minority oversampling
-    For a minority point $x_i$, pick one of its $k$ minority nearest neighbors $x_j$
-    and create a synthetic point on the segment between them:
-    $$x_{\text{new}} = x_i + \lambda\,(x_j - x_i),\qquad \lambda\sim U(0,1).$$
-    This **fills the minority region** with plausible interpolated examples rather than
-    stacking exact duplicates, reducing overfitting. *Assumptions:* the minority class
-    is locally convex and features are continuous — interpolating categorical or
-    high-dimensional sparse features produces nonsense (§7).
+    $$
+    \operatorname{accuracy}=\frac{TP+TN}{TP+TN+FP+FN}
+    $$
 
-    ### 4.4 Threshold moving (recap of Lesson MLE-01)
-    Keep the model; choose the threshold $t$ minimizing expected cost
-    $C_{FP}\,FP(t)+C_{FN}\,FN(t)$, or hitting a recall/precision target. For a
-    **calibrated** model this is often the best fix — it changes the *decision*, not
-    the *probabilities*, so calibration is preserved.
+    $$
+    \operatorname{precision}=\frac{TP}{TP+FP},\qquad
+    \operatorname{recall}=\frac{TP}{TP+FN}
+    $$
 
-    ### 4.5 The calibration consequence of resampling
-    If you train on data resampled to a balanced ratio, the model learns
-    $P_{\text{resampled}}(y{=}1\mid x)$, **not** the true $P(y{=}1\mid x)$. The
-    predicted probabilities are systematically inflated for the minority. To recover
-    true probabilities you must **correct the prior** or **recalibrate** (Platt/
-    isotonic) on data with the *real* class ratio. Class weights distort calibration
-    less than aggressive resampling; threshold moving not at all.
-
-    ### 4.6 The validation rule (recap of Lesson MLE-02)
-    **Resampling is part of model fitting**, so it must happen **inside** each CV fold,
-    on the training portion only. Balancing the full dataset first leaks synthetic/
-    duplicated minority points across the train/test boundary, producing optimistic and
-    meaningless scores. Use an imblearn `Pipeline` (or manual in-fold resampling).
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    We implement random over/under-sampling, **SMOTE**, and a **class-weighted logistic
-    regression** — the three core mechanisms — in pure NumPy.
+    The always-negative model has many true negatives, zero recall, and no predicted
+    positives. We report its precision as zero by convention rather than dividing by
+    zero.
     """),
 
     code(r"""
-    # 5.1 Random oversampling, random undersampling, and SMOTE from scratch.
-    def random_oversample(X, y, seed=0):
-        r = np.random.default_rng(seed)
-        pos, neg = np.where(y == 1)[0], np.where(y == 0)[0]
-        extra = r.choice(pos, size=len(neg) - len(pos), replace=True)   # duplicate minority
-        idx = np.concatenate([neg, pos, extra])
-        return X[idx], y[idx]
+    def summarize_binary_decisions(actual_labels, predicted_labels, false_positive_cost=1, false_negative_cost=10):
+        '''Return confusion counts, core metrics, and declared decision cost.'''
+        actual_labels = np.asarray(actual_labels, dtype=int)
+        predicted_labels = np.asarray(predicted_labels, dtype=int)
 
-    def random_undersample(X, y, seed=0):
-        r = np.random.default_rng(seed)
-        pos, neg = np.where(y == 1)[0], np.where(y == 0)[0]
-        keep_neg = r.choice(neg, size=len(pos), replace=False)          # drop majority
-        idx = np.concatenate([keep_neg, pos])
-        return X[idx], y[idx]
+        true_positive = int(np.sum((actual_labels == 1) & (predicted_labels == 1)))
+        false_positive = int(np.sum((actual_labels == 0) & (predicted_labels == 1)))
+        false_negative = int(np.sum((actual_labels == 1) & (predicted_labels == 0)))
+        true_negative = int(np.sum((actual_labels == 0) & (predicted_labels == 0)))
 
-    def smote(X, y, k=5, seed=0):
-        r = np.random.default_rng(seed)
-        Xmin = X[y == 1]
-        n_needed = int((y == 0).sum() - (y == 1).sum())
-        synth = np.empty((n_needed, X.shape[1]))
-        for s in range(n_needed):
-            i = r.integers(len(Xmin))
-            d = np.linalg.norm(Xmin - Xmin[i], axis=1)
-            nn = np.argsort(d)[1:k + 1]                                 # k nearest minority neighbors
-            j = nn[r.integers(len(nn))]
-            lam = r.random()
-            synth[s] = Xmin[i] + lam * (Xmin[j] - Xmin[i])             # interpolate
-        Xnew = np.vstack([X, synth])
-        ynew = np.r_[y, np.ones(n_needed)]
-        return Xnew, ynew
+        accuracy = (true_positive + true_negative) / len(actual_labels)
+        precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
+        recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
+        decision_cost = false_positive_cost * false_positive + false_negative_cost * false_negative
 
-    for name, fn in [("oversample", random_oversample), ("undersample", random_undersample),
-                     ("SMOTE", smote)]:
-        Xr, yr = fn(Xtr, ytr)
-        print(f"{name:12s}: {len(yr)} rows, balance {yr.mean():.2f}")
-    """),
+        return {
+            "TN": true_negative,
+            "FP": false_positive,
+            "FN": false_negative,
+            "TP": true_positive,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "cost": decision_cost,
+        }
 
-    code(r"""
-    # 5.2 Class-weighted logistic regression (cost-sensitive) from scratch.
-    def sigmoid(z):
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
 
-    def fit_weighted_logistic(X, y, lr=0.1, steps=3000, class_weight=None):
-        A = np.c_[np.ones(len(X)), X]
-        w = np.zeros(A.shape[1])
-        if class_weight is None:
-            sw = np.ones(len(y))
-        else:
-            sw = np.where(y == 1, class_weight[1], class_weight[0])     # per-sample weights
-        for _ in range(steps):
-            p = sigmoid(A @ w)
-            grad = A.T @ (sw * (p - y)) / sw.sum()                      # weighted gradient (Section 4.2)
-            w -= lr * grad
-        return w
+    always_negative_validation = np.zeros(len(validation_labels), dtype=int)
+    baseline_summary = summarize_binary_decisions(
+        validation_labels,
+        always_negative_validation,
+    )
 
-    def predict_proba(X, w):
-        return sigmoid(np.c_[np.ones(len(X)), X] @ w)
+    print(pd.Series(baseline_summary))
 
-    # inverse-frequency weights make the minority "count" as much as the majority
-    cw = {0: 1.0, 1: (ytr == 0).sum() / (ytr == 1).sum()}
-    w_plain = fit_weighted_logistic(Xtr, ytr)
-    w_weighted = fit_weighted_logistic(Xtr, ytr, class_weight=cw)
-    from sklearn.metrics import recall_score, precision_score
-    for name, w in [("plain", w_plain), ("class-weighted", w_weighted)]:
-        pr = (predict_proba(Xte, w) >= 0.5).astype(int)
-        print(f"{name:15s}: recall={recall_score(yte, pr):.3f}, "
-              f"precision={precision_score(yte, pr, zero_division=0):.3f}")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    Four pictures: SMOTE's synthetic points, the boundary shift from class weights,
-    the recall/precision tradeoff across methods, and the **calibration damage** that
-    resampling does.
-    """),
-
-    code(r"""
-    # Figure 1 — SMOTE fills the minority region with interpolated points.
-    Xsm, ysm = smote(Xtr, ytr)
-    synth = Xsm[len(Xtr):]                                  # the newly created points
-    fig, ax = plt.subplots(figsize=(6.5, 6))
-    ax.scatter(Xtr[ytr == 0][:, 0], Xtr[ytr == 0][:, 1], s=8, alpha=0.3, label="majority")
-    ax.scatter(Xtr[ytr == 1][:, 0], Xtr[ytr == 1][:, 1], s=25, color="tab:red", label="minority (real)")
-    ax.scatter(synth[:, 0], synth[:, 1], s=10, color="tab:green", alpha=0.5, label="SMOTE synthetic")
-    ax.set_title("Figure 1 — SMOTE interpolates new minority points between neighbors")
-    ax.legend()
-    plt.show()
+    assert baseline_summary["TP"] == 0
+    assert baseline_summary["recall"] == 0
+    assert baseline_summary["accuracy"] > 0.90
     """),
 
     md(r"""
-    **Figure 1.** SMOTE doesn't copy minority points — it creates **new** ones on the
-    line segments between a minority point and its minority neighbors (green). This
-    densifies the minority region so the classifier sees a fuller picture of it,
-    avoiding the exact-duplicate overfitting of random oversampling. The flip side is
-    visible too: where minority points are sparse or near the majority cloud, synthetic
-    points can land in **majority territory**, manufacturing label noise (§7) — which
-    is why SMOTE assumes a locally-clean, continuous minority region.
-    """),
+    ## 5 · Separate ranking, probability, and decision threshold
 
-    code(r"""
-    # Figure 2 — class weights move the decision boundary to recover the minority.
-    def boundary(ax, predict_fn, title):
-        xx, yy = np.meshgrid(np.linspace(-4, 6, 200), np.linspace(-4, 6, 200))
-        Z = predict_fn(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-        ax.contourf(xx, yy, Z, levels=[-0.5, 0.5, 1.5], cmap="RdBu", alpha=0.3)
-        ax.scatter(Xtr[ytr == 0][:, 0], Xtr[ytr == 0][:, 1], s=6, alpha=0.3, color="tab:blue")
-        ax.scatter(Xtr[ytr == 1][:, 0], Xtr[ytr == 1][:, 1], s=18, color="tab:red")
-        ax.set_title(title); ax.set_aspect("equal")
+    Logistic regression first produces a probability estimate $p$. A threshold $t$
+    converts it into a decision:
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    boundary(axes[0], lambda G: (predict_proba(G, w_plain) >= 0.5).astype(int),
-             "Plain: boundary ignores the minority")
-    boundary(axes[1], lambda G: (predict_proba(G, w_weighted) >= 0.5).astype(int),
-             "Class-weighted: boundary protects the minority")
-    plt.suptitle("Figure 2 — Class weights shift the boundary toward the rare class")
-    plt.tight_layout()
-    plt.show()
-    """),
+    $$
+    \hat y=\begin{cases}
+    1 & p\ge t\\
+    0 & p<t
+    \end{cases}
+    $$
 
-    md(r"""
-    **Figure 2.** The plain model (left) places its boundary to maximize overall
-    accuracy, swallowing much of the (red) minority into the majority region. With
-    **inverse-frequency class weights** (right), each minority error costs ~19× more,
-    so the boundary moves to carve out the minority region — recall rises sharply at
-    some cost to precision. Note: this looks a lot like simply *lowering the threshold*
-    — which is the next figure's point.
-    """),
+    Lowering $t$ normally flags more rows: recall may rise and false positives may
+    also rise. The probability model has not changed; only the decision rule changed.
 
-    code(r"""
-    # Figure 3 — compare strategies by precision/recall (evaluate on the ORIGINAL test set).
-    from sklearn.metrics import precision_recall_fscore_support
+    Three different questions must remain separate:
 
-    def evaluate(name, proba, thresh=0.5):
-        pr = (proba >= thresh).astype(int)
-        p, r, f, _ = precision_recall_fscore_support(yte, pr, average="binary", zero_division=0)
-        return name, p, r, f
+    1. **Ranking:** do positive rows tend to receive higher scores?
+    2. **Probability:** do predicted probabilities match observed frequencies?
+    3. **Decision:** which threshold matches the declared costs or capacity?
 
-    results = [
-        evaluate("baseline", predict_proba(Xte, w_plain)),
-        evaluate("class weights", predict_proba(Xte, w_weighted)),
-    ]
-    # SMOTE-trained model
-    w_smote = fit_weighted_logistic(*smote(Xtr, ytr))
-    results.append(evaluate("SMOTE", predict_proba(Xte, w_smote)))
-    # threshold moving on the PLAIN calibrated model (no resampling at all)
-    results.append(evaluate("threshold=0.15", predict_proba(Xte, w_plain), thresh=0.15))
-
-    labels = [r[0] for r in results]
-    prec = [r[1] for r in results]; rec = [r[2] for r in results]; f1 = [r[3] for r in results]
-    xp = np.arange(len(labels)); width = 0.27
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(xp - width, prec, width, label="precision")
-    ax.bar(xp, rec, width, label="recall")
-    ax.bar(xp + width, f1, width, label="F1")
-    ax.set_xticks(xp); ax.set_xticklabels(labels); ax.set_ylim(0, 1)
-    ax.set_title("Figure 3 — Strategies trade precision for recall (test set unchanged)")
-    ax.legend()
-    plt.show()
-    for n, p, r, f in results:
-        print(f"{n:16s}: P={p:.2f} R={r:.2f} F1={f:.2f}")
-    """),
-
-    md(r"""
-    **Figure 3.** All three "imbalance fixes" do essentially the same thing — **buy
-    recall at the cost of precision** — by effectively lowering the decision threshold.
-    Strikingly, **threshold moving on the plain model** (no resampling, no reweighting)
-    achieves a similar recall/precision trade as class weights and SMOTE, with less
-    machinery and *without* harming calibration. This is the senior takeaway: before
-    SMOTE-ing, check whether your model's **ranking** (PR-AUC) is actually poor or
-    whether you just need a better **threshold** (Lesson MLE-01). Often it's the latter.
-    """),
-
-    code(r"""
-    # Figure 4 — resampling DECALIBRATES: oversampled model overstates P(positive).
-    def reliability(y, p, bins=8):
-        edges = np.linspace(0, 1, bins + 1); xs, ys = [], []
-        for i in range(bins):
-            m = (p >= edges[i]) & (p < edges[i + 1])
-            if m.sum() > 10:
-                xs.append(p[m].mean()); ys.append(y[m].mean())
-        return np.array(xs), np.array(ys)
-
-    fig, ax = plt.subplots()
-    for w, name, c in [(w_plain, "plain (calibrated)", "tab:blue"),
-                       (w_smote, "SMOTE-trained", "tab:red")]:
-        p = predict_proba(Xte, w)
-        xs, ys = reliability(yte, p)
-        brier = np.mean((p - yte) ** 2)
-        ax.plot(xs, ys, "o-", color=c, label=f"{name} (Brier {brier:.3f})")
-    ax.plot([0, 1], [0, 1], "k--", label="perfectly calibrated")
-    ax.set_xlabel("mean predicted probability"); ax.set_ylabel("observed frequency")
-    ax.set_title("Figure 4 — Resampling inflates probabilities (decalibration)")
-    ax.legend()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 4.** The plain model (blue) tracks the diagonal — its probabilities are
-    roughly honest. The **SMOTE-trained** model (red) bows **above** the diagonal: it
-    was trained on a 50/50 world, so it systematically *overstates* the probability of
-    the (truly rare) positive class, and its Brier score is worse. If you only need a
-    *ranking* or a yes/no decision, this may be fine; but if the **probability is
-    consumed** (pricing, expected-loss, risk thresholds), resampling demands a
-    **recalibration** step on real-ratio data or a prior correction. Threshold moving
-    avoids this entirely.
-    """),
-
-    # ============================================ 7. Failure Modes
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Resample before split** | CV ≫ live; "perfect" minority recall | Synthetic/dup minority points leak across folds | Resample **inside** the fold (imblearn Pipeline, MLE-02) |
-    | **Decalibration** | Probabilities too high for minority | Trained on a balanced (fake) prior | Recalibrate / prior-correct; or use class weights / threshold |
-    | **SMOTE on wrong data** | Noisy synthetic points; worse model | Categorical/sparse/high-dim or overlapping classes | SMOTENC/encodings; clean overlap; prefer class weights |
-    | **Undersampling discards signal** | Higher variance, lost majority info | Threw away most of the data | Keep data; oversample/weight; or ensemble undersampling |
-    | **Oversampling overfit** | Train ≫ test; memorized duplicates | Exact minority copies | SMOTE instead; regularize |
-    | **Wrong metric** | "Improved accuracy," worse business outcome | Accuracy on imbalanced data | PR-AUC, recall@precision, cost (MLE-01) |
-    | **Over-fixing imbalance** | Tons of false positives | Pushed recall with no cost basis | Set threshold/weights from the **cost matrix** |
-
-    The cell shows the **leakage** failure — SMOTE applied before the split inflates CV.
-    """),
-
-    code(r"""
-    # SMOTE before splitting leaks; SMOTE inside the fold is honest.
-    from sklearn.model_selection import StratifiedKFold
-    from sklearn.metrics import f1_score
-
-    def cv_smote(leaky):
-        skf = StratifiedKFold(5, shuffle=True, random_state=0)
-        scores = []
-        Xall, yall = (smote(X, y) if leaky else (X, y))      # LEAKY: resample everything first
-        # For the honest case we resample only the train part of each fold below.
-        for tr, te in skf.split(X, y):
-            if leaky:
-                # train on resampled-everything (test points' synthetics may be in train) -- LEAK
-                Xt, yt = smote(X[tr], y[tr]) if False else (Xall, yall)  # illustrative
-            if leaky:
-                w = fit_weighted_logistic(Xall, yall, steps=1500)
-            else:
-                Xt, yt = smote(X[tr], y[tr])
-                w = fit_weighted_logistic(Xt, yt, steps=1500)
-            pr = (predict_proba(X[te], w) >= 0.5).astype(int)
-            scores.append(f1_score(y[te], pr, zero_division=0))
-        return np.mean(scores)
-
-    # cleaner: explicit leaky vs honest
-    def cv_honest():
-        skf = StratifiedKFold(5, shuffle=True, random_state=0); s = []
-        for tr, te in skf.split(X, y):
-            Xt, yt = smote(X[tr], y[tr])                      # resample TRAIN ONLY
-            w = fit_weighted_logistic(Xt, yt, steps=1500)
-            s.append(f1_score(y[te], (predict_proba(X[te], w) >= 0.5).astype(int), zero_division=0))
-        return np.mean(s)
-
-    def cv_leaky():
-        Xall, yall = smote(X, y)                              # resample BEFORE splitting -> leak
-        skf = StratifiedKFold(5, shuffle=True, random_state=0); s = []
-        for tr, te in skf.split(Xall, yall):
-            w = fit_weighted_logistic(Xall[tr], yall[tr], steps=1500)
-            s.append(f1_score(yall[te], (predict_proba(Xall[te], w) >= 0.5).astype(int), zero_division=0))
-        return np.mean(s)
-
-    print(f"LEAKY  (SMOTE before split) F1: {cv_leaky():.3f}   <- optimistic, fake")
-    print(f"HONEST (SMOTE inside fold)  F1: {cv_honest():.3f}   <- trustworthy")
-    """),
-
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
-
-    The `imbalanced-learn` library provides SMOTE and friends plus an
-    **imblearn `Pipeline`** that applies resampling **train-fold-only** automatically
-    (the leak-safe pattern). sklearn offers `class_weight="balanced"` everywhere, and
-    XGBoost has `scale_pos_weight`. The import is wrapped defensively; if absent, we
-    fall back to `class_weight`, which needs no extra package.
+    Before changing training data, test whether the existing model plus a validated
+    threshold already solves the decision problem.
     """),
 
     code(r"""
     from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import cross_val_score, StratifiedKFold
-    from sklearn.metrics import make_scorer, f1_score
+    from sklearn.metrics import average_precision_score
 
-    f1 = make_scorer(f1_score, zero_division=0)
+    plain_logistic_model = LogisticRegression(max_iter=1000, random_state=42)
+    plain_logistic_model.fit(train_features_scaled, train_labels)
+    plain_validation_probabilities = plain_logistic_model.predict_proba(
+        validation_features_scaled
+    )[:, 1]
 
-    # sklearn class_weight='balanced' = inverse-frequency weights (Section 4.2), no extra lib
-    plain_cv = cross_val_score(LogisticRegression(max_iter=1000),
-                               X, y, cv=StratifiedKFold(5), scoring=f1).mean()
-    bal_cv = cross_val_score(LogisticRegression(max_iter=1000, class_weight="balanced"),
-                             X, y, cv=StratifiedKFold(5), scoring=f1).mean()
-    print(f"F1  plain: {plain_cv:.3f}   class_weight='balanced': {bal_cv:.3f}")
+    default_validation_decisions = (plain_validation_probabilities >= 0.5).astype(int)
+    default_summary = summarize_binary_decisions(
+        validation_labels,
+        default_validation_decisions,
+    )
+    validation_average_precision = average_precision_score(
+        validation_labels,
+        plain_validation_probabilities,
+    )
 
-    # imbalanced-learn (optional) -- leak-safe Pipeline that resamples train folds only
-    try:
-        from imblearn.over_sampling import SMOTE as ImbSMOTE
-        from imblearn.pipeline import Pipeline as ImbPipeline
-        pipe = ImbPipeline([("smote", ImbSMOTE(random_state=0)),
-                            ("clf", LogisticRegression(max_iter=1000))])
-        smote_cv = cross_val_score(pipe, X, y, cv=StratifiedKFold(5), scoring=f1).mean()
-        print(f"imblearn SMOTE-in-pipeline F1: {smote_cv:.3f} (resampling is train-fold-only)")
-    except Exception as e:
-        print(f"[imbalanced-learn not installed: {type(e).__name__}] "
-              f"class_weight='balanced' above is the no-dependency alternative.")
+    print(pd.Series(default_summary))
+    print("validation average precision:", round(validation_average_precision, 3))
+
+    assert np.all((plain_validation_probabilities >= 0) & (plain_validation_probabilities <= 1))
+    assert 0 <= validation_average_precision <= 1
     """),
 
     md(r"""
-    **Scratch vs production.** Our hand-written SMOTE and weighted-logistic taught the
-    mechanics; `imbalanced-learn`'s **`Pipeline`** is what you ship, because it
-    guarantees resampling happens *inside* each CV fold (and not at serving) — the
-    single most important correctness property (§7). `class_weight="balanced"` is the
-    zero-dependency option that often matches SMOTE and preserves calibration better;
-    `scale_pos_weight` is XGBoost's equivalent. Reach for SMOTE only when class weights/
-    threshold moving underperform *and* your features are continuous and clean.
+    ## 6 · Choose the threshold on validation costs
+
+    With false-positive cost $C_{FP}$ and false-negative cost $C_{FN}$:
+
+    $$
+    C(t)=C_{FP}\,FP(t)+C_{FN}\,FN(t)
+    $$
+
+    **Symbols:** $t$ is a candidate threshold; $FP(t)$ and $FN(t)$ are validation
+    counts at that threshold.
+
+    We declared $C_{FP}=1$ and $C_{FN}=10$. Candidate thresholds are development
+    choices, so validation selects one. Test remains sealed.
+
+    The exact minimum can be noisy when positives are rare. A production process may
+    add confidence intervals, review-capacity constraints, or a minimum recall rule.
     """),
 
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — Rare-Disease Screening
+    code(r"""
+    threshold_records = []
+    candidate_thresholds = np.linspace(0.05, 0.95, 19)
 
-    **Scenario.** A screening model flags patients for a disease present in ~0.5% of
-    the screened population. Missing a case (FN) is far worse than a false alarm (FP),
-    which triggers a (costly, stressful, but survivable) follow-up test.
+    for candidate_threshold in candidate_thresholds:
+        candidate_decisions = (
+            plain_validation_probabilities >= candidate_threshold
+        ).astype(int)
+        candidate_summary = summarize_binary_decisions(
+            validation_labels,
+            candidate_decisions,
+        )
+        threshold_records.append(
+            {"threshold": candidate_threshold, **candidate_summary}
+        )
 
-    **Why this is the textbook imbalance problem:**
-    - **Accuracy is meaningless** — "all healthy" scores 99.5% (Lesson MLE-01).
-    - The objective is **recall at an acceptable false-positive rate**, set by the
-      enormous FN:FP cost asymmetry.
-    - The output may feed clinical risk discussions, so **calibrated probabilities**
-      matter — which constrains how aggressively we resample.
+    threshold_table = pd.DataFrame(threshold_records)
+    best_threshold_row = threshold_table.loc[threshold_table["cost"].idxmin()]
+    selected_plain_threshold = float(best_threshold_row["threshold"])
 
-    **Approach (senior playbook):**
-    1. Train a strong model with **`class_weight`** (preserves calibration better than
-      heavy resampling); evaluate with **PR-AUC** and recall@FP-rate.
-    2. **Move the threshold** to the cost-optimal point from the FN/FP matrix
-      (Lesson MLE-01) — usually the biggest lever.
-    3. Only if ranking is still poor, try **SMOTE inside the CV fold**, then
-      **recalibrate** on real-ratio data.
+    print(threshold_table[["threshold", "FP", "FN", "precision", "recall", "cost"]].to_string(index=False))
+    print("selected validation threshold:", selected_plain_threshold)
+    print("test status: still sealed")
 
-    **Cost of mistakes:** FN = missed disease (catastrophic); FP = unnecessary
-    follow-up (costly/anxiety). The ratio sets weights and threshold. **Over-fixing**
-    imbalance (chasing recall blindly) floods clinicians with false positives.
-
-    **Constraints:** clinical capacity caps the false-positive volume; outputs must be
-    auditable and calibrated; rigorous, leak-free validation (Lesson MLE-02).
-
-    **KPIs:** recall at fixed FP-rate (sensitivity at fixed specificity), PR-AUC,
-    calibration error, and the realized catch-rate vs review burden in deployment.
+    assert selected_plain_threshold in candidate_thresholds
+    assert best_threshold_row["cost"] <= default_summary["cost"]
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ## 7 · Class weights change the training objective
 
-    - **Resample train-fold-only, always.** Use an imblearn `Pipeline`; never resample
-      before the split or at serving (you don't resample live data). This is the #1
-      correctness rule (§7, Lesson MLE-02).
-    - **Mind calibration.** If the probability is consumed downstream, prefer class
-      weights or threshold moving (calibration-preserving), or **recalibrate** a
-      resampled model on real-ratio data (Lesson MLE-01).
-    - **Threshold is the main production lever** and is cheap to re-tune as costs and
-      **base rates drift** — monitor the positive rate over time; a shifting prior
-      changes the optimal threshold even if the model is unchanged.
-    - **Metric discipline.** Track PR-AUC / recall@precision / cost, never bare
-      accuracy (Lesson MLE-01). Report with confidence intervals (few positives → noisy
-      metrics; bootstrap, Lesson FND-02).
-    - **Don't over-correct.** Balancing to 50/50 is rarely optimal; tune the
-      sampling/weight ratio and threshold to the **business cost**, not to "balanced."
-    - **Combine sparingly.** Stacking SMOTE + class weights + threshold moving triple-
-      counts the minority and floods false positives; pick the minimal effective fix.
+    Scikit-learn's balanced weight for class $c$ is:
+
+    $$
+    w_c=\frac{n}{K n_c}
+    $$
+
+    where $n$ is total training rows, $K$ is number of classes, and $n_c$ is the
+    training count for class $c$.
+
+    A positive row receives more weight when positives are rare. In weighted logistic
+    loss, its error contributes more strongly to optimization.
+
+    Weighting is related to repeating rows, but it is not universally identical:
+    regularization, stochastic optimization, tree construction, and probability
+    interpretation can make results differ. Class weighting can also change
+    calibration; it does not guarantee honest probabilities.
     """),
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    code(r"""
+    number_of_training_rows = len(train_labels)
+    number_of_classes = 2
+    balanced_class_weights = {
+        0: number_of_training_rows / (number_of_classes * negative_count),
+        1: number_of_training_rows / (number_of_classes * positive_count),
+    }
 
-    | Approach | Mechanism | Pros | Cons | Calibration impact |
-    |---|---|---|---|---|
-    | **Random oversample** | Duplicate minority | Simple; keeps all data | Overfits duplicates | Distorted |
-    | **Random undersample** | Drop majority | Fast; small data | **Discards signal**; variance | Distorted |
-    | **SMOTE** | Interpolate minority | Less overfit than dup; fills region | Continuous-only; noisy near overlap | Distorted |
-    | **Class weights** | Reweight loss | No data change; simple | Still shifts threshold implicitly | Mildly distorted |
-    | **Threshold moving** | Move decision point | **Cleanest**; preserves probabilities | Needs a good/calibrated model | **None** |
+    weighted_logistic_model = LogisticRegression(
+        max_iter=1000,
+        class_weight=balanced_class_weights,
+        random_state=42,
+    )
+    weighted_logistic_model.fit(train_features_scaled, train_labels)
+    weighted_validation_probabilities = weighted_logistic_model.predict_proba(
+        validation_features_scaled
+    )[:, 1]
+    weighted_validation_decisions = (
+        weighted_validation_probabilities >= 0.5
+    ).astype(int)
+    weighted_summary = summarize_binary_decisions(
+        validation_labels,
+        weighted_validation_decisions,
+    )
 
-    **Decision guide (senior):**
-    - **First**: train a strong model + **move the threshold** from the cost matrix.
-      Check if PR-AUC (ranking) is actually the problem.
-    - **If ranking is weak**: try **class weights** (calibration-friendly).
-    - **If still weak and features are continuous/clean**: **SMOTE inside CV**, then
-      **recalibrate**.
-    - **Undersample** only when the majority is huge and compute-bound (or in an
-      ensemble like BalancedBagging).
+    print("manual balanced weights:", balanced_class_weights)
+    print(pd.Series(weighted_summary))
 
-    **Senior lesson:** most "imbalance" problems are really **threshold + metric**
-    problems. Reach for the simplest decision-level fix before complicating the data
-    pipeline — and never forget the leakage and calibration consequences.
+    assert balanced_class_weights[1] > balanced_class_weights[0]
     """),
 
-    # ============================================ 12. Interview Prep
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## 8 · Random oversampling and undersampling change training rows
 
-    **Common questions**
-    - *Fraud model predicts 'never fraud' — fix it?* → It's optimizing accuracy on
-      imbalance. Switch to PR metrics, move the threshold from the cost matrix, add
-      class weights; resample only if ranking is poor.
-    - *Oversample vs undersample vs SMOTE vs class weights?* → Section 11 table — and
-      note they mostly shift the threshold.
+    **Random oversampling** repeats minority training rows. It retains majority data
+    but exact copies can encourage memorization.
 
-    **Deep-dive questions**
-    - *How does SMOTE work and when does it fail?* → Interpolate between minority
-      neighbors; fails on categorical/sparse/overlapping data (Sections 4.3, 7).
-    - *Why resample inside CV?* → Resampling before the split leaks minority info
-      across folds → fake-good CV (Fig in §7, Lesson MLE-02).
-    - *Does oversampling change probabilities?* → Yes — trains on a fake prior, inflates
-      minority probability; recalibrate or prior-correct (Fig 4).
+    **Random undersampling** discards majority training rows. It reduces computation
+    but may throw away useful boundary examples.
 
-    **Whiteboard questions**
-    - "Implement SMOTE." (Section 5.1.)
-    - "Implement class-weighted logistic loss/gradient." (Section 5.2.)
+    Neither method belongs on validation or test data. We use a target minority-to-
+    majority ratio of 0.5 rather than automatically forcing 50/50 classes.
 
-    **Strong vs weak answers**
-    - *"How do you handle 1% positives?"*
-      - **Weak:** "SMOTE to balance it."
-      - **Strong:** "First I'd check whether *ranking* (PR-AUC) is bad or just the
-        *threshold*. I'd train with class weights, move the threshold from the FN/FP
-        costs, and use PR-based metrics. SMOTE only if ranking is still weak — applied
-        inside CV — and then recalibrate, since resampling distorts probabilities."
-    - *"Your SMOTE model has great CV but fails live."*
-      - **Weak:** "Needs more data."
-      - **Strong:** "Almost certainly SMOTE was applied before the split — synthetic
-        minority points leaked across folds. I'd move resampling inside an imblearn
-        Pipeline and re-measure; the honest score will be lower."
-
-    **Follow-ups:** "Categorical features — still SMOTE?" (SMOTENC / encode first, or
-    class weights). "Probabilities feed pricing — which fix?" (class weights/threshold,
-    or recalibrate). "How pick the resample ratio?" (tune to cost, not to 50/50).
-
-    **Common mistakes:** resampling before the split; reporting accuracy; balancing to
-    50/50 reflexively; ignoring calibration after resampling; SMOTE on categorical data;
-    stacking every fix and flooding false positives.
+    Example: with 10 minority and 100 majority rows, ratio 0.5 requires 50 minority
+    rows. Oversampling adds 40 minority draws; undersampling keeps 20 majority rows.
     """),
 
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    code(r"""
+    def random_oversample(feature_matrix, labels, target_ratio=0.5, random_seed=0):
+        '''Repeat minority training rows until the declared minority/majority ratio.'''
+        feature_matrix = np.asarray(feature_matrix)
+        labels = np.asarray(labels, dtype=int)
+        random_generator = np.random.default_rng(random_seed)
 
-    1. **What is it?** Why does class imbalance break naive training and accuracy?
-    2. **Why was it invented?** What gap did SMOTE fill over random oversampling?
-    3. **How does it work?** Explain SMOTE, class weights, and threshold moving.
-    4. **Why does it work?** Why do all three essentially trade precision for recall?
-    5. **When to use it?** Order the fixes you'd try and justify the order.
-    6. **When NOT to use it?** When does resampling hurt (calibration, SMOTE on
-       categorical, leakage)?
-    7. **Tradeoffs?** Resampling vs class weights vs threshold moving.
-    8. **How would you productionize it?** In-fold resampling, recalibration, cost-
-       based threshold, base-rate-drift monitoring.
+        minority_indices = np.flatnonzero(labels == 1)
+        majority_indices = np.flatnonzero(labels == 0)
+        required_minority_count = int(np.ceil(target_ratio * len(majority_indices)))
+        additional_count = required_minority_count - len(minority_indices)
+
+        if additional_count <= 0:
+            return feature_matrix.copy(), labels.copy()
+
+        repeated_indices = random_generator.choice(
+            minority_indices,
+            size=additional_count,
+            replace=True,
+        )
+        selected_indices = np.concatenate(
+            [majority_indices, minority_indices, repeated_indices]
+        )
+        return feature_matrix[selected_indices], labels[selected_indices]
+
+
+    def random_undersample(feature_matrix, labels, target_ratio=0.5, random_seed=0):
+        '''Drop majority training rows until the declared minority/majority ratio.'''
+        feature_matrix = np.asarray(feature_matrix)
+        labels = np.asarray(labels, dtype=int)
+        random_generator = np.random.default_rng(random_seed)
+
+        minority_indices = np.flatnonzero(labels == 1)
+        majority_indices = np.flatnonzero(labels == 0)
+        majority_to_keep = int(np.floor(len(minority_indices) / target_ratio))
+        majority_to_keep = min(majority_to_keep, len(majority_indices))
+        kept_majority_indices = random_generator.choice(
+            majority_indices,
+            size=majority_to_keep,
+            replace=False,
+        )
+        selected_indices = np.concatenate([kept_majority_indices, minority_indices])
+        return feature_matrix[selected_indices], labels[selected_indices]
+
+
+    oversampled_train_features, oversampled_train_labels = random_oversample(
+        train_features_scaled,
+        train_labels,
+    )
+    undersampled_train_features, undersampled_train_labels = random_undersample(
+        train_features_scaled,
+        train_labels,
+    )
+
+    print("original counts:", np.bincount(train_labels))
+    print("oversampled counts:", np.bincount(oversampled_train_labels))
+    print("undersampled counts:", np.bincount(undersampled_train_labels))
+
+    assert len(oversampled_train_labels) > len(train_labels)
+    assert len(undersampled_train_labels) < len(train_labels)
     """),
 
-    # ============================================ 14. Exercises
     md(r"""
-    ## 14 · Exercises
+    ## 9 · Nearest-neighbour distance comes before SMOTE
 
-    **Beginner (conceptual)**
-    1. A dataset is 2% positive. State the accuracy of "always negative" and explain
-       why recall and PR-AUC are the metrics to watch.
-    2. Explain in two sentences why training on SMOTE-balanced data makes predicted
-       probabilities too high.
+    For vectors $a$ and $b$, Euclidean distance is:
 
-    **Beginner → Intermediate (coding)**
-    3. Show empirically that `class_weight='balanced'` with weight ratio $n_0/n_1$ gives
-       similar recall to oversampling the minority by the same ratio.
-    4. Implement **Borderline-SMOTE** (only synthesize from minority points near the
-       boundary) and compare it to plain SMOTE on the §3 data.
+    $$
+    d(a,b)=\sqrt{\sum_{j=1}^{d}(a_j-b_j)^2}
+    $$
 
-    **Intermediate (analysis)**
-    5. Reproduce the leakage demo (§7) and quantify how the optimistic gap grows as the
-       minority gets rarer (5% → 1% → 0.5%).
-    6. After SMOTE training, apply **isotonic recalibration** on a real-ratio holdout
-       and show the reliability diagram (Fig 4) returns to the diagonal while recall is
-       preserved.
+    SMOTE selects a minority row $x_i$, chooses one of its nearby minority neighbours
+    $x_j$, draws $\lambda\in[0,1]$, and interpolates:
 
-    **Senior (interview + production design)**
-    7. *Whiteboard:* derive why class weighting by inverse frequency is approximately
-       equivalent to oversampling by the same ratio (from the weighted-loss gradient).
-    8. *Design:* build the rare-disease screening system of §9 — model + class weights,
-       cost-based threshold, in-fold resampling, recalibration, PR-based monitoring,
-       and base-rate-drift alerts.
-    9. *Diagnose:* a teammate's SMOTE pipeline shows F1 0.9 offline but floods
-       clinicians with false positives live. Identify the two most likely causes
-       (resample-before-split leakage; decalibration + wrong threshold) and the fix.
+    $$
+    x_{new}=x_i+\lambda(x_j-x_i)
+    $$
+
+    If $x_i=[0,2]$, $x_j=[2,4]$, and $\lambda=0.25$:
+
+    $$
+    x_{new}=[0,2]+0.25[2,2]=[0.5,2.5]
+    $$
+
+    Distance is scale-sensitive. A feature measured in thousands can dominate one
+    measured between zero and one. That is why this lesson fits scaling on training
+    data before neighbour search. Ordinary interpolation is also inappropriate for
+    raw category codes, sparse indicators, isolated outliers, or mixed-class overlap.
     """),
 
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    Imbalanced learning is about forcing a model — and your metrics — to attend to a
-    rare but important class. The three families are **data-level** (over/under-sample,
-    **SMOTE**), **algorithm-level** (**class weights / cost-sensitive**), and
-    **decision-level** (**threshold moving**), and they mostly do the same thing: trade
-    precision for recall by shifting the effective threshold. The senior moves: start
-    with a calibrated model + threshold from the **cost matrix**, prefer class weights
-    over heavy resampling, **resample inside the CV fold** (never before — leakage,
-    Lesson MLE-02), **recalibrate** after resampling, and judge with **PR-based metrics**
-    (Lesson MLE-01), not accuracy.
+    code(r"""
+    first_minority_point = np.array([0.0, 2.0])
+    neighbour_minority_point = np.array([2.0, 4.0])
+    interpolation_fraction = 0.25
 
-    **Related lesson:** `MLE-05 · Explainability (SHAP)` — our tree ensembles (CML-04 and CML-05) and the models
-    here are accurate but opaque. We close Section 03 by making any model's predictions
-    *explainable* with a principled, game-theoretic method, essential for trust,
-    debugging, and regulated decisions.
+    neighbour_distance = np.sqrt(
+        np.sum((first_minority_point - neighbour_minority_point) ** 2)
+    )
+    synthetic_point = first_minority_point + interpolation_fraction * (
+        neighbour_minority_point - first_minority_point
+    )
+
+    print("Euclidean distance:", round(neighbour_distance, 4))
+    print("synthetic point:", synthetic_point)
+
+    assert np.isclose(neighbour_distance, np.sqrt(8))
+    assert np.allclose(synthetic_point, [0.5, 2.5])
+    """),
+
+    md(r"""
+    ## 10 · Implement guarded SMOTE for continuous training features
+
+    SMOTE does not know whether a synthetic point is scientifically valid. It assumes
+    interpolation between nearby minority rows is meaningful.
+
+    Our educational implementation checks:
+
+    - binary labels 0 and 1;
+    - enough minority rows for the requested neighbours;
+    - a target ratio that actually requires new rows;
+    - finite continuous feature values.
+
+    It still lacks production optimizations and mixed-feature strategies. Use a tested
+    library pipeline for practical work.
+    """),
+
+    code(r"""
+    def smote_continuous_training_data(
+        feature_matrix,
+        labels,
+        target_ratio=0.5,
+        number_of_neighbors=5,
+        random_seed=0,
+    ):
+        '''Create interpolated minority rows from already-scaled training features.'''
+        feature_matrix = np.asarray(feature_matrix, dtype=float)
+        labels = np.asarray(labels, dtype=int)
+        random_generator = np.random.default_rng(random_seed)
+
+        if set(np.unique(labels)) != {0, 1}:
+            raise ValueError("SMOTE lesson expects binary labels 0 and 1")
+        if not np.isfinite(feature_matrix).all():
+            raise ValueError("feature matrix must contain finite continuous values")
+
+        minority_features = feature_matrix[labels == 1]
+        majority_count = int(np.sum(labels == 0))
+        required_minority_count = int(np.ceil(target_ratio * majority_count))
+        synthetic_count = required_minority_count - len(minority_features)
+
+        if synthetic_count <= 0:
+            return feature_matrix.copy(), labels.copy()
+        if len(minority_features) <= number_of_neighbors:
+            raise ValueError("number_of_neighbors must be smaller than minority count")
+
+        synthetic_features = np.empty((synthetic_count, feature_matrix.shape[1]))
+
+        for synthetic_index in range(synthetic_count):
+            source_index = random_generator.integers(len(minority_features))
+            source_point = minority_features[source_index]
+
+            # Compute distances only among real minority training rows.
+            distances = np.linalg.norm(minority_features - source_point, axis=1)
+            nearest_indices = np.argsort(distances)[1 : number_of_neighbors + 1]
+            neighbour_index = random_generator.choice(nearest_indices)
+            neighbour_point = minority_features[neighbour_index]
+
+            interpolation_fraction = random_generator.random()
+            synthetic_features[synthetic_index] = source_point + interpolation_fraction * (
+                neighbour_point - source_point
+            )
+
+        resampled_features = np.vstack([feature_matrix, synthetic_features])
+        resampled_labels = np.concatenate(
+            [labels, np.ones(synthetic_count, dtype=int)]
+        )
+        return resampled_features, resampled_labels
+
+
+    smote_train_features, smote_train_labels = smote_continuous_training_data(
+        train_features_scaled,
+        train_labels,
+        target_ratio=0.5,
+        number_of_neighbors=5,
+        random_seed=42,
+    )
+
+    print("training counts before SMOTE:", np.bincount(train_labels))
+    print("training counts after SMOTE:", np.bincount(smote_train_labels))
+    print("validation counts unchanged:", np.bincount(validation_labels))
+
+    assert len(smote_train_labels) > len(train_labels)
+    assert len(validation_labels) == 240
+    """),
+
+    md(r"""
+    ## 11 · Put preprocessing and resampling inside each training fold
+
+    The correct fold sequence is:
+
+    ```mermaid
+    flowchart LR
+        A[Original development rows] --> B[Create one CV split]
+        B --> C[Fit scaler on fold training]
+        C --> D[SMOTE fold training only]
+        D --> E[Fit classifier]
+        E --> F[Transform and score untouched fold validation]
+    ```
+
+    Resampling before splitting allows duplicated or synthetic information derived
+    from a held-out row to influence training. Fitting the scaler before the fold also
+    leaks held-out distribution information.
+
+    `imblearn.pipeline.Pipeline` understands that a sampler runs during fitting but
+    not during prediction. A standard sklearn pipeline does not accept a sampler in
+    the same role.
+    """),
+
+    code(r"""
+    from imblearn.over_sampling import SMOTE
+    from imblearn.pipeline import Pipeline as ImbalancedPipeline
+    from sklearn.model_selection import StratifiedKFold, cross_validate
+
+    fold_safe_smote_pipeline = ImbalancedPipeline(
+        steps=[
+            ("scale", StandardScaler()),
+            ("smote", SMOTE(sampling_strategy=0.5, k_neighbors=5, random_state=42)),
+            ("model", LogisticRegression(max_iter=1000, random_state=42)),
+        ]
+    )
+    stratified_folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    # Cross-validation sees development rows only; the final test remains absent.
+    cross_validation_results = cross_validate(
+        fold_safe_smote_pipeline,
+        development_features,
+        development_labels,
+        cv=stratified_folds,
+        scoring={"average_precision": "average_precision", "recall": "recall"},
+        return_train_score=False,
+    )
+
+    print("fold average precision:", cross_validation_results["test_average_precision"].round(3))
+    print("fold recall:", cross_validation_results["test_recall"].round(3))
+    print("test status: still sealed")
+
+    assert len(cross_validation_results["test_average_precision"]) == 5
+    """),
+
+    md(r"""
+    ## 12 · Compare methods on the same validation partition
+
+    We compare six declared configurations:
+
+    - always-negative baseline;
+    - plain logistic regression at threshold 0.5;
+    - the same plain model at its validation-selected threshold;
+    - class-weighted logistic regression at 0.5;
+    - random oversampling at ratio 0.5;
+    - random undersampling at ratio 0.5;
+    - SMOTE at ratio 0.5.
+
+    Class weighting and sampling can change the learned boundary and ranking; threshold
+    movement changes only the final decision. They may produce similar confusion
+    counts in one example, but they are not the same operation.
+
+    We also print mean predicted probability as a calibration warning. A changed mean
+    is not a complete calibration diagnosis; formal recalibration is deferred.
+    """),
+
+    code(r"""
+    def fit_logistic_on_resampled_training(resampled_features, resampled_labels):
+        '''Fit the same logistic model so only the training-row strategy changes.'''
+        fitted_model = LogisticRegression(max_iter=1000, random_state=42)
+        fitted_model.fit(resampled_features, resampled_labels)
+        return fitted_model
+
+
+    oversampled_model = fit_logistic_on_resampled_training(
+        oversampled_train_features,
+        oversampled_train_labels,
+    )
+    undersampled_model = fit_logistic_on_resampled_training(
+        undersampled_train_features,
+        undersampled_train_labels,
+    )
+    smote_model = fit_logistic_on_resampled_training(
+        smote_train_features,
+        smote_train_labels,
+    )
+
+    validation_configurations = [
+        ("always negative", np.zeros(len(validation_labels)), 0.5, None),
+        ("plain @ 0.5", plain_validation_probabilities, 0.5, plain_logistic_model),
+        ("plain @ selected", plain_validation_probabilities, selected_plain_threshold, plain_logistic_model),
+        ("class weight", weighted_validation_probabilities, 0.5, weighted_logistic_model),
+        ("random oversample", oversampled_model.predict_proba(validation_features_scaled)[:, 1], 0.5, oversampled_model),
+        ("random undersample", undersampled_model.predict_proba(validation_features_scaled)[:, 1], 0.5, undersampled_model),
+        ("SMOTE", smote_model.predict_proba(validation_features_scaled)[:, 1], 0.5, smote_model),
+    ]
+
+    comparison_records = []
+    configuration_registry = {}
+
+    for configuration_name, probabilities, threshold, fitted_model in validation_configurations:
+        decisions = (probabilities >= threshold).astype(int)
+        summary = summarize_binary_decisions(validation_labels, decisions)
+        comparison_records.append(
+            {
+                "configuration": configuration_name,
+                "threshold": threshold,
+                "mean_probability": float(np.mean(probabilities)),
+                **summary,
+            }
+        )
+        configuration_registry[configuration_name] = {
+            "model": fitted_model,
+            "threshold": threshold,
+        }
+
+    validation_comparison = pd.DataFrame(comparison_records).sort_values(
+        ["cost", "FN", "FP"],
+        ignore_index=True,
+    )
+    selected_configuration_name = validation_comparison.iloc[0]["configuration"]
+
+    print(validation_comparison.to_string(index=False))
+    print("selected from validation:", selected_configuration_name)
+    print("actual validation positive fraction:", round(validation_labels.mean(), 4))
+    print("test status: still sealed")
+
+    assert selected_configuration_name != "always negative"
+    assert validation_comparison.iloc[0]["cost"] <= validation_comparison.iloc[-1]["cost"]
+    """),
+
+    md(r"""
+    ## 13 · Mini-project decision and one sealed test
+
+    **Project goal:** minimize the declared inspection cost while reporting precision,
+    recall, and accuracy for context.
+
+    **Dataset columns:** six anonymous continuous sensor measurements. They are
+    anonymous because this synthetic dataset demonstrates workflow, not domain truth.
+
+    **Evaluation criteria:**
+
+    - method and threshold selected from validation only;
+    - scaler fitted from training only;
+    - samplers used on scaled training rows only;
+    - test transformed but never resampled;
+    - exactly one final test summary;
+    - no claim that the winning method is universally best.
+
+    The final test may disagree with validation because rare positive counts are
+    small. Report the result; do not reopen method selection on this test.
+    """),
+
+    code(r"""
+    # Freeze the selected configuration before touching test features.
+    selected_configuration = configuration_registry[selected_configuration_name]
+    selected_model = selected_configuration["model"]
+    selected_threshold = selected_configuration["threshold"]
+
+    sealed_test_features_scaled = training_scaler.transform(sealed_test_features)
+
+    if selected_model is None:
+        final_test_probabilities = np.zeros(len(sealed_test_labels))
+    else:
+        final_test_probabilities = selected_model.predict_proba(
+            sealed_test_features_scaled
+        )[:, 1]
+
+    final_test_decisions = (
+        final_test_probabilities >= selected_threshold
+    ).astype(int)
+    final_test_summary = summarize_binary_decisions(
+        sealed_test_labels,
+        final_test_decisions,
+    )
+
+    print("selected configuration:", selected_configuration_name)
+    print("frozen threshold:", selected_threshold)
+    print("final sealed-test rows:", len(sealed_test_labels))
+    print(pd.Series(final_test_summary))
+    print("this is a final estimate, not a new method-selection table")
+
+    assert len(final_test_decisions) == len(sealed_test_labels)
+    assert 0 <= final_test_summary["recall"] <= 1
+    assert final_test_summary["cost"] >= 0
+    """),
+
+    md(r"""
+    ## 14 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    With 90 negative and 10 positive rows, the imbalance ratio is 9. An always-negative
+    classifier has 90% accuracy and zero recall. If $C_{FN}=10$, its decision cost is
+    $10\times10=100$.
+
+    ### Guided practice
+
+    1. Calculate the ratio for 980 negative and 20 positive rows.
+    2. Build confusion counts for actual $[0,0,1,1]$ and predicted $[0,1,0,1]$.
+    3. Compare costs at two thresholds using $C_{FP}=1,C_{FN}=5$.
+    4. Calculate balanced class weights for 900 negative and 100 positive rows.
+    5. Interpolate between $[1,2]$ and $[5,6]$ using $\lambda=0.25$.
+
+    ### Independent practice
+
+    6. Add input validation to both random sampling functions.
+    7. Compare target sampling ratios 0.25, 0.5, and 1.0 on validation cost.
+    8. Prove that SMOTE never changes validation row counts in the project.
+    9. Add a review-capacity constraint to threshold selection.
+    10. Compare average precision before and after weighting without changing test.
+
+    ### Challenge
+
+    Rebuild the defect project without copying. Include a positive-class contract,
+    measured class ratio, always-negative baseline, validation-selected threshold, class
+    weights, fold-safe SMOTE pipeline, configuration registry, and exactly one test.
+
+    ### Self-check
+
+    1. Why can high accuracy coexist with zero recall?
+    2. What changes when a threshold moves?
+    3. What changes when class weights are applied?
+    4. What information does undersampling discard?
+    5. Why must SMOTE features have compatible scales?
+    6. Why must SMOTE run inside a training fold?
+    7. Are class weighting and oversampling always identical?
+    8. Why should test not choose the sampling ratio?
+
+    ### Solution and scoring rubric
+
+    1. $980/20=49$ negative rows per positive row.
+    2. TN=1, FP=1, FN=1, TP=1.
+    3. Calculate $FP+5FN$ for each threshold; lower cost wins on validation.
+    4. $w_0=1000/(2\times900)\approx0.556$ and $w_1=1000/(2\times100)=5$.
+    5. $[1,2]+0.25[4,4]=[2,3]$.
+
+    Score the eight self-check answers at two points each and the challenge at four
+    points. Full credit requires both mechanism and leakage reasoning.
+
+    ### Common mistakes
+
+    - Calling imbalance a problem without defining the positive class and costs.
+    - Reporting accuracy without confusion counts.
+    - Selecting a threshold from test data.
+    - Resampling validation or test rows.
+    - Fitting scaling before the split or fold.
+    - Applying ordinary SMOTE to raw categories or incompatible scales.
+    - Treating class weights, oversampling, and thresholding as identical.
+    - Assuming balanced 50/50 training data is always optimal.
+    - Claiming weighting automatically preserves calibration.
+    - Combining every intervention without measuring incremental value.
+
+    ### Readiness threshold
+
+    Score at least **16/20**, including correct confusion counts, threshold cost,
+    class weights, SMOTE interpolation, fold boundary, and sealed-test workflow.
+    """),
+
+    md(r"""
+    ## Ready to move on?
+
+    ### Quick check
+
+    Explain this chain without notes:
+
+    positive event  
+    → class counts  
+    → majority baseline  
+    → confusion matrix  
+    → validation threshold  
+    → class weights or training-only sampling  
+    → fold-safe comparison  
+    → one sealed test.
+
+    ### Teach it back
+
+    Explain why threshold movement can improve a decision without retraining, while
+    class weighting and resampling can change the fitted model. Then explain why none
+    may inspect validation or test rows during fitting.
+
+    ### Memory aid
+
+    **Define the rare event, validate the decision, resample training only, and test
+    the frozen choice once.**
+
+    ### Next dependency
+
+    Validated tree ensembles and imbalance decisions  
+    → required before SHAP explanations  
+    → because an explanation cannot rescue a model selected with leaked or misleading
+    evidence.
     """),
 ]
+
 
 build("03_ml_engineering/04_imbalanced_learning.ipynb", cells)
