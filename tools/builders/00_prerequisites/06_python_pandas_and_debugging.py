@@ -498,6 +498,9 @@ cells = [
     \end{cases}
     $$
 
+    **Symbols:** `value` is the original measurement; `unit` is either grams (`g`)
+    or milligrams (`mg`); and `value in mg` is the converted result.
+
     The number 1000 is the conversion factor because one gram equals 1000 milligrams.
     This rule changes the numerical representation, not the physical quantity.
     """),
