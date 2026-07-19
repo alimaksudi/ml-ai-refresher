@@ -1,690 +1,1045 @@
-"""Builder for Lesson CML-03 — Decision Trees.
+"""Build CML-03: Decision Trees."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # CML-03 · Decision Trees
-    ### Section 02 — Classical Machine Learning · *ML/AI Senior Mastery Curriculum*
 
-    > Lessons CML-01 and CML-02 drew **one straight boundary** through feature space. Real
-    > relationships are rarely linear, and forcing them to be requires hand-crafted
-    > features. Decision trees take the opposite approach: **recursively chop feature
-    > space into axis-aligned boxes**, each box getting its own simple prediction.
-    > No equations to fit, no feature scaling, native handling of nonlinearity and
-    > interactions, and a model you can literally read as a flowchart. Their fatal
-    > flaw — **high variance** — is exactly the flaw that Random Forests (CML-04) and
-    > Gradient Boosting (CML-05) are built to cure, so this notebook is the keystone of
-    > the most important model family in tabular ML.
+    **Prerequisites:** FND-03 and CML-02  
+    **Estimated study time:** 8–10 hours, including practice  
+    **Next lesson:** CML-04 · Random Forest
+
+    Logistic regression uses one linear score. A decision tree learns a sequence of
+    if/else questions. This can express thresholds and feature interactions without
+    manually creating curved features.
+
+    The goal is not to call `DecisionTreeClassifier().fit(...)`. The goal is to know
+    exactly why one question was chosen, how training rows move into child nodes, and
+    why an unrestricted tree memorizes noise.
+
+    ### Scope boundary
+
+    This lesson teaches binary classification trees with Gini impurity. It defers:
+
+    - formal classification metrics to MLE-01;
+    - cross-validation and systematic hyperparameter selection to MLE-02;
+    - entropy comparisons and regression trees to an extension;
+    - random forests and bagging to CML-04;
+    - boosting to CML-05;
+    - feature-importance and SHAP claims to MLE-05.
+
+    We count wrong decisions directly instead of using unexplained metric names.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The tree as **recursive partitioning**: greedy, axis-aligned splits that carve
-      feature space into pure regions.
-    - **Impurity** measures — **Gini**, **entropy** (classification), **variance**
-      (regression) — and **information gain** as the splitting criterion.
-    - Why splitting is **greedy** (finding the optimal tree is NP-hard) and what that
-      costs you.
-    - How trees **overfit**, and the levers that control it: max depth, min samples,
-      and **cost-complexity pruning**.
-    - Why a single tree is **high-variance and unstable** — the precise motivation
-      for ensembles (CML-04 and CML-05).
-    - Building a CART classifier **from scratch** and reading its rules.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - The building block of **XGBoost/LightGBM**, which win most tabular ML problems
-      and Kaggle competitions.
-    - **Interpretable as rules** — "if income < X and debt > Y then decline" — which
-      domain experts and (sometimes) regulators accept directly.
-    - Handles mixed types, missing values, and unscaled features with **almost no
-      preprocessing** — a huge practical advantage over linear models and NNs.
+    - explain when a threshold rule may outperform one linear boundary;
+    - identify a root, internal node, branch, leaf, and depth;
+    - calculate a leaf class probability from training counts;
+    - calculate Gini impurity manually;
+    - calculate weighted child impurity;
+    - calculate impurity decrease for one candidate split;
+    - enumerate valid numerical thresholds;
+    - explain why tree construction is greedy;
+    - build and traverse a small tree from scratch;
+    - distinguish training fit from validation evidence;
+    - show how unrestricted depth can memorize training rows;
+    - explain `max_depth`, `min_samples_split`, and `min_samples_leaf`;
+    - explain pre-pruning and post-pruning;
+    - compare the scratch tree with sklearn;
+    - explain axis-aligned boundaries and tree instability;
+    - complete a sealed-test mini-project.
 
-    **Typical interview questions**
-    - "How does a decision tree choose a split? Define Gini and entropy."
-    - "Why are trees prone to overfitting, and how do you prevent it?"
-    - "Gini vs entropy — does it matter?"
-    - "Why is a single tree unstable, and how do ensembles fix it?"
-    - "Trees need no feature scaling — why, and when is that an advantage?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **Before trees: rules by hand.** Early "expert systems" encoded human-written
-    if-then rules. They were interpretable but brittle, expensive to build, and
-    couldn't learn from data. The question became: can we *learn* the rules
-    automatically?
-
-    **ID3 / C4.5 (Quinlan, 1986/1993)** and **CART (Breiman et al., 1984)** answered
-    yes. Both greedily grow a tree by repeatedly choosing the split that most
-    reduces impurity; CART (Classification And Regression Trees) is the variant
-    sklearn implements — binary splits, Gini or variance, and cost-complexity
-    pruning. This was a turning point: a *non-parametric* model that makes **no
-    assumption of linearity**, handles numeric and categorical features together,
-    is invariant to monotonic feature transforms (so no scaling), and emits a
-    human-readable model.
-
-    **Why trees over linear models (the Lessons CML-01 and CML-02 contrast).** Linear models
-    assume a global linear relationship and need you to *engineer* nonlinearity and
-    interactions. A tree discovers interactions automatically ("the effect of income
-    depends on whether you're a homeowner" is just a split-within-a-split) and bends
-    to any shape given enough depth. The price: a single tree **overfits and is
-    unstable**.
-
-    **Why this motivates everything after it.** Breiman's own response to tree
-    instability was **bagging** and then **Random Forests** (1996–2001); Friedman's
-    was **Gradient Boosting** (1999). Both are *ensembles of trees*. So Decision
-    Trees are not just a model — they are the unit cell of the dominant tabular-ML
-    paradigm. Understand the single tree's strengths and (especially) its variance
-    problem, and CML-04/CML-05 become obvious.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The 20-questions game.** A tree is a sequence of yes/no questions about
-    features that narrows down the answer. "Is income > \$50k?" → "Is debt ratio >
-    0.4?" → … Each question **splits the data into two purer groups**. Keep asking
-    until each group is (nearly) all one class, then predict that class.
-
-    **Geometrically: axis-aligned boxes.** Each split is a threshold on *one*
-    feature — a vertical or horizontal cut in feature space. Stacking splits tiles
-    the space into rectangles; every rectangle (a **leaf**) gets one prediction (the
-    majority class, or the mean for regression). The decision boundary is therefore
-    a **staircase**, never a smooth diagonal — a key limitation (§7).
-
-    **What "good split" means.** A split is good if the two resulting groups are
-    **purer** (more single-class) than the parent. We measure mess with an
-    **impurity** score and pick the split that reduces it most — a greedy, local
-    choice repeated all the way down.
+    ### Learning path
 
     ```mermaid
-    flowchart TD
-        R["All data<br/>(mixed classes)"] -->|"income > 50k?"| A["yes"]
-        R -->|"no"| B["no: mostly decline"]
-        A -->|"debt ratio > 0.4?"| C["yes: mostly decline"]
-        A -->|"no"| D["no: mostly approve"]
+    flowchart LR
+        A[Count labels in parent] --> B[Try one feature threshold]
+        B --> C[Count labels in children]
+        C --> D[Calculate weighted impurity]
+        D --> E[Keep largest impurity decrease]
+        E --> F[Repeat inside each child]
+        F --> G[Stop and create leaves]
     ```
 
-    Run the cells: build a real tree, see the boxes, and watch it overfit.
+    A tree does not search every possible complete tree. It repeatedly chooses the
+    best split available at the current node.
+    """),
+
+    md(r"""
+    ## 2 · The practical problem: rules for late-delivery warnings
+
+    Consider six training routes:
+
+    | Distance (km) | Late label |
+    | ---: | ---: |
+    | 1 | 0 |
+    | 2 | 0 |
+    | 3 | 1 |
+    | 4 | 0 |
+    | 5 | 1 |
+    | 6 | 1 |
+
+    A simple rule might be:
+
+    ```text
+    if distance <= 2.5:
+        predict not late
+    else:
+        predict late
+    ```
+
+    This rule gets one of the four right-side training rows wrong. A deeper tree could
+    ask another question inside the right side.
+
+    Decision trees are useful when the relationship can be described by nested rules:
+
+    - distance matters differently when rain is present;
+    - a measurement becomes risky only above a threshold;
+    - one feature matters only after another condition is met.
+
+    A tree can express those interactions naturally. The cost is instability and easy
+    overfitting.
     """),
 
     code(r"""
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
+    route_distance_km = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    late_label = np.array([0, 0, 1, 0, 1, 1], dtype=int)
 
-    # A nonlinear (circular-boundary) 2D dataset — impossible for one straight line.
-    def make_circle_data(n=400):
-        X = rng.uniform(-3, 3, (n, 2))
-        r = X[:, 0] ** 2 + X[:, 1] ** 2
-        y = (r < 4.0).astype(int)                    # inside a circle of radius 2
-        flip = rng.random(n) < 0.05                  # 5% label noise
-        y[flip] = 1 - y[flip]
-        return X, y
+    rule_decisions = (route_distance_km > 2.5).astype(int)
+    wrong_rule_rows = rule_decisions != late_label
 
-    X, y = make_circle_data()
-    print("data:", X.shape, "| class balance:", np.bincount(y))
+    rule_table = pd.DataFrame(
+        {
+            "distance_km": route_distance_km,
+            "actual_label": late_label,
+            "rule_decision": rule_decisions,
+            "wrong": wrong_rule_rows,
+        }
+    )
+
+    print(rule_table)
+    print("wrong training rows:", int(wrong_rule_rows.sum()))
+
+    assert int(wrong_rule_rows.sum()) == 1
     """),
 
-    # ============================================ 4. Mathematical Foundations
     md(r"""
-    ## 4 · Mathematical Foundations
+    ## 3 · Tree anatomy and leaf predictions
 
-    ### 4.1 Impurity — measuring "mess" in a node
-    For a node with class proportions $p_k$:
-    - **Gini impurity:** $G=1-\sum_k p_k^2$ — the probability of misclassifying a
-      random sample if you label it by the node's class distribution. 0 = pure.
-    - **Entropy:** $H=-\sum_k p_k\log_2 p_k$ — bits of uncertainty. 0 = pure, max at
-      uniform. Information gain uses entropy.
-    - **Regression (variance/MSE):** $\frac1n\sum_i (y_i-\bar y)^2$ — spread of the
-      target; the leaf predicts $\bar y$.
+    | Term | Meaning |
+    | --- | --- |
+    | Root | First node containing all training rows |
+    | Internal node | Node that asks a feature question |
+    | Split | Feature and threshold used by the question |
+    | Branch | Path taken after the answer |
+    | Child | Node reached from a parent branch |
+    | Leaf | Final node with no further split |
+    | Depth | Number of split steps from root to a node |
 
-    Gini and entropy are numerically close and almost always pick the same splits;
-    Gini is slightly cheaper (no log), which is why it's CART's default.
+    For a numerical feature, a binary split is commonly:
 
-    ### 4.2 The splitting criterion: impurity decrease (information gain)
-    A split sends $n_L$ samples left and $n_R$ right. Its quality is the **weighted
-    impurity decrease**:
-    $$\Delta = I(\text{parent}) - \frac{n_L}{n}I(\text{left}) - \frac{n_R}{n}I(\text{right}).$$
-    With entropy, $\Delta$ is the **information gain**. We choose the
-    $(\text{feature},\text{threshold})$ pair maximizing $\Delta$.
+    $$
+    x_j\le t
+    $$
 
-    ### 4.3 Greedy recursive construction (CART)
-    ```
-    build(node):
-        if stopping condition: make a leaf (predict majority class / mean)
-        else:
-            for each feature f, for each candidate threshold t:
-                compute weighted impurity decrease of splitting on (f, t)
-            pick the best (f*, t*); split the data; recurse on both children
-    ```
-    Candidate thresholds are the **midpoints between consecutive sorted feature
-    values**. This is **greedy**: each split is locally optimal, never reconsidered.
+    **Symbols:** $x_j$ is feature $j$ for one row; $t$ is the threshold. Rows that
+    satisfy the condition go left; the remaining rows go right.
 
-    ### 4.4 Why greedy? Because optimal trees are NP-hard
-    Finding the globally smallest/most-accurate tree is **NP-complete** — the number
-    of possible trees is astronomical. Greedy CART is a heuristic that runs in
-    roughly $O(\text{features}\times n\log n)$ per level and works well in practice,
-    at the cost of sometimes missing a better tree that needs a "bad-looking" split
-    first.
+    A classification leaf stores training label counts. If a leaf contains labels
+    $[0,1,1,1]$:
 
-    ### 4.5 Overfitting, stopping, and pruning
-    Grown unrestricted, a tree keeps splitting until **every leaf is pure** — it
-    memorizes the training set (including noise), giving 100% train accuracy and poor
-    test accuracy. Controls:
-    - **Pre-pruning (stopping):** `max_depth`, `min_samples_split`,
-      `min_samples_leaf`, `min_impurity_decrease`.
-    - **Post-pruning (cost-complexity, CCP):** grow fully, then prune back the
-      subtrees that add complexity without enough accuracy, by minimizing
-      $R_\alpha(T)=R(T)+\alpha|T|$ (error + $\alpha\times$#leaves). $\alpha$ is
-      chosen by cross-validation — the same bias–variance dial as Ridge's $\lambda$
-      (Lesson CML-01).
+    $$
+    \hat p(1)=\frac{3}{4}=0.75
+    $$
 
-    ### 4.6 The variance problem (the bridge to ensembles)
-    A tree's structure is **unstable**: change a few training rows and an early split
-    can flip, cascading into a completely different tree. This is **high variance** —
-    low bias (it can fit anything) but high sensitivity to the data sample. The cure
-    is to **average many decorrelated trees** (bagging → Random Forest, Lesson CML-04)
-    or to **add trees that correct each other's errors** (boosting, Lesson CML-05).
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    A complete CART classifier in pure NumPy: Gini impurity, exhaustive best-split
-    search, recursive growth with stopping rules, prediction, and a readable rule
-    dump. This *is* the algorithm sklearn runs (minus the C-level speed).
+    Its probability estimate is 0.75 for class 1. A majority decision is class 1.
+    The probability is based only on training rows that reached the leaf; it is not a
+    guarantee for every future row.
     """),
 
     code(r"""
-    # 5.1 Impurity and best-split search.
-    def gini(y):
-        if len(y) == 0:
-            return 0.0
-        _, counts = np.unique(y, return_counts=True)
-        p = counts / len(y)
-        return 1.0 - np.sum(p ** 2)
+    leaf_labels = np.array([0, 1, 1, 1])
+    leaf_positive_probability = leaf_labels.mean()
+    leaf_majority_decision = int(leaf_positive_probability >= 0.5)
 
-    def best_split(X, y):
-        n, d = X.shape
-        parent = gini(y)
-        best_gain, best = 0.0, None
-        for f in range(d):
-            vals = np.unique(X[:, f])
-            if len(vals) < 2:
-                continue
-            thresholds = (vals[:-1] + vals[1:]) / 2          # midpoints
-            for t in thresholds:
-                left = X[:, f] <= t
-                nl, nr = left.sum(), (~left).sum()
-                if nl == 0 or nr == 0:
+    print("leaf labels:", leaf_labels)
+    print("class-1 probability:", leaf_positive_probability)
+    print("majority decision:", leaf_majority_decision)
+
+    assert np.isclose(leaf_positive_probability, 0.75)
+    assert leaf_majority_decision == 1
+    """),
+
+    md(r"""
+    ## 4 · Gini impurity measures label mixture
+
+    Before choosing a split, we need a number that describes how mixed a node is.
+    For class proportions $p_0$ and $p_1$:
+
+    $$
+    G=1-p_0^2-p_1^2
+    $$
+
+    **Symbols:** $G$ is Gini impurity; $p_0$ and $p_1$ are the proportions of class 0
+    and class 1 in the node.
+
+    Important anchors:
+
+    - labels $[0,0,0,0]$: $p_0=1,p_1=0$, so $G=0$;
+    - labels $[0,0,1,1]$: $p_0=p_1=0.5$, so $G=0.5$;
+    - labels $[0,1,1,1]$: $p_0=0.25,p_1=0.75$, so
+      $G=1-0.25^2-0.75^2=0.375$.
+
+    Zero means pure: every training label in the node is the same. For binary labels,
+    0.5 is the most mixed value.
+
+    Gini is not the fraction of wrong predictions. It is a split-selection measure
+    based on class proportions.
+    """),
+
+    code(r"""
+    def gini_impurity(labels):
+        '''Calculate Gini impurity from a non-empty one-dimensional label array.'''
+        label_array = np.asarray(labels, dtype=int)
+        if label_array.ndim != 1 or label_array.size == 0:
+            raise ValueError("labels must be a non-empty one-dimensional array")
+
+        _, counts = np.unique(label_array, return_counts=True)
+        proportions = counts / label_array.size
+        return float(1 - np.sum(proportions**2))
+
+
+    pure_gini = gini_impurity([0, 0, 0, 0])
+    mixed_gini = gini_impurity([0, 0, 1, 1])
+    three_to_one_gini = gini_impurity([0, 1, 1, 1])
+
+    print("pure Gini:", pure_gini)
+    print("balanced Gini:", mixed_gini)
+    print("three-to-one Gini:", three_to_one_gini)
+
+    assert np.isclose(pure_gini, 0.0)
+    assert np.isclose(mixed_gini, 0.5)
+    assert np.isclose(three_to_one_gini, 0.375)
+    """),
+
+    md(r"""
+    ## 5 · Calculate one candidate split completely
+
+    The parent labels are $[0,0,1,0,1,1]$. Each class appears three times:
+
+    $$
+    G_{parent}=1-(3/6)^2-(3/6)^2=0.5
+    $$
+
+    Try threshold $t=2.5$:
+
+    - left labels: $[0,0]$, so $G_L=0$;
+    - right labels: $[1,0,1,1]$, so $G_R=0.375$.
+
+    Child impurity must be weighted by child size:
+
+    $$
+    G_{children}
+    =\frac{n_L}{n}G_L+\frac{n_R}{n}G_R
+    $$
+
+    $$
+    G_{children}
+    =\frac{2}{6}(0)+\frac{4}{6}(0.375)=0.25
+    $$
+
+    Impurity decrease is:
+
+    $$
+    \Delta G=G_{parent}-G_{children}=0.5-0.25=0.25
+    $$
+
+    **Symbols:** $n_L$ and $n_R$ are child row counts; $n$ is parent count;
+    $G_L$ and $G_R$ are child impurities; $\Delta G$ is the improvement.
+
+    Larger positive impurity decrease is preferred. A split with an empty child is
+    invalid because it did not divide the rows.
+    """),
+
+    code(r"""
+    parent_gini = gini_impurity(late_label)
+    left_mask = route_distance_km <= 2.5
+    left_labels = late_label[left_mask]
+    right_labels = late_label[~left_mask]
+
+    left_gini = gini_impurity(left_labels)
+    right_gini = gini_impurity(right_labels)
+    weighted_child_gini = (
+        len(left_labels) / len(late_label) * left_gini
+        + len(right_labels) / len(late_label) * right_gini
+    )
+    impurity_decrease = parent_gini - weighted_child_gini
+
+    print("parent Gini:", parent_gini)
+    print("left labels and Gini:", left_labels, left_gini)
+    print("right labels and Gini:", right_labels, right_gini)
+    print("weighted child Gini:", weighted_child_gini)
+    print("impurity decrease:", impurity_decrease)
+
+    assert np.isclose(parent_gini, 0.5)
+    assert np.isclose(weighted_child_gini, 0.25)
+    assert np.isclose(impurity_decrease, 0.25)
+    """),
+
+    md(r"""
+    ## 6 · Candidate thresholds come from neighbouring values
+
+    For sorted unique numerical values, useful candidates are midpoints between
+    neighbours. For values $[1,2,3,4,5,6]$:
+
+    $$
+    [1.5,2.5,3.5,4.5,5.5]
+    $$
+
+    A threshold below the minimum or at/above the maximum sends every row to one side.
+    It cannot create two children.
+
+    The search procedure is:
+
+    1. calculate parent impurity;
+    2. try every feature;
+    3. sort that feature's unique values;
+    4. try neighbouring midpoints;
+    5. calculate weighted child impurity;
+    6. keep the largest impurity decrease.
+
+    This choice is **greedy**: it chooses the best immediate split and does not revisit
+    it after deeper branches are built.
+    """),
+
+    code(r"""
+    def candidate_thresholds(feature_values):
+        '''Return midpoints between sorted unique numerical values.'''
+        unique_values = np.unique(np.asarray(feature_values, dtype=float))
+        if unique_values.size < 2:
+            return np.array([], dtype=float)
+        return (unique_values[:-1] + unique_values[1:]) / 2
+
+
+    def evaluate_split(feature_values, labels, threshold):
+        '''Return impurity decrease and masks for one numerical threshold.'''
+        feature_array = np.asarray(feature_values, dtype=float)
+        label_array = np.asarray(labels, dtype=int)
+        left = feature_array <= threshold
+        right = ~left
+        if not left.any() or not right.any():
+            raise ValueError("a valid split must create two non-empty children")
+
+        parent = gini_impurity(label_array)
+        weighted_children = (
+            left.mean() * gini_impurity(label_array[left])
+            + right.mean() * gini_impurity(label_array[right])
+        )
+        return parent - weighted_children, left, right
+
+
+    threshold_records = []
+    for threshold in candidate_thresholds(route_distance_km):
+        gain, left, right = evaluate_split(route_distance_km, late_label, threshold)
+        threshold_records.append(
+            {
+                "threshold": threshold,
+                "left_rows": int(left.sum()),
+                "right_rows": int(right.sum()),
+                "impurity_decrease": gain,
+            }
+        )
+
+    threshold_table = pd.DataFrame(threshold_records)
+    best_threshold_row = threshold_table.loc[threshold_table["impurity_decrease"].idxmax()]
+
+    print(threshold_table)
+    print("\nbest threshold:", best_threshold_row["threshold"])
+
+    assert np.isclose(best_threshold_row["threshold"], 2.5)
+    assert np.isclose(best_threshold_row["impurity_decrease"], 0.25)
+    """),
+
+    md(r"""
+    ## 7 · Search several features before recursing
+
+    A real node may have several features. We use a matrix $X$ with rows as examples
+    and columns as features. The best split stores:
+
+    - feature index and name;
+    - threshold;
+    - impurity decrease;
+    - left and right row masks.
+
+    The split search is computationally more expensive than one linear score because
+    it evaluates many feature-threshold pairs.
+    """),
+
+    code(r"""
+    def find_best_split(feature_matrix, labels, min_samples_leaf=1):
+        '''Find the feature and threshold with largest Gini decrease.'''
+        matrix = np.asarray(feature_matrix, dtype=float)
+        label_array = np.asarray(labels, dtype=int)
+        if matrix.ndim != 2 or label_array.ndim != 1:
+            raise ValueError("feature_matrix must be 2D and labels must be 1D")
+        if len(matrix) != len(label_array):
+            raise ValueError("features and labels must have matching row counts")
+
+        best = None
+        for feature_index in range(matrix.shape[1]):
+            for threshold in candidate_thresholds(matrix[:, feature_index]):
+                gain, left, right = evaluate_split(
+                    matrix[:, feature_index], label_array, threshold
+                )
+                if left.sum() < min_samples_leaf or right.sum() < min_samples_leaf:
                     continue
-                weighted = (nl * gini(y[left]) + nr * gini(y[~left])) / n
-                gain = parent - weighted
-                if gain > best_gain:
-                    best_gain, best = gain, (f, t)
-        return best, best_gain
+                if best is None or gain > best["impurity_decrease"]:
+                    best = {
+                        "feature_index": feature_index,
+                        "threshold": float(threshold),
+                        "impurity_decrease": float(gain),
+                        "left_mask": left,
+                        "right_mask": right,
+                    }
+        return best
+
+
+    rain_indicator = np.array([0, 0, 1, 0, 0, 1], dtype=float)
+    route_features = np.column_stack([route_distance_km, rain_indicator])
+    feature_names = ["distance_km", "rain_indicator"]
+
+    best_root_split = find_best_split(route_features, late_label)
+
+    print("best feature:", feature_names[best_root_split["feature_index"]])
+    print("best threshold:", best_root_split["threshold"])
+    print("impurity decrease:", best_root_split["impurity_decrease"])
+
+    assert best_root_split["feature_index"] == 0
+    assert np.isclose(best_root_split["threshold"], 2.5)
+    """),
+
+    md(r"""
+    ## 8 · Build a shallow tree recursively
+
+    Recursion means the same procedure operates inside each child:
+
+    1. decide whether the node must stop;
+    2. otherwise find its best split;
+    3. build a left child from left rows;
+    4. build a right child from right rows.
+
+    A node becomes a leaf when it is pure, reaches maximum depth, has too few rows to
+    split safely, or has no positive impurity decrease.
+
+    Leaf decisions use the majority class. Leaf probabilities use the positive-label
+    proportion. If a leaf is tied at 0.5, this learning implementation chooses class
+    0, matching scikit-learn's lower-class tie rule for labels 0 and 1.
     """),
 
     code(r"""
-    # 5.2 Recursive tree growth (a node is a dict) + prediction + rule dump.
-    def build_tree(X, y, depth=0, max_depth=None, min_samples=2):
-        # leaf if: depth cap hit, too few samples, or already pure
-        if (max_depth is not None and depth >= max_depth) or len(y) < min_samples \
-                or len(np.unique(y)) == 1:
-            return {"leaf": True, "pred": int(np.round(y.mean())), "n": len(y),
-                    "p1": float(y.mean())}
-        split, gain = best_split(X, y)
-        if split is None or gain <= 0:
-            return {"leaf": True, "pred": int(np.round(y.mean())), "n": len(y),
-                    "p1": float(y.mean())}
-        f, t = split
-        left = X[:, f] <= t
-        return {"leaf": False, "feature": f, "threshold": t,
-                "left": build_tree(X[left], y[left], depth + 1, max_depth, min_samples),
-                "right": build_tree(X[~left], y[~left], depth + 1, max_depth, min_samples)}
+    def make_leaf(labels, depth):
+        '''Create a leaf containing training counts and a majority decision.'''
+        label_array = np.asarray(labels, dtype=int)
+        positive_probability = float(label_array.mean())
+        return {
+            "leaf": True,
+            "depth": depth,
+            "rows": len(label_array),
+            "positive_probability": positive_probability,
+            "decision": int(positive_probability > 0.5),
+        }
 
-    def predict_one(node, x):
-        while not node["leaf"]:
-            node = node["left"] if x[node["feature"]] <= node["threshold"] else node["right"]
-        return node["pred"]
 
-    def predict(tree, X):
-        return np.array([predict_one(tree, x) for x in X])
+    def build_classification_tree(
+        feature_matrix,
+        labels,
+        depth=0,
+        max_depth=2,
+        min_samples_split=2,
+        min_samples_leaf=1,
+    ):
+        '''Build a small binary Gini tree for learning purposes.'''
+        matrix = np.asarray(feature_matrix, dtype=float)
+        label_array = np.asarray(labels, dtype=int)
 
-    def print_rules(node, depth=0, name=("x0", "x1")):
-        pad = "  " * depth
-        if node["leaf"]:
-            print(f"{pad}-> predict {node['pred']}  (n={node['n']}, P(1)={node['p1']:.2f})")
-        else:
-            print(f"{pad}if {name[node['feature']]} <= {node['threshold']:.2f}:")
-            print_rules(node["left"], depth + 1, name)
-            print(f"{pad}else:")
-            print_rules(node["right"], depth + 1, name)
+        should_stop = (
+            depth >= max_depth
+            or len(label_array) < min_samples_split
+            or np.unique(label_array).size == 1
+        )
+        if should_stop:
+            return make_leaf(label_array, depth)
 
-    tree = build_tree(X, y, max_depth=3)
-    acc = np.mean(predict(tree, X) == y)
-    print(f"depth-3 tree training accuracy: {acc:.3f}\\n")
-    print_rules(tree)
+        split = find_best_split(matrix, label_array, min_samples_leaf=min_samples_leaf)
+        if split is None or split["impurity_decrease"] <= 0:
+            return make_leaf(label_array, depth)
+
+        left = split["left_mask"]
+        right = split["right_mask"]
+        return {
+            "leaf": False,
+            "depth": depth,
+            "rows": len(label_array),
+            "feature_index": split["feature_index"],
+            "threshold": split["threshold"],
+            "impurity_decrease": split["impurity_decrease"],
+            "left": build_classification_tree(
+                matrix[left], label_array[left], depth + 1,
+                max_depth, min_samples_split, min_samples_leaf,
+            ),
+            "right": build_classification_tree(
+                matrix[right], label_array[right], depth + 1,
+                max_depth, min_samples_split, min_samples_leaf,
+            ),
+        }
+
+
+    def predict_tree_row(node, feature_row):
+        '''Traverse one row until reaching a leaf.'''
+        current = node
+        while not current["leaf"]:
+            if feature_row[current["feature_index"]] <= current["threshold"]:
+                current = current["left"]
+            else:
+                current = current["right"]
+        return current["decision"], current["positive_probability"]
+
+
+    def predict_tree(node, feature_matrix):
+        results = [predict_tree_row(node, row) for row in np.asarray(feature_matrix)]
+        decisions = np.array([result[0] for result in results], dtype=int)
+        probabilities = np.array([result[1] for result in results], dtype=float)
+        return decisions, probabilities
+
+
+    scratch_tree = build_classification_tree(route_features, late_label, max_depth=2)
+    scratch_decisions, scratch_probabilities = predict_tree(scratch_tree, route_features)
+
+    print("tree:", scratch_tree)
+    print("training decisions:", scratch_decisions)
+    print("training probabilities:", scratch_probabilities)
+    print("wrong training rows:", int(np.sum(scratch_decisions != late_label)))
+
+    assert scratch_tree["leaf"] is False
+    # The depth limit leaves one tied leaf, so one training row remains wrong.
+    assert int(np.sum(scratch_decisions != late_label)) == 1
     """),
 
-    # ============================================ 6. Visualization
     md(r"""
-    ## 6 · Visualization
+    ## 9 · Overfitting appears before pruning controls
 
-    Four pictures: the axis-aligned regions a tree learns, the impurity curve that
-    drives a split, the overfitting-with-depth story, and the instability that
-    motivates ensembles.
+    A tree can keep adding questions until individual training rows are isolated.
+    Training errors may reach zero even when the rules capture noise that will not
+    repeat.
+
+    Compare:
+
+    - a shallow tree: fewer rules, may miss real structure;
+    - a deep tree: more flexible, may memorize training details.
+
+    We judge this with validation rows that did not choose splits. We count wrong
+    decisions directly. Formal metric selection comes later.
+
+    The example below uses a noisy two-feature pattern. Depth is the only changed
+    control.
     """),
 
     code(r"""
-    # Figure 1 — decision regions: the tree tiles space into axis-aligned boxes.
-    def plot_regions(ax, tree, X, y, title):
-        xx, yy = np.meshgrid(np.linspace(-3, 3, 300), np.linspace(-3, 3, 300))
-        grid = np.c_[xx.ravel(), yy.ravel()]
-        Z = predict(tree, grid).reshape(xx.shape)
-        ax.contourf(xx, yy, Z, levels=[-0.5, 0.5, 1.5], cmap="RdBu", alpha=0.4)
-        ax.scatter(X[:, 0], X[:, 1], c=y, cmap="RdBu", edgecolor="k", s=12)
-        ax.set_title(title); ax.set_aspect("equal")
-        # overlay the true circular boundary for reference
-        th = np.linspace(0, 2 * np.pi, 100)
-        ax.plot(2 * np.cos(th), 2 * np.sin(th), "g--", lw=2)
+    from sklearn.datasets import make_moons
+    from sklearn.model_selection import train_test_split
+    from sklearn.tree import DecisionTreeClassifier
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    plot_regions(ax, tree, X, y, "Figure 1 — depth-3 tree (green = true circle)")
-    plt.show()
+    noisy_features, noisy_labels = make_moons(n_samples=240, noise=0.28, random_state=12)
+    X_train, X_validation, y_train, y_validation = train_test_split(
+        noisy_features,
+        noisy_labels,
+        test_size=0.35,
+        random_state=42,
+        stratify=noisy_labels,
+    )
+
+    depth_records = []
+    for depth in [1, 2, 3, 5, None]:
+        model = DecisionTreeClassifier(max_depth=depth, random_state=42)
+        model.fit(X_train, y_train)
+        training_wrong = int(np.sum(model.predict(X_train) != y_train))
+        validation_wrong = int(np.sum(model.predict(X_validation) != y_validation))
+        depth_records.append(
+            {
+                "max_depth": "unlimited" if depth is None else depth,
+                "tree_depth": model.get_depth(),
+                "leaf_count": model.get_n_leaves(),
+                "training_wrong": training_wrong,
+                "validation_wrong": validation_wrong,
+            }
+        )
+
+    depth_table = pd.DataFrame(depth_records)
+    print(depth_table)
+
+    assert depth_table.iloc[-1]["training_wrong"] <= depth_table.iloc[0]["training_wrong"]
+    assert depth_table.iloc[-1]["leaf_count"] >= depth_table.iloc[0]["leaf_count"]
     """),
 
     md(r"""
-    **Figure 1.** The true boundary is a smooth **circle** (green dashed), but the
-    tree can only cut along the axes, so it approximates the circle with a
-    **staircase of rectangles**. A depth-3 tree captures the gist with a handful of
-    boxes. Deeper trees add finer steps — better fit, but soon they start fencing off
-    individual noisy points (overfitting, next figure). This staircase nature is the
-    tree's signature strength (any shape, given depth) *and* weakness (no smooth or
-    diagonal boundaries).
+    The unlimited tree normally has fewer training errors and many more leaves. Its
+    validation result need not improve. That gap is the reason stopping and pruning
+    come before ensembles.
+    """),
+
+    md(r"""
+    ## 10 · Pre-pruning controls growth
+
+    **Pre-pruning** stops growth while the tree is being built:
+
+    | Control | Question it asks |
+    | --- | --- |
+    | `max_depth` | How many split levels may exist? |
+    | `min_samples_split` | Does this node contain enough rows to attempt a split? |
+    | `min_samples_leaf` | Will each new leaf contain enough rows? |
+    | `min_impurity_decrease` | Is the immediate improvement large enough? |
+
+    Larger leaves pool more observations into each probability estimate. They are less
+    tailored to individual rows but may miss small real groups.
+
+    These controls are development choices. They must not be repeatedly adjusted from
+    final-test results.
     """),
 
     code(r"""
-    # Figure 2 — the impurity curve that selects the first split on feature x0.
-    f = 0
-    vals = np.unique(X[:, f]); thr = (vals[:-1] + vals[1:]) / 2
-    parent = gini(y); gains = []
-    for t in thr:
-        left = X[:, f] <= t
-        nl, nr = left.sum(), (~left).sum()
-        weighted = (nl * gini(y[left]) + nr * gini(y[~left])) / len(y)
-        gains.append(parent - weighted)
-    gains = np.array(thr), np.array(gains)
+    prepruned_models = {
+        "depth_2": DecisionTreeClassifier(max_depth=2, random_state=42),
+        "leaf_12": DecisionTreeClassifier(min_samples_leaf=12, random_state=42),
+        "unrestricted": DecisionTreeClassifier(random_state=42),
+    }
 
-    fig, ax = plt.subplots()
-    ax.plot(gains[0], gains[1], color="tab:purple")
-    best_t = gains[0][np.argmax(gains[1])]
-    ax.axvline(best_t, color="r", ls="--", label=f"best threshold = {best_t:.2f}")
-    ax.set_xlabel("split threshold on x0"); ax.set_ylabel("impurity decrease (gain)")
-    ax.set_title("Figure 2 — CART picks the threshold of maximum impurity decrease")
-    ax.legend()
-    plt.show()
+    prepruning_records = []
+    for name, model in prepruned_models.items():
+        model.fit(X_train, y_train)
+        prepruning_records.append(
+            {
+                "model": name,
+                "depth": model.get_depth(),
+                "leaves": model.get_n_leaves(),
+                "training_wrong": int(np.sum(model.predict(X_train) != y_train)),
+                "validation_wrong": int(np.sum(model.predict(X_validation) != y_validation)),
+            }
+        )
+
+    prepruning_table = pd.DataFrame(prepruning_records)
+    print(prepruning_table)
+
+    assert prepruning_table["leaves"].min() < prepruning_table["leaves"].max()
     """),
 
     md(r"""
-    **Figure 2.** For one feature, we sweep every candidate threshold and compute the
-    weighted Gini decrease. The algorithm picks the peak (red line). Note the curve
-    is **symmetric-ish around the data's structure**: thresholds near $\pm$ the
-    circle's edge separate inside/outside best. CART does this for *every* feature
-    and takes the global best — that single greedy choice becomes the root, and the
-    process recurses. This is the entire learning algorithm, made visible.
+    ## 11 · Post-pruning removes weak branches
+
+    **Post-pruning** first grows a larger tree, then removes branches whose training
+    improvement is too small relative to their complexity.
+
+    Scikit-learn uses cost-complexity parameter $\alpha$ through `ccp_alpha`:
+
+    $$
+    R_\alpha(T)=R(T)+\alpha|T_{leaves}|
+    $$
+
+    **Symbols:** $T$ is a tree; $R(T)$ is its training leaf error or impurity cost;
+    $|T_{leaves}|$ is its number of leaves; $\alpha$ controls the complexity penalty.
+
+    - $\alpha=0$ applies no pruning penalty;
+    - larger $\alpha$ prefers fewer leaves.
+
+    This formula describes the trade-off. Systematic selection of $\alpha$ with
+    cross-validation belongs to MLE-02. Here we compare two declared values on the
+    development split and keep the final test out.
     """),
 
     code(r"""
-    # Figure 3 — overfitting: deeper trees fit training noise, hurting test accuracy.
-    Xtr, ytr = X[:300], y[:300]
-    Xte, yte = X[300:], y[300:]
-    depths = range(1, 16)
-    tr_acc, te_acc = [], []
-    for dmax in depths:
-        t = build_tree(Xtr, ytr, max_depth=dmax)
-        tr_acc.append(np.mean(predict(t, Xtr) == ytr))
-        te_acc.append(np.mean(predict(t, Xte) == yte))
+    pruning_records = []
+    for alpha in [0.0, 0.01, 0.03]:
+        pruned_model = DecisionTreeClassifier(ccp_alpha=alpha, random_state=42)
+        pruned_model.fit(X_train, y_train)
+        pruning_records.append(
+            {
+                "ccp_alpha": alpha,
+                "depth": pruned_model.get_depth(),
+                "leaves": pruned_model.get_n_leaves(),
+                "training_wrong": int(np.sum(pruned_model.predict(X_train) != y_train)),
+                "validation_wrong": int(np.sum(pruned_model.predict(X_validation) != y_validation)),
+            }
+        )
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-    axes[0].plot(list(depths), tr_acc, "o-", label="train")
-    axes[0].plot(list(depths), te_acc, "s-", label="test")
-    axes[0].set_xlabel("max depth"); axes[0].set_ylabel("accuracy")
-    axes[0].set_title("Train accuracy -> 100%; test accuracy peaks then drops")
-    axes[0].legend()
+    pruning_table = pd.DataFrame(pruning_records)
+    print(pruning_table)
 
-    plot_regions(axes[1], build_tree(Xtr, ytr, max_depth=None), Xtr, ytr,
-                 "Fully grown tree: jagged, noise-fitting boundary")
-    plt.suptitle("Figure 3 — The depth dial is the bias-variance dial")
-    plt.tight_layout()
-    plt.show()
+    assert pruning_table.iloc[-1]["leaves"] <= pruning_table.iloc[0]["leaves"]
     """),
 
     md(r"""
-    **Figure 3.** **Left:** training accuracy climbs to 100% as depth grows (a deep
-    tree can isolate every point), but test accuracy is **U-shaped inverted** — it
-    peaks at a moderate depth and then *falls* as the tree starts memorizing noise.
-    Same bias–variance story as Lesson CML-01's polynomial degree, different model.
-    **Right:** the fully-grown tree's boundary is a jagged mess that fences off
-    individual noisy points — textbook overfitting. The fix: cap depth / prune, or
-    (better) ensemble many trees.
+    ## 12 · Use sklearn and understand the learned rules
+
+    The library performs the same core operations as our scratch tree:
+
+    1. search feature-threshold candidates;
+    2. select the largest impurity decrease;
+    3. repeat in child nodes;
+    4. stop according to controls;
+    5. store class counts and probabilities in leaves.
+
+    `export_text` displays the fitted questions. Read the rules before trusting the
+    predictions.
+
+    Two implementations do not have to produce the identical tree. If candidate
+    splits have equal impurity decrease, their tie-breaking rules may choose different
+    questions. The trees can still have the same depth and number of wrong training
+    rows. Matching the root calculation and understanding any later difference is
+    more important than forcing every printed rule to match.
     """),
 
     code(r"""
-    # Figure 4 — INSTABILITY: two bootstrap samples -> two different trees.
-    # This high variance is the single fact that motivates Random Forests (Lesson CML-04).
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    for ax, seed in zip(axes, [1, 2]):
-        boot = np.random.default_rng(seed).integers(0, len(X), len(X))
-        t = build_tree(X[boot], y[boot], max_depth=5)
-        plot_regions(ax, t, X[boot], y[boot], f"tree on bootstrap sample #{seed}")
-    plt.suptitle("Figure 4 — Same distribution, resampled data -> very different trees (high variance)")
-    plt.tight_layout()
-    plt.show()
+    from sklearn.tree import export_text
+
+    sklearn_route_tree = DecisionTreeClassifier(max_depth=2, random_state=42)
+    sklearn_route_tree.fit(route_features, late_label)
+    sklearn_route_decisions = sklearn_route_tree.predict(route_features)
+    sklearn_route_probabilities = sklearn_route_tree.predict_proba(route_features)[:, 1]
+
+    print(export_text(sklearn_route_tree, feature_names=feature_names))
+    print("sklearn decisions:", sklearn_route_decisions)
+    print("scratch decisions:", scratch_decisions)
+    print("sklearn class-1 probabilities:", sklearn_route_probabilities)
+    print("scratch class-1 probabilities:", scratch_probabilities)
+
+    assert sklearn_route_tree.tree_.feature[0] == scratch_tree["feature_index"] == 0
+    assert np.isclose(sklearn_route_tree.tree_.threshold[0], scratch_tree["threshold"])
+    assert int(np.sum(sklearn_route_decisions != late_label)) == 1
+    assert int(np.sum(scratch_decisions != late_label)) == 1
+    assert np.all((sklearn_route_probabilities >= 0) & (sklearn_route_probabilities <= 1))
     """),
 
     md(r"""
-    **Figure 4.** Both trees were trained on resamples of the *same* dataset, yet
-    their boundaries differ noticeably — an early split landed differently and the
-    whole structure cascaded. This is **high variance**: the model depends heavily on
-    the particular sample. Individually unreliable, but here's the key insight that
-    powers Lesson CML-04: if you **average many such decorrelated trees**, the errors
-    cancel and the variance collapses while the low bias remains. That is a Random
-    Forest in one sentence.
+    ### What a tree can and cannot express
+
+    **Strengths:**
+
+    - nonlinear threshold rules;
+    - feature interactions;
+    - no scaling requirement for ordinary numerical splits;
+    - inspectable shallow rules;
+    - fast prediction after fitting.
+
+    **Limitations:**
+
+    - numerical splits create axis-aligned rectangular regions;
+    - stepwise predictions do not extrapolate smoothly;
+    - deep trees are hard to inspect;
+    - small data changes can change early splits and the whole tree;
+    - leaf probabilities can be extreme when leaves are tiny;
+    - greedy local choices may miss a better complete tree.
+
+    A single tree's instability motivates CML-04. Random forests average many varied
+    trees instead of trusting one fragile structure.
     """),
 
-    # ============================================ 7. Failure Modes
     md(r"""
-    ## 7 · Failure Modes
+    ## 13 · Mini-project: Wine cultivar tree with a sealed test
 
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Overfitting** | 100% train acc, poor test acc; jagged boundary | Grown until leaves are pure | `max_depth`, `min_samples_leaf`, CCP pruning |
-    | **Instability / high variance** | Tiny data change → different tree | Greedy early splits cascade | **Ensembles** (bagging/RF, boosting) |
-    | **Diagonal / smooth boundaries** | Staircase artifacts; needs huge depth | Axis-aligned splits only | Feature engineering (rotations); ensembles; or linear/SVM |
-    | **Extrapolation** | Flat, constant prediction outside training range | Leaves are constants | Don't extrapolate; use models with trend (linear) if needed |
-    | **High-cardinality bias** | Splits favor IDs/many-valued features | More thresholds → more chances to fit noise | Limit candidate splits; target/impact encoding; RF importance caveats |
-    | **Class imbalance** | Minority class ignored | Impurity dominated by majority | `class_weight`, resampling, careful metrics (MLE-04) |
+    **Goal:** classify whether a Wine sample belongs to cultivar class 0 using a
+    shallow tree. This is an educational recognition task, not a quality or safety
+    decision.
 
-    The cell shows the **axis-aligned limitation**: a simple **diagonal** boundary
-    forces the tree into a clumsy staircase.
+    **Workflow:**
+
+    1. declare the positive class and two features;
+    2. create training, validation, and sealed test partitions;
+    3. freeze a training-majority decision baseline;
+    4. fit one pre-declared depth-3 tree;
+    5. count validation errors;
+    6. inspect rules and leaf sizes;
+    7. preserve the final test without prediction.
     """),
 
     code(r"""
-    # A diagonal boundary (y = x) is trivial for a line but awkward for a tree.
-    Xd = rng.uniform(-3, 3, (400, 2))
-    yd = (Xd[:, 1] > Xd[:, 0]).astype(int)               # linear diagonal boundary
-    td = build_tree(Xd, yd, max_depth=4)
-    fig, ax = plt.subplots(figsize=(6, 6))
-    xx, yy = np.meshgrid(np.linspace(-3, 3, 300), np.linspace(-3, 3, 300))
-    Z = predict(td, np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-    ax.contourf(xx, yy, Z, levels=[-0.5, 0.5, 1.5], cmap="RdBu", alpha=0.4)
-    ax.scatter(Xd[:, 0], Xd[:, 1], c=yd, cmap="RdBu", edgecolor="k", s=10)
-    ax.plot([-3, 3], [-3, 3], "g--", lw=2, label="true boundary (y=x)")
-    ax.set_title("Figure 5 — A diagonal boundary becomes a staircase"); ax.legend()
-    plt.show()
-    print("A logistic regression would nail y=x with one line; the tree approximates "
-          "it with steps and needs ever more depth to refine them.")
-    """),
+    from sklearn.datasets import load_wine
 
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
+    wine_dataset = load_wine(as_frame=True)
+    wine_frame = wine_dataset.frame.copy()
+    wine_frame.insert(
+        0,
+        "sample_id",
+        [f"wine_{row_number:03d}" for row_number in range(len(wine_frame))],
+    )
+    wine_frame["is_class_zero"] = (wine_frame["target"] == 0).astype(int)
 
-    sklearn's `DecisionTreeClassifier`/`Regressor` implement optimized CART with all
-    the pruning knobs, plus `export_text`/`plot_tree` for inspection. What the
-    library adds over our scratch code: C-level split search, presorting,
-    cost-complexity pruning (`ccp_alpha`), `class_weight`, and feature-importance
-    accounting. We confirm sklearn and our scratch tree agree on a depth-limited fit.
+    project_feature_names = ["alcohol", "color_intensity"]
+    project_X = wine_frame[project_feature_names]
+    project_y = wine_frame["is_class_zero"]
+    project_ids = wine_frame["sample_id"]
+
+    X_development, X_test, y_development, y_test, id_development, id_test = train_test_split(
+        project_X,
+        project_y,
+        project_ids,
+        test_size=0.20,
+        random_state=42,
+        stratify=project_y,
+    )
+    X_train_project, X_validation_project, y_train_project, y_validation_project, id_train, id_validation = train_test_split(
+        X_development,
+        y_development,
+        id_development,
+        test_size=0.25,
+        random_state=42,
+        stratify=y_development,
+    )
+
+    print("training rows:", len(X_train_project))
+    print("validation rows:", len(X_validation_project))
+    print("sealed test rows:", len(X_test))
+
+    assert len(X_train_project) == 106
+    assert len(X_validation_project) == 36
+    assert len(X_test) == 36
+    assert set(id_train).isdisjoint(id_validation)
+    assert set(id_train).isdisjoint(id_test)
+    assert set(id_validation).isdisjoint(id_test)
     """),
 
     code(r"""
-    from sklearn.tree import DecisionTreeClassifier, export_text
-    from sklearn.metrics import accuracy_score
+    training_majority_decision = int(y_train_project.mean() >= 0.5)
+    baseline_validation_decisions = np.full(
+        len(y_validation_project),
+        training_majority_decision,
+    )
+    baseline_validation_wrong = int(
+        np.sum(baseline_validation_decisions != y_validation_project.to_numpy())
+    )
 
-    skt = DecisionTreeClassifier(max_depth=3, random_state=0).fit(X, y)
-    print(f"sklearn depth-3 train acc : {accuracy_score(y, skt.predict(X)):.3f}")
-    print(f"scratch depth-3 train acc : {np.mean(predict(tree, X) == y):.3f}")
-    print("\\nsklearn's learned rules:")
-    print(export_text(skt, feature_names=["x0", "x1"], max_depth=3))
+    project_tree = DecisionTreeClassifier(
+        max_depth=3,
+        min_samples_leaf=5,
+        random_state=42,
+    )
+    project_tree.fit(X_train_project, y_train_project)
+    project_validation_decisions = project_tree.predict(X_validation_project)
+    project_validation_wrong = int(
+        np.sum(project_validation_decisions != y_validation_project.to_numpy())
+    )
 
-    # cost-complexity pruning path: alpha trades accuracy vs tree size
-    path = DecisionTreeClassifier(random_state=0).cost_complexity_pruning_path(X, y)
-    print("a few ccp_alpha values:", path.ccp_alphas[:5].round(4),
-          "...  (larger alpha -> smaller pruned tree)")
+    leaf_training_counts = np.bincount(
+        project_tree.apply(X_train_project),
+        minlength=project_tree.tree_.node_count,
+    )
+    used_leaf_counts = leaf_training_counts[leaf_training_counts > 0]
+
+    print("baseline validation wrong:", baseline_validation_wrong)
+    print("tree validation wrong:", project_validation_wrong)
+    print("tree depth:", project_tree.get_depth())
+    print("leaf count:", project_tree.get_n_leaves())
+    print("training rows per used leaf:", used_leaf_counts)
+    print("\nlearned rules:\n", export_text(project_tree, feature_names=project_feature_names))
+
+    assert project_validation_wrong < baseline_validation_wrong
+    assert project_tree.get_depth() <= 3
+    assert used_leaf_counts.min() >= 5
+    """),
+
+    code(r"""
+    project_partition_manifest = pd.concat(
+        [
+            pd.DataFrame({"sample_id": id_train, "partition": "train"}),
+            pd.DataFrame({"sample_id": id_validation, "partition": "validation"}),
+            pd.DataFrame({"sample_id": id_test, "partition": "test"}),
+        ],
+        ignore_index=True,
+    )
+
+    project_result = {
+        "positive_class": "original cultivar target equals 0",
+        "features": project_feature_names,
+        "baseline_validation_wrong": baseline_validation_wrong,
+        "tree_validation_wrong": project_validation_wrong,
+        "tree_depth": project_tree.get_depth(),
+        "leaf_count": project_tree.get_n_leaves(),
+        "partition_manifest": project_partition_manifest,
+        "test_status": "sealed — no tree decision, probability, or error count calculated",
+    }
+
+    print("partition counts:\n", project_partition_manifest["partition"].value_counts())
+    print("test status:", project_result["test_status"])
+
+    assert project_partition_manifest["sample_id"].is_unique
+    assert len(project_partition_manifest) == len(wine_frame)
+    assert project_result["test_status"].startswith("sealed")
     """),
 
     md(r"""
-    **Scratch vs production.** Our hand-grown tree reaches essentially the same
-    training accuracy and the same kinds of splits as sklearn at matched depth — the
-    algorithm is identical; sklearn is just faster and adds pruning, importances, and
-    sample weighting. The `cost_complexity_pruning_path` exposes the $\alpha$ knob
-    from §4.5: cross-validate over `ccp_alpha` to pick the right tree size instead of
-    guessing `max_depth`. For production tabular work, though, you almost never ship
-    a *single* tree — you ship the ensemble built from them (CML-04 and CML-05).
+    ## 14 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    A parent contains labels $[0,0,1,1]$, so its Gini is 0.5. A split creates pure
+    children $[0,0]$ and $[1,1]$:
+
+    $$
+    G_{children}=\frac{2}{4}(0)+\frac{2}{4}(0)=0
+    $$
+
+    $$
+    \Delta G=0.5-0=0.5
+    $$
+
+    This is the largest possible Gini decrease for a balanced binary parent.
+
+    ### Guided practice
+
+    1. Identify the root, branches, and leaves in a three-question rule.
+    2. Calculate leaf probability and decision for labels $[0,0,1]$.
+    3. Calculate Gini for counts 8 class-0 and 2 class-1.
+    4. Calculate weighted child impurity for child sizes 3 and 7.
+    5. Compare thresholds 2.5 and 3.5 for the six-route dataset manually.
+    6. List candidate thresholds for values $[1,2,4,8]$.
+
+    ### Independent practice
+
+    7. Rebuild `gini_impurity` with input checks.
+    8. Rebuild one-feature split search and verify against the threshold table.
+    9. Add a second feature and print the chosen feature name and threshold.
+    10. Trace two rows through the scratch tree by hand.
+    11. Compare depth 1, depth 3, and unlimited trees using training and validation
+        wrong-row counts.
+    12. Compare pre-pruning and post-pruning tree sizes.
+
+    ### Challenge
+
+    Rebuild the Wine mini-project without copying. Include:
+
+    - a declared positive class and prediction time;
+    - a frozen training-majority baseline;
+    - disjoint training, validation, and sealed test partitions;
+    - one fully manual candidate split;
+    - a pre-declared shallow sklearn tree;
+    - validation wrong-row comparison;
+    - printed rules, depth, leaf count, and leaf training sizes;
+    - a partition manifest and at least eight assertions;
+    - no test result, random forest, boosting, cross-validation, or feature-importance claim.
+
+    ### Self-check
+
+    For every split, write:
+
+    - parent label counts and Gini;
+    - feature name and threshold;
+    - left and right row counts;
+    - left and right Gini;
+    - weighted child Gini;
+    - impurity decrease;
+    - stopping rule that will eventually create a leaf.
     """),
 
-    # ============================================ 9. Business Case Study
     md(r"""
-    ## 9 · Realistic Business Case Study — Loan Approval Triage Rules
+    ### Solution and scoring rubric
 
-    **Scenario.** A lender wants a **transparent first-pass triage**: a small set of
-    if-then rules that auto-approve clearly-good and auto-decline clearly-bad
-    applicants, routing the ambiguous middle to human underwriters.
+    1. The root asks the first question; each answer forms a branch; final predictions
+       live in leaves.
+    2. Positive probability is $1/3$ and majority decision is class 0.
+    3. $G=1-0.8^2-0.2^2=0.32$.
+    4. Multiply each child impurity by 3/10 or 7/10, then add.
+    5. Threshold 2.5 has decrease 0.25; threshold 3.5 has about 0.0556, so 2.5 wins.
+    6. Midpoints are $[1.5,3,6]$.
+    7. Pure nodes return 0; balanced binary nodes return 0.5.
+    8. The six-route best threshold is 2.5.
+    9. Search every feature-threshold pair and retain the largest positive decrease.
+    10. Apply each condition in order until a leaf is reached.
+    11. Training errors usually fall with depth; validation need not improve.
+    12. Stronger controls should reduce depth or leaf count.
 
-    **Why a (shallow) tree here?**
-    - **Direct interpretability:** the model *is* the rulebook — "if FICO > 720 and
-      DTI < 0.35 → auto-approve." Underwriters and compliance can read and sign off
-      on every path, which a coefficient vector or a forest cannot offer as cleanly.
-    - **No preprocessing:** mixes categorical (employment type) and numeric (income)
-      features without scaling or encoding gymnastics.
-    - **Cheap, fast, auditable** decisions.
+    Challenge scoring:
 
-    **Business objectives:** cut manual review volume while keeping risk controlled
-    and decisions explainable.
+    | Skill | Points |
+    | --- | ---: |
+    | Tree anatomy and leaf probability | 2 |
+    | Manual Gini and weighted split | 4 |
+    | Correct candidate search | 3 |
+    | Recursion and traversal explanation | 2 |
+    | Overfitting, stopping, and pruning | 3 |
+    | Split-safe baseline and validation comparison | 3 |
+    | Rules, leaf evidence, assertions, sealed test | 3 |
+    | **Total** | **20** |
 
-    **Cost of mistakes**
-    - **Auto-approve a bad applicant** → loan loss (expensive).
-    - **Auto-decline a good applicant** → lost revenue + customer friction.
-    - **Unexplainable decision** → regulatory and reputational risk.
-    These costs argue for a **shallow** tree (few, defensible rules) plus a human in
-    the loop for the uncertain middle — not a deep, opaque tree.
+    ### Common mistakes
 
-    **Constraints:** protected attributes handled per law; monotonicity often
-    required; rules must be stable enough to publish.
+    - Introducing impurity before counting labels.
+    - Forgetting to weight child impurity by child size.
+    - Choosing the smallest impurity decrease instead of the largest.
+    - Allowing an empty child or a leaf smaller than the declared minimum.
+    - Treating Gini as the fraction of wrong decisions.
+    - Assuming a greedy split produces the globally best complete tree.
+    - Judging depth from training fit alone.
+    - Tuning controls repeatedly on the final test.
+    - Calling every unusual row noise and growing around it.
+    - Treating a deep rule path as automatically interpretable.
+    - Claiming a split proves causation.
+    - Using feature importance before learning its biases and alternatives.
 
-    **The catch (and the lead-in to CML-04/CML-05):** a single tree's **instability** means
-    the published rules can change substantially on retrain. So the triage tree is
-    for *interpretable policy*, while the lender's actual *risk score* is produced by
-    a **gradient-boosted ensemble** (Lesson CML-05) and explained post-hoc with SHAP
-    (Lesson MLE-05). Right tool, right job.
+    ### Readiness threshold
 
-    **KPIs:** auto-decision rate, default rate within auto-approved, approval rate,
-    rule stability across retrains, and fairness across protected groups.
+    Score at least **16/20**, including a correct manual split, stopping/pruning
+    explanation, validation comparison, and sealed final test.
     """),
 
-    # ============================================ 10. Production Considerations
     md(r"""
-    ## 10 · Production Considerations
+    ## Ready to move on?
 
-    - **Latency / cost.** Inference is a handful of comparisons down a path —
-      nanoseconds, trivially cacheable, no matrix math. Among the cheapest models to
-      serve. (Ensembles multiply this by the number of trees but it's still fast.)
-    - **Interpretability.** A shallow tree is self-documenting; export the rules and
-      version them. Deep trees lose this — past ~depth 4–5 nobody can hold the logic.
-    - **Stability / monitoring.** Because trees are unstable, **monitor rule drift**
-      across retrains; large structural changes usually signal data-pipeline issues
-      or genuine distribution shift (Lesson PROD-05). This instability is the main
-      operational reason to prefer ensembles for the production scorer.
-    - **No scaling required**, and **monotonic constraints** are supported by modern
-      libraries (LightGBM/XGBoost) when regulation demands "more debt never lowers
-      risk."
-    - **Missing values.** CART can handle them via surrogate splits or default
-      directions (XGBoost learns a default branch) — far less preprocessing than
-      linear models.
-    - **Retraining.** Cheap; but pin `random_state` and pruning params so published
-      rules don't churn arbitrarily.
-    """),
+    ### Quick check
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    1. What does a leaf store for binary classification?
+    2. What does Gini impurity measure?
+    3. Why are child impurities weighted by row count?
+    4. How are numerical candidate thresholds created?
+    5. What makes tree construction greedy?
+    6. Why can training errors reach zero while validation worsens?
+    7. How do `max_depth` and `min_samples_leaf` differ?
+    8. What is the difference between pre-pruning and post-pruning?
+    9. Why are tree boundaries axis-aligned and stepwise?
+    10. Why can a small change in training rows alter the whole tree?
 
-    **Single tree vs linear models vs tree ensembles:**
+    ### Teach it back
 
-    | Dimension | Decision Tree | Linear/Logistic | Random Forest / XGBoost |
-    |---|---|---|---|
-    | Accuracy (tabular) | Moderate (overfits/unstable) | Low–moderate | **High** |
-    | Interpretability | **High (shallow)** / low (deep) | High (coefficients) | Low (needs SHAP) |
-    | Nonlinearity & interactions | **Automatic** | Manual | **Automatic** |
-    | Feature scaling needed | **No** | Yes (esp. regularized) | No |
-    | Variance / stability | **High / unstable** | Low | **Low (ensemble)** |
-    | Latency / cost | **Lowest** | Lowest | Higher (many trees) |
-    | Extrapolation | Poor (constant) | Good (linear trend) | Poor |
-    | Handles mixed/missing data | **Yes** | Needs encoding/imputation | Yes |
+    Starting with six route labels, explain:
 
-    **Gini vs entropy:**
+    **parent counts → parent Gini → candidate threshold → child counts → child Gini →
+    weighted impurity → impurity decrease → greedy choice → recursion → stopping →
+    leaf probability.**
 
-    | Dimension | Gini | Entropy |
-    |---|---|---|
-    | Formula | $1-\sum p_k^2$ | $-\sum p_k\log p_k$ |
-    | Cost | Cheaper (no log) | Slightly higher |
-    | Splits chosen | Nearly identical | Nearly identical |
-    | Default in | CART/sklearn | ID3/C4.5 |
+    Then explain why validation evidence and pruning must appear before random forests.
 
-    **Senior lesson:** a single tree is best understood as the **interpretable unit**
-    and the **ensemble building block** — rarely the final production model on its
-    own, because its variance is a liability that bagging and boosting exist to fix.
-    """),
+    ### Memory aid
 
-    # ============================================ 12. Interview Prep
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    **A tree greedily asks the question that most reduces label mixture, then stops
+    before its rules become a memory of individual training rows.**
 
-    **Common questions**
-    - *How does a tree pick a split?* → Maximize weighted impurity decrease over all
-      (feature, threshold) pairs (Sections 4.1–4.3).
-    - *Define Gini and entropy.* → $1-\sum p_k^2$ vs $-\sum p_k\log p_k$; both measure
-      node purity.
+    ### Next dependency
 
-    **Deep-dive questions**
-    - *Why do trees overfit and how do you stop it?* → They grow until leaves are
-      pure; control with depth/min-samples/pruning (CCP $\alpha$ via CV).
-    - *Why is finding the optimal tree hard?* → NP-hard; CART is a greedy heuristic.
-    - *Why no feature scaling?* → Splits depend only on the *order* of values, so any
-      monotonic transform leaves the tree unchanged.
-
-    **Whiteboard questions**
-    - "Implement Gini and a best-split search." (Section 5.1.)
-    - "Pseudocode recursive tree growth with a stopping rule." (Section 4.3 / 5.2.)
-
-    **Strong vs weak answers**
-    - *"Your tree gets 100% train accuracy."*
-      - **Weak:** "Great, it learned the data."
-      - **Strong:** "That's a red flag — it almost certainly memorized noise. I'd
-        check the train/test gap, limit depth or prune via cross-validated
-        `ccp_alpha`, and probably move to an ensemble for the production model."
-    - *"Single tree vs random forest?"*
-      - **Weak:** "Forest is just better."
-      - **Strong:** "A single tree is low-bias but high-variance/unstable. A forest
-        averages many decorrelated trees to cut variance with little bias cost — at
-        the price of interpretability, which I'd recover with SHAP."
-
-    **Follow-ups:** "How do you choose depth?" (CV / pruning path). "Trees for
-    regression?" (variance impurity, predict the mean). "High-cardinality categorical
-    — what happens?" (split bias; encode carefully).
-
-    **Common mistakes:** shipping a deep single tree to prod; equating train accuracy
-    with quality; thinking Gini vs entropy matters much; forgetting tree instability;
-    claiming trees extrapolate.
-    """),
-
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
-
-    1. **What is it?** Describe a decision tree as recursive partitioning.
-    2. **Why was it invented?** What did it offer over hand-written rules and over
-       linear models?
-    3. **How does it work?** Explain impurity, information gain, and greedy splitting.
-    4. **Why does it work?** Why does reducing impurity at each split produce a good
-       classifier — and why only locally optimal?
-    5. **When to use it?** When is a single shallow tree the right production choice?
-    6. **When NOT to use it?** Name three weaknesses (variance, diagonal boundaries,
-       extrapolation) and their symptoms.
-    7. **Tradeoffs?** Tree vs linear vs ensemble; Gini vs entropy; depth vs pruning.
-    8. **How would you productionize it?** Discuss rule export, stability monitoring,
-       and why you'd often ship an ensemble instead.
-    """),
-
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises
-
-    **Beginner (conceptual)**
-    1. Compute Gini and entropy by hand for a node with class counts [8, 2]. Which is
-       larger, and why are they "close"?
-    2. Explain in two sentences why a decision tree needs no feature scaling.
-
-    **Beginner → Intermediate (coding)**
-    3. Add **entropy** as an alternative impurity to the scratch tree and verify it
-       picks nearly the same splits as Gini.
-    4. Implement a **regression tree** (variance impurity, leaf predicts the mean)
-       and fit it to a noisy 1D sine; visualize the staircase prediction.
-
-    **Intermediate (analysis)**
-    5. Reproduce Figure 3's overfitting curve with **k-fold cross-validation** and
-       pick the best `max_depth`. Then prune a full tree via `ccp_alpha` and compare.
-    6. Quantify **instability**: train 50 trees on bootstrap samples and measure how
-       often the *root* split feature/threshold changes. Relate this to variance.
-
-    **Senior (interview + production design)**
-    7. *Whiteboard:* explain why optimal tree induction is NP-hard and what greedy
-       CART sacrifices; give a concrete example where greedy misses a better tree.
-    8. *Design:* build the loan-triage system of §9 — shallow interpretable tree for
-       auto-decisions, human-in-the-loop for the middle, plus a separate boosted
-       ensemble for risk scoring; specify rule export, stability monitoring, and
-       fairness checks.
-    9. *Diagnose:* a published decision-tree rulebook changes drastically every
-       monthly retrain, alarming stakeholders. Explain the cause from first
-       principles and propose three fixes (constraints, ensembling, monitoring).
-    """),
-
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    A decision tree learns a flowchart: greedily split feature space on the
-    (feature, threshold) that most reduces **impurity** (Gini/entropy/variance),
-    recurse, and predict the majority/mean in each leaf box. It captures nonlinearity
-    and interactions for free, needs no scaling, and is interpretable when shallow —
-    but it **overfits** and is **high-variance/unstable**. That variance is not a
-    footnote; it is the entire reason the next two notebooks exist.
-
-    **Related lesson:** `CML-04 · Random Forest` — take this exact tree, train hundreds of them on
-    bootstrap samples with randomized features, and **average** them. Variance
-    collapses, accuracy jumps, and we get the first truly production-grade tabular
-    model.
+    CML-04 addresses the instability of one tree by training many varied trees and
+    averaging their outputs.
     """),
 ]
+
 
 build("02_classical_ml/03_decision_trees.ipynb", cells)
