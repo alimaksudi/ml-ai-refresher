@@ -31,7 +31,7 @@ BUILDERS = sorted((ROOT / "tools" / "builders").rglob("*.py"))
 NOTEBOOKS = sorted((ROOT / "notebooks").rglob("*.ipynb"))
 
 FOUNDATION_PREFIXES = ("00_prerequisites/", "01_ml_foundations/")
-SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06", "MLE-04", "MLE-05", "EVAL-01"}
+SELF_CONTAINED_LESSON_IDS = {"PRE-01", "PRE-02", "PRE-03", "PRE-04", "PRE-05", "PRE-06", "FND-01", "FND-02", "FND-03", "FND-04", "CML-01", "CML-02", "CML-03", "CML-04", "CML-05", "CML-06", "MLE-04", "MLE-05", "EVAL-01", "MLE-06"}
 FORMULA_CUE = re.compile(
     r"(?i)\b(symbols?|where|means?|represents?|denotes?|read(?:s)? as|in words)\b"
 )
