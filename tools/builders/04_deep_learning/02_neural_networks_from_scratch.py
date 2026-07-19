@@ -1,732 +1,935 @@
-"""Builder for Lesson DL-02 — Neural Networks from Scratch.
+"""Build DL-02: a verified two-layer neural network from scratch."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
     # DL-02 · Neural Networks from Scratch
-    ### Section 04 — Deep Learning Foundations · *ML/AI Senior Mastery Curriculum*
 
-    **Prerequisites:** FND-04, CML-02, and DL-01. You should be able to explain
-    loss and gradient descent, trace tensor shapes, and write a correct framework
-    training/evaluation loop. This notebook now opens that loop and derives its math.
+    **Prerequisites:** FND-04, CML-02, and DL-01  
+    **Estimated study time:** 10–12 hours, including practice  
+    **Next lesson:** DL-03 · Backpropagation
 
-    > Section 02's models drew straight boundaries (linear/logistic) or axis-aligned boxes
-    > (trees). Neural networks do something qualitatively new: they **learn their own
-    > features**. A network is just **logistic regressions stacked in layers**
-    > (Lesson CML-02), with a **nonlinearity** between them — and that single addition
-    > lets it bend space into whatever shape the data needs, approximating *any*
-    > function. This notebook builds a multilayer perceptron entirely in NumPy: the
-    > forward pass as matrix multiplies (Lesson FND-01), the cross-entropy loss
-    > (Lesson FND-02), and a manual training loop (Lesson FND-04). We derive the gradients
-    > for our specific 2-layer net by hand here; Lesson DL-03 generalizes that into the
-    > **backpropagation** algorithm that powers all of deep learning.
+    DL-01 taught reliable PyTorch mechanics. Now we open the model itself.
+
+    A feed-forward neural network is a composition of affine transformations and
+    nonlinear activations. We will calculate one neuron, build one hidden layer in
+    NumPy, derive every gradient for that specific network, verify those gradients
+    numerically, and then reproduce the same computation in PyTorch.
+
+    ### Scope boundary
+
+    This lesson covers binary classification with one hidden layer. DL-03 generalizes
+    the chain rule into reverse-mode automatic differentiation for arbitrary computation
+    graphs. DL-04 covers regularization and stable deep training.
+
+    Universal approximation means suitable weights exist under stated conditions. It
+    does not guarantee that training finds them, that finite data supports them, or that
+    the resulting model generalizes.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The neuron as a **logistic-regression unit**, and a network as **stacked layers**
-      of them with nonlinear activations between (the CML-02 link).
-    - Why **nonlinearity is essential**: stacking linear layers collapses to one linear
-      layer; the activation is what buys expressiveness.
-    - The **XOR problem** that killed the perceptron, and how a hidden layer solves it
-      by learning a **new representation** where the classes become linearly separable.
-    - **Universal approximation**: enough hidden units can fit any continuous function.
-    - Activations (**sigmoid, tanh, ReLU**), their derivatives, and the saturation /
-      vanishing-gradient story.
-    - A complete **from-scratch NumPy MLP** — forward pass, manual gradients, training
-      loop — fit to a nonlinear dataset.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - Every deep model (CNNs, RNNs, Transformers, LLMs) is this same machinery scaled
-      and specialized; the MLP is the atom.
-    - "Deep learning = representation learning" is the paradigm shift from hand-crafted
-      features (Lesson MLE-03) to learned ones.
-    - Understanding the forward pass + gradients from scratch is what lets you debug
-      training failures that a framework hides.
+    - calculate a neuron's weighted sum and activation manually;
+    - trace every shape through a batched hidden layer;
+    - prove that stacked affine maps without activation remain affine;
+    - compare sigmoid, tanh, and ReLU by output and derivative behavior;
+    - distinguish logits, probabilities, decisions, and loss;
+    - calculate stable binary cross-entropy directly from logits;
+    - count parameters in a two-layer network;
+    - choose Xavier or He initialization from the activation;
+    - derive gradients for weights and biases in a two-layer network;
+    - implement the complete forward and backward pass in NumPy;
+    - verify analytical gradients with finite differences;
+    - fit preprocessing and models on training data only;
+    - select and restore a checkpoint using validation loss;
+    - inspect a learned hidden representation without using test rows;
+    - reproduce NumPy logits and gradients in PyTorch;
+    - evaluate the frozen model once on sealed test data.
 
-    **Typical interview questions**
-    - "Why does a neural network need nonlinear activations?"
-    - "What is the XOR problem and why did it matter historically?"
-    - "Explain universal approximation — does it mean NNs always work?"
-    - "Sigmoid vs tanh vs ReLU — tradeoffs?"
-    - "Walk me through the forward pass and loss of an MLP."
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The perceptron (Rosenblatt, 1958).** The first trainable neuron: a weighted sum
-    passed through a step function — essentially Lesson CML-02's logistic unit with a
-    hard threshold. It learned linearly separable patterns and sparked huge optimism
-    about "thinking machines."
-
-    **The XOR winter (Minsky & Papert, 1969).** Minsky and Papert proved a single
-    perceptron **cannot** learn XOR — a trivially simple function that isn't linearly
-    separable (no single line separates the classes). This devastating result (a single
-    linear unit can only draw a line, Lesson CML-02) helped trigger the first "AI winter":
-    funding and interest collapsed for over a decade.
-
-    **The fix was always there: hidden layers.** Stacking a *hidden* layer of neurons
-    between input and output lets the network first transform the data into a new space
-    where the classes *are* linearly separable — then a final linear unit finishes the
-    job. The missing piece was *how to train* such a network, solved by the
-    rediscovery and popularization of **backpropagation** (Rumelhart, Hinton &
-    Williams, 1986 — our Lesson DL-03).
-
-    **Universal approximation (Cybenko 1989, Hornik 1991).** It was then proven that a
-    network with a single hidden layer and enough units can approximate *any*
-    continuous function to arbitrary accuracy. Neural networks are, in principle,
-    universal function approximators — which is *why* they can fit the nonlinear
-    boundaries that defeated linear models and the staircases that limited trees.
-
-    **Why over linear models / trees (the Phase-1 contrast).** Linear models need you to
-    *engineer* nonlinearity (Lesson MLE-03); trees carve axis-aligned boxes (Lesson CML-03).
-    A neural network **learns a smooth, nonlinear representation directly from data** —
-    no feature engineering, no axis alignment. The price (which the rest of Section 04
-    addresses): they need more data, more compute, careful optimization, and they're
-    far less interpretable.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **A neuron is a logistic regression.** Recall Lesson CML-02: compute a weighted sum
-    $z=\mathbf w^\top\mathbf x+b$, squash it through a nonlinearity $a=g(z)$. That's one
-    neuron. A **layer** is many neurons sharing the same inputs (a matrix multiply,
-    Lesson FND-01). A **network** stacks layers: each layer's outputs feed the next.
-
-    **Why the nonlinearity is non-negotiable.** If $g$ were the identity (no
-    nonlinearity), then $W_2(W_1\mathbf x)=(W_2W_1)\mathbf x$ — a product of matrices is
-    just *another* matrix. A hundred linear layers collapse into a single linear layer:
-    no more expressive than logistic regression. The **activation** breaks this
-    collapse; it's the source of all the network's power to bend space.
-
-    **The key idea: hidden layers learn a new representation.** Take XOR — four points
-    that no line can separate. A hidden layer *folds and stretches* the input space so
-    that, in the **hidden-layer coordinates**, the four points *become* linearly
-    separable, and the output neuron (a plain logistic unit) finishes easily. "Deep
-    learning is representation learning": the early layers learn features so the last
-    layer's job is simple.
-
-    **Universal approximation, intuitively.** Each hidden unit contributes a soft
-    "bump"/"ridge" (a sigmoid step or ReLU hinge). Add enough of them with the right
-    weights and you can paint any shape — like building a curve out of many small tiles.
+    ### Learning path
 
     ```mermaid
     flowchart LR
-        X["input x"] --> H1["hidden layer<br/>z1 = xW1+b1, a1 = g(z1)"]
-        H1 --> H2["(more layers...)"]
-        H2 --> O["output<br/>z = aW+b, p = softmax/sigmoid"]
-        O --> L["loss (cross-entropy, FND-02)"]
-        L -.->|"gradients (DL-03)"| H1
+        A[One neuron] --> B[Batched layer]
+        B --> C[Nonlinearity]
+        C --> D[Two-layer forward pass]
+        D --> E[Logit loss]
+        E --> F[Two-layer chain rule]
+        F --> G[NumPy implementation]
+        G --> H[Gradient check]
+        H --> I[Validation checkpoint]
+        I --> J[PyTorch verification]
+        J --> K[One sealed test]
     ```
 
-    Run the cells — first, watch a linear model fail XOR and an MLP solve it.
+    Weighted sums  
+    → required before a neuron  
+    → because a neuron begins as the same affine score used in logistic regression.
+
+    Scalar chain rule  
+    → required before matrix gradients  
+    → because matrix formulas collect many scalar derivative paths.
+
+    Gradient checking  
+    → required before trusting scratch training  
+    → because an incorrect derivative may still produce a plausible-looking loss curve.
+    """),
+
+    md(r"""
+    ## 2 · The practical problem: XOR defeats one straight boundary
+
+    XOR returns positive when exactly one input is positive:
+
+    | $x_1$ | $x_2$ | XOR target |
+    |---:|---:|---:|
+    | 0 | 0 | 0 |
+    | 0 | 1 | 1 |
+    | 1 | 0 | 1 |
+    | 1 | 1 | 0 |
+
+    The two positive corners are diagonal from each other. No single straight line can
+    put both positives on one side and both negatives on the other.
+
+    A hidden layer can learn new coordinates. The output layer then draws a straight
+    boundary in that learned space. This is **representation learning**: the network
+    changes the features presented to its final linear decision.
+
+    XOR proves that a hidden nonlinear representation can add expressive power. It does
+    not prove neural networks are the best model for every dataset.
     """),
 
     code(r"""
-    import numpy as np
+    import copy
+
     import matplotlib.pyplot as plt
-
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-
-    def sigmoid(z):
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
-    print("NumPy", np.__version__)
-    """),
-
-    # ============================================ 4. Mathematical Foundations
-    md(r"""
-    ## 4 · Mathematical Foundations
-
-    ### 4.1 A layer is an affine map + nonlinearity
-    For inputs $X\in\mathbb R^{n\times d}$, a layer with $h$ units has weights
-    $W\in\mathbb R^{d\times h}$ and bias $\mathbf b\in\mathbb R^h$:
-    $$Z = XW + \mathbf b,\qquad A = g(Z),$$
-    where $g$ is applied elementwise. The matrix multiply (Lesson FND-01) computes all
-    neurons for all examples at once.
-
-    ### 4.2 A 2-layer MLP (one hidden layer)
-    $$Z_1 = XW_1+\mathbf b_1,\quad A_1=g(Z_1),\quad
-    Z_2 = A_1W_2+\mathbf b_2,\quad \hat y=\sigma(Z_2).$$
-    Hidden activation $g$ (tanh/ReLU) provides nonlinearity; the output $\sigma$
-    (sigmoid for binary, softmax for multiclass) produces probabilities. This is
-    *exactly* logistic regression (Lesson CML-02) applied to the **learned features**
-    $A_1$ instead of the raw inputs.
-
-    ### 4.3 Why nonlinearity is essential (the collapse argument)
-    With $g=\text{identity}$: $\hat y = (A_1)W_2 = (XW_1)W_2 = X(W_1W_2)=XW'$. The whole
-    network is a single linear map $W'$ — no gain over one layer. A nonlinear $g$ makes
-    the composition strictly more expressive; this is the mathematical reason hidden
-    layers help.
-
-    ### 4.4 Activation functions and their derivatives
-    | Activation | $g(z)$ | $g'(z)$ | Range | Notes |
-    |---|---|---|---|---|
-    | **Sigmoid** | $\frac{1}{1+e^{-z}}$ | $g(1-g)$ | $(0,1)$ | Saturates → vanishing gradients |
-    | **Tanh** | $\tanh z$ | $1-\tanh^2 z$ | $(-1,1)$ | Zero-centered; still saturates |
-    | **ReLU** | $\max(0,z)$ | $\mathbb 1[z>0]$ | $[0,\infty)$ | No saturation for $z>0$; can "die" |
-
-    ReLU's constant gradient for positive inputs is *why* it enabled training very deep
-    networks (no vanishing on the active side) — the default for hidden layers.
-
-    ### 4.5 Loss (Lesson FND-02)
-    Binary: cross-entropy $J=-\frac1n\sum[y\log\hat y+(1-y)\log(1-\hat y)]$ (Bernoulli
-    NLL). Multiclass: softmax + categorical cross-entropy. Regression: MSE (Gaussian
-    NLL). Same loss-design logic as Section 02 — choosing the loss = choosing the noise
-    model.
-
-    ### 4.6 Gradients for our 2-layer net (chain rule, by hand)
-    With binary cross-entropy + sigmoid output, the output error simplifies beautifully
-    (as in Lesson CML-02): $\;dZ_2=\hat y - y$. Then propagate backward through the layer:
-    $$dW_2 = \tfrac1n A_1^\top dZ_2,\quad dZ_1 = (dZ_2\,W_2^\top)\odot g'(Z_1),\quad
-    dW_1 = \tfrac1n X^\top dZ_1.$$
-    This *is* backpropagation for two layers — repeated application of the chain rule,
-    reusing each layer's stored activations. **Lesson DL-03 turns this hand-derivation
-    into the general algorithm** for arbitrary depth. Here we code these exact formulas.
-
-    ### 4.7 Universal approximation (statement)
-    *A feed-forward network with a single hidden layer containing finitely many neurons
-    and a non-polynomial activation can approximate any continuous function on a compact
-    set to arbitrary accuracy.* Caveat: it guarantees *existence* of weights, not that
-    gradient descent will *find* them, nor that the width needed is practical — depth
-    often achieves the same with exponentially fewer units.
-    """),
-
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    A complete one-hidden-layer MLP in NumPy: forward pass, the hand-derived gradients
-    from §4.6, and a gradient-descent training loop (Lesson FND-04). We first prove the
-    *motivation* — a linear model cannot learn XOR — then watch the MLP succeed.
-    """),
-
-    code(r"""
-    # 5.1 The MLP: forward pass + manual backward (the §4.6 chain-rule formulas).
-    class MLP:
-        def __init__(self, n_in, n_hidden, seed=0, activation="tanh"):
-            r = np.random.default_rng(seed)
-            # Xavier/He-style init: scale by fan-in to keep activations well-scaled (FND-04 conditioning)
-            self.W1 = r.normal(0, 1, (n_in, n_hidden)) * np.sqrt(2.0 / n_in)
-            self.b1 = np.zeros(n_hidden)
-            self.W2 = r.normal(0, 1, (n_hidden, 1)) * np.sqrt(1.0 / n_hidden)
-            self.b2 = np.zeros(1)
-            self.act = activation
-
-        def _g(self, z):
-            return np.tanh(z) if self.act == "tanh" else np.maximum(0, z)
-
-        def _gprime(self, z, a):
-            return (1 - a ** 2) if self.act == "tanh" else (z > 0).astype(float)
-
-        def forward(self, X):
-            self.X = X
-            self.z1 = X @ self.W1 + self.b1
-            self.a1 = self._g(self.z1)
-            self.z2 = self.a1 @ self.W2 + self.b2
-            self.p = sigmoid(self.z2)
-            return self.p
-
-        def backward(self, y):
-            n = len(self.X); y = y.reshape(-1, 1)
-            dz2 = (self.p - y) / n                       # BCE + sigmoid -> (p - y)
-            dW2 = self.a1.T @ dz2
-            db2 = dz2.sum(0)
-            da1 = dz2 @ self.W2.T
-            dz1 = da1 * self._gprime(self.z1, self.a1)   # chain rule through activation
-            dW1 = self.X.T @ dz1
-            db1 = dz1.sum(0)
-            return dW1, db1, dW2, db2
-
-        def step(self, grads, lr):
-            dW1, db1, dW2, db2 = grads
-            self.W1 -= lr * dW1; self.b1 -= lr * db1
-            self.W2 -= lr * dW2; self.b2 -= lr * db2
-
-    def bce(y, p, eps=1e-12):
-        p = np.clip(p, eps, 1 - eps); y = y.reshape(-1, 1)
-        return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
-
-    def train(model, X, y, lr=0.5, epochs=3000):
-        hist = []
-        for _ in range(epochs):
-            model.forward(X)
-            model.step(model.backward(y), lr)
-            hist.append(bce(y, model.p))
-        return hist
-    """),
-
-    code(r"""
-    # 5.2 Motivation: a LINEAR model cannot learn XOR; a 2-layer MLP can.
-    # noisy XOR: 4 clusters, class = (x>0) XOR (y>0)
-    def make_xor(n=400, seed=0):
-        r = np.random.default_rng(seed)
-        X = r.uniform(-1, 1, (n, 2))
-        y = ((X[:, 0] > 0) ^ (X[:, 1] > 0)).astype(float)
-        X += r.normal(0, 0.08, X.shape)
-        return X, y
-
-    Xx, yx = make_xor()
-    from sklearn.linear_model import LogisticRegression
-    lin = LogisticRegression().fit(Xx, yx)
-    mlp = MLP(2, 8, seed=1, activation="tanh")
-    _ = train(mlp, Xx, yx, lr=0.5, epochs=4000)
-
-    lin_acc = (lin.predict(Xx) == yx).mean()
-    mlp_acc = ((mlp.forward(Xx) > 0.5).ravel() == yx).mean()
-    print(f"linear model XOR accuracy : {lin_acc:.2f}  (~chance: no line separates XOR)")
-    print(f"2-layer MLP XOR accuracy  : {mlp_acc:.2f}  (hidden layer solves it)")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    Five pictures: the XOR boundaries, the activation functions and their gradients,
-    the MLP learning a nonlinear boundary, the universal-approximation width effect,
-    and — the key insight — the **learned representation** that makes classes
-    separable.
-    """),
-
-    code(r"""
-    # Figure 1 — XOR: linear boundary fails, MLP boundary succeeds.
-    def plot_boundary(ax, predict_fn, X, y, title):
-        xx, yy = np.meshgrid(np.linspace(-1.3, 1.3, 200), np.linspace(-1.3, 1.3, 200))
-        Z = predict_fn(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-        ax.contourf(xx, yy, Z, levels=[-0.5, 0.5, 1.5], cmap="RdBu", alpha=0.4)
-        ax.scatter(X[:, 0], X[:, 1], c=y, cmap="RdBu", edgecolor="k", s=12)
-        ax.set_title(title); ax.set_aspect("equal")
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    plot_boundary(axes[0], lambda G: lin.predict(G), Xx, yx, "Linear model: cannot split XOR")
-    plot_boundary(axes[1], lambda G: (mlp.forward(G) > 0.5).astype(int).ravel(), Xx, yx,
-                  "2-layer MLP: bends space to solve XOR")
-    plt.suptitle("Figure 1 — One hidden layer defeats the problem that ended the perceptron era")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 1.** A linear model (left) can only draw one straight line, so on XOR it's
-    stuck near chance — the 1969 result that triggered the AI winter. The MLP (right)
-    uses its hidden layer to carve a nonlinear boundary that isolates both diagonal
-    clusters. Same data, same logistic *output* unit — the difference is the hidden
-    layer transforming the inputs first. This one picture is the entire reason deep
-    learning exists.
-    """),
-
-    code(r"""
-    # Figure 2 — activation functions and their derivatives (the vanishing-gradient story).
-    z = np.linspace(-5, 5, 300)
-    acts = {"sigmoid": (sigmoid(z), sigmoid(z) * (1 - sigmoid(z))),
-            "tanh": (np.tanh(z), 1 - np.tanh(z) ** 2),
-            "ReLU": (np.maximum(0, z), (z > 0).astype(float))}
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-    for name, (a, d) in acts.items():
-        axes[0].plot(z, a, label=name)
-        axes[1].plot(z, d, label=f"{name}'")
-    axes[0].set_title("Activations g(z)"); axes[0].legend()
-    axes[1].set_title("Derivatives g'(z) -- note sigmoid/tanh -> 0 at the extremes")
-    axes[1].legend()
-    plt.suptitle("Figure 2 — Activations and gradients: why ReLU avoids vanishing gradients")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 2.** The activation injects the nonlinearity that prevents layer collapse
-    (§4.3). Their **derivatives** matter for training (Lesson DL-03): sigmoid and tanh
-    **saturate** — their gradient $\to 0$ for large $|z|$, so a saturated neuron stops
-    learning and, stacked deep, gradients **vanish**. **ReLU**'s derivative is a
-    constant 1 for $z>0$, so it doesn't saturate on the active side — the key reason it
-    enabled training deep networks. Its weakness: units with $z<0$ have zero gradient
-    and can "die" (§7).
-    """),
-
-    code(r"""
-    # Figure 3 — train an MLP on 'moons' (nonlinear) and watch loss fall + boundary form.
+    import numpy as np
+    import pandas as pd
+    import torch
     from sklearn.datasets import make_moons
-    Xm, ym = make_moons(n_samples=400, noise=0.2, random_state=0)
-    Xm = (Xm - Xm.mean(0)) / Xm.std(0)               # standardize (FND-04/MLE-03)
-    net = MLP(2, 16, seed=2, activation="tanh")
-    hist = train(net, Xm, ym.astype(float), lr=0.3, epochs=4000)
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import accuracy_score, log_loss
+    from sklearn.model_selection import train_test_split
+    from torch import nn
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    axes[0].plot(hist); axes[0].set_xlabel("epoch"); axes[0].set_ylabel("cross-entropy")
-    axes[0].set_title("Training loss")
-    xx, yy = np.meshgrid(np.linspace(-2.5, 2.5, 200), np.linspace(-2.5, 2.5, 200))
-    P = net.forward(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-    axes[1].contourf(xx, yy, P, levels=20, cmap="RdBu", alpha=0.7)
-    axes[1].contour(xx, yy, P, levels=[0.5], colors="k")
-    axes[1].scatter(Xm[:, 0], Xm[:, 1], c=ym, cmap="RdBu", edgecolor="k", s=12)
-    acc = ((net.forward(Xm) > 0.5).ravel() == ym).mean()
-    axes[1].set_title(f"Learned boundary (acc {acc:.2f})"); axes[1].set_aspect("equal")
-    plt.suptitle("Figure 3 — A from-scratch MLP fits a curved boundary")
+    # Keep XOR tiny so we can inspect every row and isolate the geometry problem.
+    xor_features = np.array(
+        [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]]
+    )
+    xor_targets = np.array([0, 1, 1, 0])
+
+    xor_linear_model = LogisticRegression(C=1e6, random_state=42)
+    xor_linear_model.fit(xor_features, xor_targets)
+    xor_linear_predictions = xor_linear_model.predict(xor_features)
+
+    print("XOR predictions from one linear boundary:", xor_linear_predictions)
+    print("XOR accuracy:", accuracy_score(xor_targets, xor_linear_predictions))
+
+    assert accuracy_score(xor_targets, xor_linear_predictions) < 1.0
+    """),
+
+    md(r"""
+    ## 3 · Calculate one neuron before building a layer
+
+    A neuron first calculates a logit:
+
+    $$
+    z=w_1x_1+w_2x_2+b
+    $$
+
+    **Symbols:** $x_1,x_2$ are inputs; $w_1,w_2$ are learned weights; $b$ is bias; and
+    $z$ is the raw output before activation.
+
+    Let $x=[2,3]$, $w=[0.5,-1]$, and $b=0.25$:
+
+    $$
+    z=(0.5)(2)+(-1)(3)+0.25=-1.75
+    $$
+
+    A sigmoid output is $\sigma(z)=1/(1+e^{-z})\approx0.148$. That number can be read
+    as a binary probability only when sigmoid is the declared output link and the model
+    has been trained and evaluated for that purpose.
+
+    Hidden neurons need not use sigmoid. They commonly use tanh, ReLU, GELU, or another
+    nonlinearity appropriate to the architecture.
+    """),
+
+    code(r"""
+    def stable_sigmoid(values):
+        '''Calculate sigmoid without overflowing for large positive or negative inputs.'''
+        values = np.asarray(values, dtype=float)
+
+        # Use two equivalent formulas: each avoids exponentiating a large positive number.
+        positive_mask = values >= 0
+        results = np.empty_like(values)
+        results[positive_mask] = 1 / (1 + np.exp(-values[positive_mask]))
+        negative_exponentials = np.exp(values[~positive_mask])
+        results[~positive_mask] = negative_exponentials / (1 + negative_exponentials)
+        return results
+
+
+    neuron_inputs = np.array([2.0, 3.0])
+    neuron_weights = np.array([0.5, -1.0])
+    neuron_bias = 0.25
+    neuron_logit = neuron_inputs @ neuron_weights + neuron_bias
+    neuron_output = stable_sigmoid(np.array([neuron_logit]))[0]
+
+    print("logit:", neuron_logit)
+    print("sigmoid output:", round(float(neuron_output), 4))
+
+    assert np.isclose(neuron_logit, -1.75)
+    """),
+
+    md(r"""
+    ## 4 · A layer batches many neurons, and nonlinearity prevents collapse
+
+    For batch $X\in\mathbb R^{B\times d}$ and $h$ hidden units:
+
+    $$
+    Z_1=XW_1+b_1,\qquad A_1=g(Z_1)
+    $$
+
+    **Symbols:** $B$ is batch size; $d$ is input width; $h$ is hidden width;
+    $W_1\in\mathbb R^{d\times h}$; $b_1\in\mathbb R^h$; and $A_1$ is the hidden
+    representation.
+
+    Without activation, two affine layers collapse:
+
+    $$
+    (XW_1+b_1)W_2+b_2=X(W_1W_2)+(b_1W_2+b_2)
+    $$
+
+    The result is another affine map. Depth without nonlinear activation cannot solve
+    XOR. The activation changes the geometry between layers.
+    """),
+
+    code(r"""
+    layer_inputs = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    first_weights = np.array([[1.0, -1.0, 0.5], [0.5, 2.0, -0.5]])
+    first_bias = np.array([0.1, 0.2, 0.3])
+    second_weights = np.array([[1.0], [-0.5], [2.0]])
+    second_bias = np.array([0.4])
+
+    # Calculate the long route first, then combine its weights and biases algebraically.
+    two_affine_layers = (layer_inputs @ first_weights + first_bias) @ second_weights + second_bias
+    collapsed_weights = first_weights @ second_weights
+    collapsed_bias = first_bias @ second_weights + second_bias
+    one_collapsed_layer = layer_inputs @ collapsed_weights + collapsed_bias
+
+    print("input shape:", layer_inputs.shape)
+    print("hidden pre-activation shape:", (layer_inputs @ first_weights + first_bias).shape)
+    print("output shape:", two_affine_layers.shape)
+    print("two affine layers equal one collapsed layer:", np.allclose(two_affine_layers, one_collapsed_layer))
+
+    assert np.allclose(two_affine_layers, one_collapsed_layer)
+    """),
+
+    md(r"""
+    ## 5 · Activation choice changes both representation and gradient flow
+
+    | Activation | Output | Derivative | Main caution |
+    |---|---|---|---|
+    | sigmoid | $\sigma(z)$ | $\sigma(z)(1-\sigma(z))$ | saturates near 0 and 1 |
+    | tanh | $\tanh(z)$ | $1-\tanh^2(z)$ | saturates at large magnitude |
+    | ReLU | $\max(0,z)$ | 1 for positive, 0 for negative | inactive units can receive zero local gradient |
+
+    ReLU avoids sigmoid-style saturation on its positive side, but it does not guarantee
+    healthy gradients through a deep network. Products of weights and derivatives can
+    still shrink or explode. DL-03 and DL-04 develop that story.
+
+    Tanh is convenient for the small scratch network because it is smooth, zero-centered,
+    and has an easy derivative. Modern architectures often use ReLU-family or GELU
+    activations.
+    """),
+
+    code(r"""
+    activation_inputs = np.linspace(-6, 6, 300)
+    sigmoid_outputs = stable_sigmoid(activation_inputs)
+    activation_curves = {
+        "sigmoid": (sigmoid_outputs, sigmoid_outputs * (1 - sigmoid_outputs)),
+        "tanh": (np.tanh(activation_inputs), 1 - np.tanh(activation_inputs) ** 2),
+        "ReLU": (np.maximum(0, activation_inputs), (activation_inputs > 0).astype(float)),
+    }
+
+    # Plot outputs beside local slopes: learning depends on both views.
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    for activation_name, (outputs, derivatives) in activation_curves.items():
+        axes[0].plot(activation_inputs, outputs, label=activation_name)
+        axes[1].plot(activation_inputs, derivatives, label=activation_name)
+    axes[0].set_title("Activation outputs")
+    axes[1].set_title("Local derivatives")
+    for axis in axes:
+        axis.axhline(0, color="gray", linewidth=0.7)
+        axis.legend()
     plt.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 3.** The loss falls smoothly as gradient descent (Lesson FND-04) updates the
-    hand-derived gradients (§4.6), and the network carves a **smooth, curved** decision
-    boundary around the interleaving moons — something neither a linear model nor a
-    shallow tree manages cleanly. Note we **standardized** the inputs first: like every
-    gradient-based model (Lessons FND-04, CML-01, and CML-02), NNs train far better on well-scaled data.
+    ## 6 · Trace the two-layer forward pass from inputs to stable loss
+
+    Our binary network uses tanh hidden units and one output logit:
+
+    $$
+    Z_1=XW_1+b_1
+    $$
+
+    $$
+    A_1=\tanh(Z_1)
+    $$
+
+    $$
+    Z_2=A_1W_2+b_2
+    $$
+
+    A sigmoid converts $Z_2$ to probabilities for interpretation. A threshold converts
+    probability into a decision. Training loss should use logits directly.
+
+    Stable binary cross-entropy for one logit $z$ and target $y\in\{0,1\}$ is:
+
+    $$
+    \ell(z,y)=\max(z,0)-zy+\log(1+e^{-|z|})
+    $$
+
+    This is mathematically equivalent to probability BCE but avoids computing
+    `log(0)` after sigmoid saturation. PyTorch packages it as `BCEWithLogitsLoss`.
     """),
 
     code(r"""
-    # Figure 4 — universal approximation: more hidden units -> more boundary complexity.
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
-    for ax, h in zip(axes, [2, 8, 64]):
-        net_h = MLP(2, h, seed=3, activation="tanh")
-        train(net_h, Xm, ym.astype(float), lr=0.3, epochs=3000)
-        xx, yy = np.meshgrid(np.linspace(-2.5, 2.5, 150), np.linspace(-2.5, 2.5, 150))
-        P = net_h.forward(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-        ax.contourf(xx, yy, P, levels=[0, 0.5, 1], cmap="RdBu", alpha=0.4)
-        ax.scatter(Xm[:, 0], Xm[:, 1], c=ym, cmap="RdBu", edgecolor="k", s=8)
-        acc = ((net_h.forward(Xm) > 0.5).ravel() == ym).mean()
-        ax.set_title(f"{h} hidden units (acc {acc:.2f})"); ax.set_aspect("equal")
-    plt.suptitle("Figure 4 — Width and expressiveness (universal approximation in action)")
+    def binary_cross_entropy_from_logits(logits, targets):
+        '''Return stable mean binary cross-entropy from raw logits.'''
+        logits = np.asarray(logits, dtype=float)
+        targets = np.asarray(targets, dtype=float).reshape(logits.shape)
+        losses = np.maximum(logits, 0) - logits * targets + np.log1p(np.exp(-np.abs(logits)))
+        return float(np.mean(losses))
+
+
+    forward_example_inputs = np.array([[0.2, -0.4], [1.0, 0.5]])
+    forward_example_targets = np.array([[0.0], [1.0]])
+    forward_W1 = np.array([[0.3, -0.2, 0.5], [0.1, 0.4, -0.3]])
+    forward_b1 = np.array([0.0, 0.1, -0.1])
+    forward_W2 = np.array([[0.6], [-0.5], [0.2]])
+    forward_b2 = np.array([0.05])
+
+    # Name each intermediate exactly as in the equations so shapes stay traceable.
+    forward_Z1 = forward_example_inputs @ forward_W1 + forward_b1
+    forward_A1 = np.tanh(forward_Z1)
+    forward_Z2 = forward_A1 @ forward_W2 + forward_b2
+    forward_probabilities = stable_sigmoid(forward_Z2)
+    forward_loss = binary_cross_entropy_from_logits(forward_Z2, forward_example_targets)
+
+    print("X:", forward_example_inputs.shape)
+    print("Z1 and A1:", forward_Z1.shape, forward_A1.shape)
+    print("Z2 and probability:", forward_Z2.shape, forward_probabilities.shape)
+    print("mean stable BCE:", round(forward_loss, 5))
+
+    assert forward_Z2.shape == (2, 1)
+    """),
+
+    md(r"""
+    ## 7 · Count parameters and match initialization to activation
+
+    With input width $d$, hidden width $h$, and one output, parameter count is:
+
+    $$
+    dh+h+h+1=dh+2h+1
+    $$
+
+    The terms are $W_1$, $b_1$, $W_2$, and $b_2$.
+
+    If weights are too large, activations may saturate or explode. If too small, signals
+    may disappear. Common variance-preserving starting points are:
+
+    - Xavier for tanh: standard deviation approximately $\sqrt{1/\text{fan-in}}$;
+    - He for ReLU: standard deviation approximately $\sqrt{2/\text{fan-in}}$.
+
+    These are starting assumptions, not guarantees. Biases may begin at zero because
+    random weights already break hidden-unit symmetry. Initializing every hidden weight
+    identically prevents units from learning distinct features.
+    """),
+
+    code(r"""
+    def initialize_two_layer_parameters(input_width, hidden_width, activation="tanh", random_seed=0):
+        '''Initialize a binary two-layer network with activation-aware weight scale.'''
+        random_generator_local = np.random.default_rng(random_seed)
+
+        # The hidden activation determines the variance-preserving scale for W1.
+        hidden_scale = np.sqrt(2 / input_width) if activation == "relu" else np.sqrt(1 / input_width)
+        return {
+            "W1": random_generator_local.normal(0, hidden_scale, (input_width, hidden_width)),
+            "b1": np.zeros(hidden_width),
+            "W2": random_generator_local.normal(0, np.sqrt(1 / hidden_width), (hidden_width, 1)),
+            "b2": np.zeros(1),
+        }
+
+
+    initialization_example = initialize_two_layer_parameters(2, 8, activation="tanh", random_seed=42)
+    counted_parameters = sum(parameter.size for parameter in initialization_example.values())
+    formula_parameter_count = 2 * 8 + 2 * 8 + 1
+
+    print("parameter shapes:", {name: value.shape for name, value in initialization_example.items()})
+    print("counted parameters:", counted_parameters)
+    print("formula parameters:", formula_parameter_count)
+
+    assert counted_parameters == formula_parameter_count == 33
+    """),
+
+    md(r"""
+    ## 8 · Derive the two-layer gradients one dependency at a time
+
+    For mean BCE with sigmoid-linked logits, the output derivative simplifies to:
+
+    $$
+    dZ_2=\frac{\hat Y-Y}{B}
+    $$
+
+    Then move backward:
+
+    $$
+    dW_2=A_1^TdZ_2,\qquad db_2=\sum_{i=1}^{B}dZ_{2,i}
+    $$
+
+    $$
+    dA_1=dZ_2W_2^T
+    $$
+
+    $$
+    dZ_1=dA_1\odot(1-A_1^2)
+    $$
+
+    $$
+    dW_1=X^TdZ_1,\qquad db_1=\sum_{i=1}^{B}dZ_{1,i}
+    $$
+
+    **Symbols:** $B$ is batch size; $\hat Y$ is sigmoid probability; $\odot$ is
+    elementwise multiplication; and each `dName` means derivative of mean loss with
+    respect to `Name`.
+
+    This is backpropagation for one specific network. DL-03 will replace hand-written
+    layer formulas with a general graph traversal.
+    """),
+
+    md(r"""
+    ## 9 · Implement the verified NumPy network
+
+    The implementation keeps forward cache explicit rather than storing the latest batch
+    invisibly on the model. That prevents a plotting call from accidentally overwriting
+    data needed by a later backward pass.
+
+    The model returns logits. Probability conversion is separate. Each gradient has the
+    same shape as its parameter, and `state_dict` creates an independent checkpoint copy.
+    """),
+
+    code(r"""
+    class TwoLayerNumpyNetwork:
+        def __init__(self, input_width, hidden_width, random_seed=0):
+            self.parameters = initialize_two_layer_parameters(
+                input_width,
+                hidden_width,
+                activation="tanh",
+                random_seed=random_seed,
+            )
+
+        def forward(self, inputs):
+            W1, b1 = self.parameters["W1"], self.parameters["b1"]
+            W2, b2 = self.parameters["W2"], self.parameters["b2"]
+            hidden_logits = inputs @ W1 + b1
+            hidden_activations = np.tanh(hidden_logits)
+            output_logits = hidden_activations @ W2 + b2
+
+            # Return the exact intermediates backward needs; do not hide mutable batch state.
+            cache = {
+                "inputs": inputs,
+                "hidden_logits": hidden_logits,
+                "hidden_activations": hidden_activations,
+                "output_logits": output_logits,
+            }
+            return output_logits, cache
+
+        def probabilities(self, inputs):
+            output_logits, _ = self.forward(inputs)
+            return stable_sigmoid(output_logits)
+
+        def backward(self, targets, cache):
+            targets = np.asarray(targets, dtype=float).reshape(-1, 1)
+            inputs = cache["inputs"]
+            hidden_activations = cache["hidden_activations"]
+            output_logits = cache["output_logits"]
+            W2 = self.parameters["W2"]
+            batch_size = len(inputs)
+
+            # Start from dL/dZ2, then follow the graph backward one edge at a time.
+            output_gradient = (stable_sigmoid(output_logits) - targets) / batch_size
+            dW2 = hidden_activations.T @ output_gradient
+            db2 = output_gradient.sum(axis=0)
+            hidden_activation_gradient = output_gradient @ W2.T
+            hidden_logit_gradient = hidden_activation_gradient * (1 - hidden_activations ** 2)
+            dW1 = inputs.T @ hidden_logit_gradient
+            db1 = hidden_logit_gradient.sum(axis=0)
+            return {"W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
+
+        def apply_gradients(self, gradients, learning_rate):
+            for parameter_name in self.parameters:
+                self.parameters[parameter_name] -= learning_rate * gradients[parameter_name]
+
+        def state_dict(self):
+            # Copies make the checkpoint independent of later in-place updates.
+            return {name: value.copy() for name, value in self.parameters.items()}
+
+        def load_state_dict(self, state):
+            self.parameters = {name: value.copy() for name, value in state.items()}
+
+
+    implementation_example = TwoLayerNumpyNetwork(2, 4, random_seed=42)
+    implementation_logits, implementation_cache = implementation_example.forward(forward_example_inputs)
+    implementation_gradients = implementation_example.backward(forward_example_targets, implementation_cache)
+
+    print("logit shape:", implementation_logits.shape)
+    print("gradient shapes:", {name: value.shape for name, value in implementation_gradients.items()})
+
+    for parameter_name in implementation_example.parameters:
+        assert implementation_gradients[parameter_name].shape == implementation_example.parameters[parameter_name].shape
+    """),
+
+    md(r"""
+    ## 10 · Verify every analytical gradient with finite differences
+
+    For parameter value $\theta$ and small $\varepsilon$:
+
+    $$
+    \frac{\partial L}{\partial\theta}\approx
+    \frac{L(\theta+\varepsilon)-L(\theta-\varepsilon)}{2\varepsilon}
+    $$
+
+    This central difference is slow but independent of the backward formulas. It is a
+    debugging oracle for a small network.
+
+    Relative error compares analytical and numerical values:
+
+    $$
+    \operatorname{relative\ error}=
+    \frac{|g_a-g_n|}{\max(10^{-8},|g_a|+|g_n|)}
+    $$
+
+    We check every parameter. Training does not begin until the maximum error is small.
+    """),
+
+    code(r"""
+    def gradient_check(model, inputs, targets, epsilon=1e-5):
+        '''Compare every analytical parameter gradient with a central difference.'''
+        logits, cache = model.forward(inputs)
+        analytical_gradients = model.backward(targets, cache)
+        relative_errors = []
+
+        for parameter_name, parameter in model.parameters.items():
+            for parameter_index in np.ndindex(parameter.shape):
+                original_value = parameter[parameter_index]
+
+                # Perturb only one scalar while every other value stays fixed.
+                parameter[parameter_index] = original_value + epsilon
+                plus_logits, _ = model.forward(inputs)
+                plus_loss = binary_cross_entropy_from_logits(plus_logits, targets)
+
+                parameter[parameter_index] = original_value - epsilon
+                minus_logits, _ = model.forward(inputs)
+                minus_loss = binary_cross_entropy_from_logits(minus_logits, targets)
+
+                parameter[parameter_index] = original_value
+                numerical_gradient = (plus_loss - minus_loss) / (2 * epsilon)
+                analytical_gradient = analytical_gradients[parameter_name][parameter_index]
+                relative_error = abs(analytical_gradient - numerical_gradient) / max(
+                    1e-8,
+                    abs(analytical_gradient) + abs(numerical_gradient),
+                )
+                relative_errors.append(relative_error)
+
+        return np.asarray(relative_errors)
+
+
+    check_generator = np.random.default_rng(7)
+    check_inputs = check_generator.normal(size=(6, 2))
+    check_targets = check_generator.integers(0, 2, size=(6, 1))
+    checked_model = TwoLayerNumpyNetwork(2, 4, random_seed=3)
+    gradient_relative_errors = gradient_check(checked_model, check_inputs, check_targets)
+
+    print("checked scalar parameters:", len(gradient_relative_errors))
+    print("maximum relative error:", f"{gradient_relative_errors.max():.2e}")
+    print("median relative error:", f"{np.median(gradient_relative_errors):.2e}")
+
+    assert gradient_relative_errors.max() < 1e-6
+    """),
+
+    md(r"""
+    ## 11 · Train on development data and select one checkpoint
+
+    We use noisy moons because a straight boundary underfits them. The split happens
+    before scaling. Training statistics transform validation and sealed test rows.
+
+    The logistic model is a held-out linear baseline. The NumPy network uses a
+    predeclared width, tanh activation, learning rate, and epoch budget. Validation BCE
+    selects the checkpoint; test remains sealed.
+
+    Full-batch gradient descent keeps this first scratch experiment easy to trace.
+    Mini-batching, optimizer variants, and regularization return in DL-04.
+    """),
+
+    code(r"""
+    all_moon_features, all_moon_targets = make_moons(
+        n_samples=900,
+        noise=0.20,
+        random_state=42,
+    )
+
+    # Seal test first; validation is then carved only from development data.
+    development_features, sealed_test_features, development_targets, sealed_test_targets = train_test_split(
+        all_moon_features,
+        all_moon_targets,
+        test_size=0.20,
+        stratify=all_moon_targets,
+        random_state=42,
+    )
+    train_features_raw, validation_features_raw, train_targets, validation_targets = train_test_split(
+        development_features,
+        development_targets,
+        test_size=0.25,
+        stratify=development_targets,
+        random_state=42,
+    )
+
+    training_mean = train_features_raw.mean(axis=0, keepdims=True)
+    training_std = train_features_raw.std(axis=0, keepdims=True)
+
+    # Reuse training statistics so validation and test cannot influence preprocessing.
+    train_features = (train_features_raw - training_mean) / training_std
+    validation_features = (validation_features_raw - training_mean) / training_std
+    sealed_test_features_scaled = (sealed_test_features - training_mean) / training_std
+
+    linear_baseline = LogisticRegression(random_state=42)
+    linear_baseline.fit(train_features, train_targets)
+    linear_validation_probabilities = linear_baseline.predict_proba(validation_features)[:, 1]
+    linear_validation_bce = log_loss(validation_targets, linear_validation_probabilities)
+    linear_validation_accuracy = accuracy_score(
+        validation_targets,
+        linear_validation_probabilities >= 0.5,
+    )
+
+    numpy_network = TwoLayerNumpyNetwork(2, 8, random_seed=42)
+    learning_rate = 0.10
+    epoch_count = 3000
+    training_losses = []
+    validation_losses = []
+    best_validation_loss = float("inf")
+    best_epoch = None
+    best_numpy_state = None
+
+    for epoch in range(epoch_count):
+        # One full-batch step keeps the update identical to the equations above.
+        training_logits, training_cache = numpy_network.forward(train_features)
+        gradients = numpy_network.backward(train_targets, training_cache)
+        numpy_network.apply_gradients(gradients, learning_rate)
+
+        # Recalculate after the update so history describes the current parameters.
+        updated_training_logits, _ = numpy_network.forward(train_features)
+        validation_logits, _ = numpy_network.forward(validation_features)
+        training_loss = binary_cross_entropy_from_logits(updated_training_logits, train_targets)
+        validation_loss = binary_cross_entropy_from_logits(validation_logits, validation_targets)
+        training_losses.append(training_loss)
+        validation_losses.append(validation_loss)
+
+        if validation_loss < best_validation_loss:
+            # Selection uses validation evidence; copy the state before training continues.
+            best_validation_loss = validation_loss
+            best_epoch = epoch
+            best_numpy_state = numpy_network.state_dict()
+
+    numpy_network.load_state_dict(best_numpy_state)
+    restored_validation_probabilities = numpy_network.probabilities(validation_features).ravel()
+    restored_validation_accuracy = accuracy_score(
+        validation_targets,
+        restored_validation_probabilities >= 0.5,
+    )
+
+    validation_comparison = pd.DataFrame(
+        [
+            {"candidate": "linear baseline", "validation_BCE": linear_validation_bce, "validation_accuracy": linear_validation_accuracy},
+            {"candidate": "two-layer NumPy", "validation_BCE": best_validation_loss, "validation_accuracy": restored_validation_accuracy},
+        ]
+    )
+    print(validation_comparison.round(4).to_string(index=False))
+    print("selected NumPy epoch:", best_epoch)
+    print("test status: sealed")
+
+    assert best_validation_loss < linear_validation_bce
+    """),
+
+    md(r"""
+    ## 12 · Inspect the learned representation and verify it in PyTorch
+
+    The decision-boundary plot uses training and validation rows only. The hidden plot
+    shows validation rows after transformation by $A_1=\tanh(XW_1+b_1)$.
+
+    Then we copy the frozen NumPy weights into a PyTorch module. We verify both logits
+    and gradients on the same batch. PyTorch uses `BCEWithLogitsLoss`, matching the
+    stable NumPy objective.
+
+    This is a mechanism comparison, not a second model-selection experiment.
+    """),
+
+    code(r"""
+    figure_grid_x, figure_grid_y = np.meshgrid(
+        np.linspace(-2.5, 2.5, 220),
+        np.linspace(-2.5, 2.5, 220),
+    )
+    figure_grid = np.column_stack([figure_grid_x.ravel(), figure_grid_y.ravel()])
+
+    # Dense grid predictions reveal the nonlinear boundary learned between observed rows.
+    grid_probabilities = numpy_network.probabilities(figure_grid).reshape(figure_grid_x.shape)
+
+    validation_logits, validation_cache = numpy_network.forward(validation_features)
+    hidden_validation = validation_cache["hidden_activations"]
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    axes[0].plot(training_losses, label="training BCE")
+    axes[0].plot(validation_losses, label="validation BCE")
+    axes[0].axvline(best_epoch, color="black", linestyle="--", label="selected epoch")
+    axes[0].set_title("Development loss")
+    axes[0].set_xlabel("epoch")
+    axes[0].legend()
+
+    axes[1].contourf(figure_grid_x, figure_grid_y, grid_probabilities, levels=20, cmap="RdBu", alpha=0.7)
+    axes[1].contour(figure_grid_x, figure_grid_y, grid_probabilities, levels=[0.5], colors="black")
+    axes[1].scatter(validation_features[:, 0], validation_features[:, 1], c=validation_targets, cmap="RdBu", edgecolor="k", s=18)
+    axes[1].set_title("Validation rows and learned boundary")
+
+    axes[2].scatter(hidden_validation[:, 0], hidden_validation[:, 1], c=validation_targets, cmap="RdBu", edgecolor="k", s=18)
+    axes[2].set_xlabel("hidden unit 1")
+    axes[2].set_ylabel("hidden unit 2")
+    axes[2].set_title("Two coordinates of learned representation")
     plt.tight_layout()
     plt.show()
     """),
 
+    code(r"""
+    class TorchTwoLayerNetwork(nn.Module):
+        def __init__(self, input_width, hidden_width):
+            super().__init__()
+            self.hidden = nn.Linear(input_width, hidden_width)
+            self.output = nn.Linear(hidden_width, 1)
+
+        def forward(self, inputs):
+            return self.output(torch.tanh(self.hidden(inputs)))
+
+
+    torch_network = TorchTwoLayerNetwork(2, 8)
+    with torch.no_grad():
+        # NumPy stores weights as (input, output); Linear stores (output, input).
+        torch_network.hidden.weight.copy_(torch.tensor(best_numpy_state["W1"].T, dtype=torch.float32))
+        torch_network.hidden.bias.copy_(torch.tensor(best_numpy_state["b1"], dtype=torch.float32))
+        torch_network.output.weight.copy_(torch.tensor(best_numpy_state["W2"].T, dtype=torch.float32))
+        torch_network.output.bias.copy_(torch.tensor(best_numpy_state["b2"], dtype=torch.float32))
+
+    comparison_inputs_numpy = train_features[:32]
+    comparison_targets_numpy = train_targets[:32].reshape(-1, 1)
+
+    # Use the same rows, parameters, objective, and mean reduction in both systems.
+    numpy_logits, numpy_cache = numpy_network.forward(comparison_inputs_numpy)
+    numpy_gradients = numpy_network.backward(comparison_targets_numpy, numpy_cache)
+
+    comparison_inputs_torch = torch.tensor(comparison_inputs_numpy, dtype=torch.float32)
+    comparison_targets_torch = torch.tensor(comparison_targets_numpy, dtype=torch.float32)
+    torch_network.zero_grad(set_to_none=True)
+    torch_logits = torch_network(comparison_inputs_torch)
+    torch_loss = nn.BCEWithLogitsLoss()(torch_logits, comparison_targets_torch)
+    torch_loss.backward()
+
+    print("maximum logit difference:", float(np.max(np.abs(torch_logits.detach().numpy() - numpy_logits))))
+    print("W1 gradient match:", np.allclose(torch_network.hidden.weight.grad.numpy().T, numpy_gradients["W1"], atol=1e-6))
+    print("b1 gradient match:", np.allclose(torch_network.hidden.bias.grad.numpy(), numpy_gradients["b1"], atol=1e-6))
+    print("W2 gradient match:", np.allclose(torch_network.output.weight.grad.numpy().T, numpy_gradients["W2"], atol=1e-6))
+    print("b2 gradient match:", np.allclose(torch_network.output.bias.grad.numpy(), numpy_gradients["b2"], atol=1e-6))
+
+    assert np.allclose(torch_logits.detach().numpy(), numpy_logits, atol=1e-6)
+    assert np.allclose(torch_network.hidden.weight.grad.numpy().T, numpy_gradients["W1"], atol=1e-6)
+    assert np.allclose(torch_network.output.weight.grad.numpy().T, numpy_gradients["W2"], atol=1e-6)
+    """),
+
     md(r"""
-    **Figure 4.** With only **2 hidden units** the network can bend space a little —
-    underfit. **8 units** capture the moons well. **64 units** can express very wiggly
-    boundaries (and would overfit on noisier/smaller data — the bias–variance tradeoff
-    of Lesson CML-01 returns, now controlled by width/depth and regularization). This is
-    universal approximation made visible: more units → more "tiles" to paint the
-    function — but expressiveness must be matched to data size, or you overfit.
+    ## 13 · Mini-project: evaluate the frozen nonlinear model once
+
+    **Goal:** prove that a gradient-checked hidden layer improves on a linear baseline
+    for a nonlinear problem, without test-based tuning.
+
+    **Dataset columns:** two standardized coordinates and one binary moon label.
+
+    **Workflow:**
+
+    1. split before scaling;
+    2. fit scaling on training rows;
+    3. calculate the linear validation baseline;
+    4. gradient-check the scratch model;
+    5. train with declared width, learning rate, and epoch budget;
+    6. select and restore by validation BCE;
+    7. copy the frozen state into `BCEWithLogitsLoss` PyTorch code;
+    8. verify logits and gradients;
+    9. evaluate the frozen PyTorch representation once on test rows;
+    10. report baseline and nonlinear performance without retuning.
+
+    Test compares the predeclared linear baseline and frozen network for context. It does
+    not choose a new architecture, epoch, threshold, or initialization.
     """),
 
     code(r"""
-    # Figure 5 — THE key idea: the hidden layer learns a representation where classes
-    # become linearly separable. Train with 2 hidden ReLU units and plot the hidden space.
-    rep = MLP(2, 2, seed=5, activation="relu")
-    train(rep, Xx, yx, lr=0.4, epochs=6000)            # back to XOR (clearest demo)
-    H = rep._g(Xx @ rep.W1 + rep.b1)                   # hidden activations (n x 2)
+    linear_test_probabilities = linear_baseline.predict_proba(sealed_test_features_scaled)[:, 1]
+    linear_test_bce = log_loss(sealed_test_targets, linear_test_probabilities)
+    linear_test_accuracy = accuracy_score(sealed_test_targets, linear_test_probabilities >= 0.5)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    axes[0].scatter(Xx[:, 0], Xx[:, 1], c=yx, cmap="RdBu", edgecolor="k", s=15)
-    axes[0].set_title("Input space: XOR is NOT linearly separable"); axes[0].set_aspect("equal")
-    axes[1].scatter(H[:, 0], H[:, 1], c=yx, cmap="RdBu", edgecolor="k", s=15)
-    axes[1].set_title("Hidden-layer space: classes ARE linearly separable")
-    axes[1].set_xlabel("hidden unit 1"); axes[1].set_ylabel("hidden unit 2")
-    plt.suptitle("Figure 5 — Deep learning = representation learning")
-    plt.tight_layout()
-    plt.show()
+    torch_network.eval()
+    with torch.inference_mode():
+        # This is the first and only use of sealed test rows in model evaluation.
+        frozen_test_logits = torch_network(
+            torch.tensor(sealed_test_features_scaled, dtype=torch.float32)
+        )
+        frozen_test_probabilities = torch.sigmoid(frozen_test_logits).numpy().ravel()
+
+    frozen_test_bce = log_loss(sealed_test_targets, frozen_test_probabilities)
+    frozen_test_accuracy = accuracy_score(sealed_test_targets, frozen_test_probabilities >= 0.5)
+
+    final_test_report = pd.DataFrame(
+        [
+            {"candidate": "linear baseline", "test_BCE": linear_test_bce, "test_accuracy": linear_test_accuracy},
+            {"candidate": "frozen two-layer network", "test_BCE": frozen_test_bce, "test_accuracy": frozen_test_accuracy},
+        ]
+    )
+    print(final_test_report.round(4).to_string(index=False))
+    print("final report only; test did not change the network")
+
+    assert frozen_test_bce < linear_test_bce
     """),
 
     md(r"""
-    **Figure 5.** This is the most important figure in the notebook. In the **input
-    space** (left) the two XOR classes are tangled — no line separates them. But the
-    network's **hidden layer** transforms the points into a new 2D space (right) where
-    the classes fall on opposite sides of a line — now the output neuron (a plain
-    logistic unit) separates them trivially. The network *learned features* that make
-    the problem easy. This is what "deep learning is representation learning" means, and
-    it's the principle behind CNNs learning edges→shapes (Lesson DL-05) and Transformers
-    learning contextual meaning (Lesson DL-08).
+    ## 14 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    For input `(5, 2)`, hidden width 4, and one output:
+
+    - $W_1$ is `(2,4)` and $b_1$ is `(4,)`;
+    - hidden activation is `(5,4)`;
+    - $W_2$ is `(4,1)` and $b_2$ is `(1,)`;
+    - output logits are `(5,1)`;
+    - parameter count is $2\times4+4+4+1=17$.
+
+    ### Guided practice
+
+    1. Calculate the neuron logit for `x=[1,2]`, `w=[3,-1]`, `b=0.5`.
+    2. Prove two affine layers collapse into one.
+    3. Trace shapes for batch 32, input 6, hidden 10, output 1.
+    4. Explain why BCE should consume logits.
+    5. Calculate tanh derivative when activation is `0.6`.
+
+    ### Independent practice
+
+    6. Add a ReLU hidden option with He initialization and gradient checking.
+    7. Compare three random starts using validation BCE only.
+    8. Add a second hidden layer, but defer general graph automation to DL-03.
+    9. Add a three-class softmax output with stable categorical cross-entropy.
+    10. Compare parameter count and validation evidence for widths 2, 8, and 32.
+
+    ### Challenge
+
+    Rebuild the moons project without copying. Include a numeric neuron, collapse proof,
+    stable logit BCE, activation-aware initialization, explicit cache, all weight and bias
+    gradients, full finite-difference check, train-only scaling, validation checkpoint,
+    PyTorch logit/gradient equivalence, and one sealed-test report.
+
+    ### Self-check
+
+    1. What does a hidden unit calculate before activation?
+    2. Why does identity activation add no expressive power?
+    3. What is the difference between a logit and probability?
+    4. Why is universal approximation not a training guarantee?
+    5. Why must analytical gradients be checked independently?
+    6. Why can zero hidden weights preserve symmetry?
+    7. Which rows select the checkpoint?
+    8. What did PyTorch equivalence actually verify?
+
+    ### Solution and scoring rubric
+
+    1. Logit is $3(1)-1(2)+0.5=1.5$.
+    2. Matrix products and combined biases form another affine map.
+    3. Shapes are `(32,6) → (32,10) → (32,1)`.
+    4. Stable logit BCE avoids saturated sigmoid followed by `log(0)`.
+    5. Derivative is $1-0.6^2=0.64$.
+
+    Award two points for each self-check and four points for the challenge explanation.
+    Full credit requires gradient verification and correct data boundaries.
+
+    ### Common mistakes
+
+    - Calling every hidden neuron logistic regression regardless of activation.
+    - Omitting activation and expecting depth to help.
+    - Applying sigmoid before a stable logit loss.
+    - Using He initialization for tanh without justification.
+    - Forgetting bias gradients.
+    - Trusting a decreasing loss without gradient checking.
+    - Mutating or overwriting a hidden forward cache.
+    - Scaling before the split.
+    - Reporting training accuracy as generalization.
+    - Choosing width or epoch from test results.
+    - Claiming universal approximation guarantees practical success.
+    - Claiming ReLU eliminates all vanishing gradients.
+
+    ### Readiness threshold
+
+    Score at least **16/20** and correctly explain the forward pass, logit loss,
+    initialization, chain-rule gradients, gradient check, validation checkpoint, and
+    NumPy–PyTorch equivalence.
     """),
 
-    # ============================================ 7. Failure Modes
     md(r"""
-    ## 7 · Failure Modes
+    ## Ready to move on?
 
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **No nonlinearity** | Network no better than linear | Identity activation → layer collapse (§4.3) | Use a nonlinear activation |
-    | **Symmetric init (all zeros)** | All hidden units identical; can't learn | Broken symmetry never broken | Random init (Xavier/He) |
-    | **Vanishing gradients** | Deep net's early layers don't learn | Sigmoid/tanh saturate, $g'\to0$ (Fig 2) | ReLU; normalization; residuals (DL-05) |
-    | **Dead ReLUs** | Many units stuck at 0 output | Large negative pre-activations → zero gradient | Lower LR; LeakyReLU; better init |
-    | **Unscaled inputs** | Slow/unstable training | Ill-conditioned loss (FND-04) | Standardize features |
-    | **Bad learning rate** | Diverges or crawls | Step too big/small (FND-04) | Tune LR; schedules; Adam |
-    | **Overfitting** | Train ≫ test | Too many params for the data | Regularization, dropout, more data, early stop |
-    | **Non-convexity** | Different runs, different solutions | Loss surface has many minima/saddles (FND-04) | Good init, SGD noise, multiple runs |
+    ### Quick check
 
-    The cell demonstrates the **zero-init symmetry** failure — a classic interview gotcha.
-    """),
+    Explain this chain without notes:
 
-    code(r"""
-    # Zero initialization breaks learning: all hidden units stay identical (no symmetry breaking).
-    net_zero = MLP(2, 8, seed=0, activation="tanh")
-    net_zero.W1[:] = 0.0; net_zero.W2[:] = 0.0          # symmetric init
-    h_zero = train(net_zero, Xm, ym.astype(float), lr=0.3, epochs=2000)
+    neuron logit  
+    → batched affine layer  
+    → nonlinear hidden representation  
+    → output logit  
+    → stable BCE  
+    → two-layer chain rule  
+    → finite-difference verification  
+    → validation checkpoint  
+    → PyTorch equivalence  
+    → one sealed test.
 
-    net_rand = MLP(2, 8, seed=0, activation="tanh")     # proper random init
-    h_rand = train(net_rand, Xm, ym.astype(float), lr=0.3, epochs=2000)
+    ### Teach it back
 
-    print(f"final loss, ZERO init   : {h_zero[-1]:.4f}  (stuck -- all units identical)")
-    print(f"final loss, RANDOM init : {h_rand[-1]:.4f}  (learns)")
-    print("With zero weights every hidden unit computes the same thing and receives the")
-    print("same gradient forever -- they never differentiate. Random init breaks the symmetry.")
-    """),
+    Explain why XOR needs a hidden nonlinearity, then derive one complete path from loss
+    to a first-layer weight. Finish by explaining why a low training loss is insufficient.
 
-    # ============================================ 8. Production Library
-    md(r"""
-    ## 8 · Production Library Implementation
+    ### Memory aid
 
-    In practice you never hand-derive gradients — **autograd** (PyTorch) builds the
-    computation graph and computes them for you (the general backprop of Lesson DL-03),
-    runs on GPU, and gives optimizers, layers, and data loaders. Below, the *same*
-    MLP in PyTorch; we verify it reaches comparable accuracy. The import is wrapped so
-    the notebook runs even without torch.
-    """),
+    **Transform, score, measure loss, trace every derivative, verify numerically, and
+    trust only the restored validation choice.**
 
-    code(r"""
-    # Same 2-layer MLP in PyTorch (autograd replaces our manual backward). Guarded import.
-    try:
-        import torch
-        import torch.nn as nn
-        torch.manual_seed(0)
-        Xt = torch.tensor(Xm, dtype=torch.float32)
-        yt = torch.tensor(ym, dtype=torch.float32).view(-1, 1)
-        model = nn.Sequential(nn.Linear(2, 16), nn.Tanh(), nn.Linear(16, 1), nn.Sigmoid())
-        opt = torch.optim.Adam(model.parameters(), lr=0.05)
-        lossf = nn.BCELoss()
-        for _ in range(2000):
-            opt.zero_grad()
-            loss = lossf(model(Xt), yt)
-            loss.backward()                              # autograd computes ALL gradients
-            opt.step()
-        acc = ((model(Xt).detach().numpy() > 0.5).ravel() == ym).mean()
-        print(f"PyTorch MLP accuracy: {acc:.3f}  (autograd + Adam; no manual gradients)")
-        print(f"our scratch MLP accuracy: {((net.forward(Xm) > 0.5).ravel() == ym).mean():.3f}")
-    except Exception as e:
-        print(f"[torch not available: {type(e).__name__}] "
-              f"scratch NumPy MLP above already demonstrates the full mechanism.")
-    """),
+    ### Next dependency
 
-    md(r"""
-    **Scratch vs production.** Our NumPy MLP and the PyTorch version implement the same
-    math; the framework's value-add is enormous at scale: **autograd** computes
-    gradients for *any* architecture automatically (so you never hand-derive §4.6
-    again), plus GPU acceleration, optimizers (Adam, Lesson FND-04), layers, batching,
-    and mixed precision. But the framework hides exactly the machinery we just built —
-    which is why understanding the forward pass and gradients from scratch is what lets
-    you diagnose vanishing gradients, dead ReLUs, and bad initialization when training
-    misbehaves. Lesson DL-03 derives the general autograd/backprop algorithm.
-    """),
-
-    # ============================================ 9. Business Case Study
-    md(r"""
-    ## 9 · Realistic Business Case Study — When (and When Not) to Use a Neural Net
-
-    **Scenario.** A team must choose a model for a customer-facing prediction problem.
-    The senior question isn't "can a neural net do it?" (universal approximation says
-    yes) but "**should** we?"
-
-    **Where neural nets win:**
-    - **Unstructured signals** — images, audio, text, raw sensor streams — where
-      features must be *learned*, not engineered (Sections 04–05). Here NNs dominate
-      decisively.
-    - **Huge datasets with complex interactions** and a need for representation transfer
-      (pretraining/fine-tuning, Lesson NLP-03).
-
-    **Where they usually lose (the honest senior take):**
-    - **Plain tabular data** — gradient boosting (Lesson CML-05) typically matches or beats
-      a neural net with far less tuning, less data, no scaling, and better
-      interpretability (Lesson MLE-05). Reaching for deep learning on a 50-column CSV is a
-      common junior mistake.
-
-    **Business objectives:** maximize accuracy *per unit of engineering cost,
-    latency, and interpretability*, not accuracy in a vacuum.
-
-    **Cost of mistakes:** choosing a neural net for tabular data → months of tuning,
-    GPU bills, an opaque model, and often *worse* accuracy than an afternoon with
-    XGBoost. Choosing a tree for images → it simply can't compete.
-
-    **Constraints:** data modality and volume, latency/compute budget, interpretability
-    and regulatory needs (Lesson MLE-05), and team expertise.
-
-    **KPIs:** accuracy vs a strong GBM baseline, training/inference cost, time-to-ship,
-    and explainability — decided *before* committing to deep learning.
-    """),
-
-    # ============================================ 10. Production Considerations
-    md(r"""
-    ## 10 · Production Considerations
-
-    - **Initialization & scaling.** Use Xavier/He init and **standardize inputs** —
-      both directly affect whether the net trains at all (§7, Lesson FND-04).
-    - **Compute & cost.** NNs are matrix-multiply heavy → GPUs/accelerators; training
-      and serving cost far exceed classical models. Budget accordingly.
-    - **Latency.** Inference is a few matrix multiplies — fast on GPU, but heavier than
-      a linear model or small tree; quantize/distill for tight budgets.
-    - **Overfitting controls** are first-class in production NNs: dropout, weight decay
-      (L2, Lesson CML-01), early stopping, data augmentation, more data.
-    - **Reproducibility.** Seed everything; non-convexity (Lesson FND-04) means runs
-      differ — pin seeds and checkpoint.
-    - **Interpretability.** NNs are opaque; use SHAP / gradient attributions
-      (Lesson MLE-05) and monitor behavior, especially in regulated settings.
-    - **Don't over-reach.** For tabular problems, baseline against gradient boosting
-      first (§9); only escalate to deep learning when the data modality demands it.
-    """),
-
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
-
-    **Neural network vs the Phase-1 models:**
-
-    | Dimension | Linear/Logistic | Gradient Boosting | Neural Network |
-    |---|---|---|---|
-    | Nonlinearity | Manual features | **Automatic** | **Automatic (learned)** |
-    | Unstructured data (image/text/audio) | No | No | **Yes (the whole point)** |
-    | Tabular accuracy | Lower | **Usually best** | Competitive only with effort |
-    | Data needed | Low | Moderate | **High** |
-    | Preprocessing | Scaling | Minimal | Scaling + careful init |
-    | Training cost | Low | Low–moderate | **High (GPU)** |
-    | Interpretability | **High** | Low (SHAP) | **Lowest** |
-    | Tuning burden | Low | Moderate | **High** |
-
-    **Activation functions:**
-
-    | Activation | Pros | Cons | Use for |
-    |---|---|---|---|
-    | Sigmoid | Probabilistic output | Saturates, vanishing grad, not zero-centered | **Output** (binary) only |
-    | Tanh | Zero-centered | Saturates | Sometimes hidden (RNNs, DL-06) |
-    | ReLU | No positive-side saturation, cheap | Dead units, not zero-centered | **Default hidden** |
-    | (Leaky/GELU/…) | Fix dead ReLU / smoother | Slightly more compute | Modern deep nets, Transformers |
-
-    **Width vs depth:** wider layers add capacity linearly; **depth** composes features
-    hierarchically and is often exponentially more parameter-efficient for structured
-    problems — the rationale for "deep" learning (DL-05 and DL-08).
-
-    **Senior lesson:** universal approximation guarantees a net *can* fit anything, but
-    *should* you? Match the model to the **data modality** and the **engineering budget**
-    — neural nets for learned representations on unstructured data, boosting for tabular.
-    """),
-
-    # ============================================ 12. Interview Prep
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
-
-    **Common questions**
-    - *Why do NNs need nonlinear activations?* → Without them, stacked linear layers
-      collapse to one linear map (§4.3); no gain over logistic regression.
-    - *What is the XOR problem?* → A non-linearly-separable function a single perceptron
-      can't learn; a hidden layer solves it by re-representing the inputs (Figs 1, 5).
-
-    **Deep-dive questions**
-    - *Explain universal approximation and its caveat.* → Enough hidden units approximate
-      any continuous function; but existence ≠ trainability, and width may be impractical
-      (§4.7).
-    - *Sigmoid vs tanh vs ReLU?* → Saturation/vanishing vs ReLU's constant positive
-      gradient and dead-unit risk (Fig 2, §11).
-    - *Walk through an MLP forward pass and its gradients.* → §4.2, §4.6; the output
-      error is $(\hat y - y)$ as in logistic regression.
-
-    **Whiteboard questions**
-    - "Implement a 2-layer MLP forward pass and the gradient for $W_2$." (Section 5.1.)
-    - "Why does zero-initialization fail?" (Symmetry; §7 demo.)
-
-    **Strong vs weak answers**
-    - *"Should we use a neural net for this 40-column tabular dataset?"*
-      - **Weak:** "Yes, neural nets are state of the art."
-      - **Strong:** "Probably not — gradient boosting usually beats NNs on tabular data
-        with less data, tuning, and cost, and it's more interpretable. I'd baseline with
-        XGBoost; reserve deep learning for unstructured signals where features must be
-        learned."
-    - *"Your deep net isn't learning."*
-      - **Weak:** "Train longer."
-      - **Strong:** "I'd check initialization (not zeros), input scaling, learning rate,
-        and activation saturation/dead ReLUs — vanishing gradients are the classic
-        culprit, addressed by ReLU, normalization, and good init."
-
-    **Follow-ups:** "Width vs depth?" (capacity vs hierarchical efficiency). "Why ReLU
-    over sigmoid in hidden layers?" (no positive-side saturation). "How prevent
-    overfitting?" (dropout, weight decay, early stopping, data).
-
-    **Common mistakes:** forgetting nonlinearity is what gives power; zero-initializing
-    weights; using sigmoid in deep hidden layers; not scaling inputs; assuming universal
-    approximation means NNs always win; defaulting to deep learning for tabular data.
-    """),
-
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
-
-    1. **What is it?** Describe an MLP as stacked logistic units with nonlinearities.
-    2. **Why was it invented?** What did hidden layers solve (XOR) that perceptrons
-       couldn't?
-    3. **How does it work?** Walk the forward pass: affine → activation → … → output →
-       loss.
-    4. **Why does it work?** Why is the nonlinearity essential, and what does
-       universal approximation guarantee (and not)?
-    5. **When to use it?** Which data modalities favor NNs over boosting?
-    6. **When NOT to use it?** Why is a neural net often the wrong call for tabular data?
-    7. **Tradeoffs?** Activation choices; width vs depth; NN vs GBM.
-    8. **How would you productionize it?** Init, scaling, regularization, compute,
-       interpretability, and the baseline-first discipline.
-    """),
-
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises
-
-    **Beginner (conceptual)**
-    1. Prove that a 2-layer network with identity activations is equivalent to a single
-       linear layer.
-    2. Explain in two sentences why zero-initializing all weights prevents learning.
-
-    **Beginner → Intermediate (coding)**
-    3. Swap the hidden activation to **ReLU** in the scratch MLP and compare convergence
-       and the learned boundary on moons.
-    4. Add **L2 weight decay** to the training loop and show it smooths the degree-64
-       boundary (Fig 4) and reduces overfitting.
-
-    **Intermediate (analysis)**
-    5. Extend the MLP to **multiclass softmax + categorical cross-entropy** and train it
-       on a 3-class spiral dataset; visualize the boundary.
-    6. Reproduce the **vanishing-gradient** problem: build a deep (6-layer) sigmoid
-       network and measure how gradient magnitude shrinks toward the input layers;
-       show ReLU mitigates it.
-
-    **Senior (interview + production design)**
-    7. *Whiteboard:* derive the gradients for the 2-layer net (§4.6) from the chain
-       rule, then explain how this generalizes to arbitrary depth (preview of DL-03).
-    8. *Design:* you're given a 60-feature tabular dataset and a folder of product
-       images. Decide which model family fits each, justify with cost/accuracy/
-       interpretability tradeoffs, and specify baselines.
-    9. *Debug:* a teammate's MLP loss is flat from epoch 0. List the four most likely
-       causes (zero init, dead ReLUs, LR, unscaled inputs) and the check for each.
-    """),
-
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    A neural network is **logistic regression stacked in layers** (Lesson CML-02) with a
-    **nonlinearity** between them — and that nonlinearity is everything: it prevents the
-    layers from collapsing into one and lets the network **learn a representation** in
-    which the problem becomes easy (Fig 5). Hidden layers solved the XOR problem that
-    ended the perceptron era, and **universal approximation** says enough units can fit
-    any function. We built the whole thing in NumPy — forward pass (matrix multiplies,
-    Lesson FND-01), cross-entropy loss (Lesson FND-02), and hand-derived gradients trained
-    by gradient descent (Lesson FND-04).
-
-    **Related lesson:** `DL-03 · Backpropagation` — we generalize the hand-derived 2-layer gradients
-    into *the* algorithm of deep learning: the chain rule applied systematically over a
-    computation graph (reverse-mode autodiff), which trains networks of *any* depth and
-    is exactly what PyTorch's `loss.backward()` does.
+    Verified two-layer chain-rule gradients  
+    → required before general backpropagation  
+    → because DL-03 turns these repeated local derivatives into a reusable reverse-mode
+    graph algorithm.
     """),
 ]
+
 
 build("04_deep_learning/02_neural_networks_from_scratch.ipynb", cells)
