@@ -1,765 +1,1214 @@
-"""Builder for Lesson DL-03 — Backpropagation.
+"""Build DL-03: backpropagation and a scalar reverse-mode autodiff engine."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
-    # ---------------------------------------------------------------- Title
     md(r"""
-    # DL-03 · Backpropagation
-    ### Section 04 — Deep Learning Foundations · *ML/AI Senior Mastery Curriculum*
+    # DL-03 · Backpropagation and Autodiff
 
-    **Prerequisites:** FND-04, DL-01, and DL-02. You should understand a PyTorch
-    training loop, a NumPy network forward pass, loss, and the chain rule.
+    **Prerequisites:** FND-04, DL-01, and DL-02  
+    **Estimated study time:** 10–12 hours, including practice  
+    **Next lesson:** DL-04 · Stable Neural Training
 
-    > In Lesson DL-02 we derived the gradients of a 2-layer network **by hand**. That
-    > doesn't scale — modern models have *billions* of parameters and arbitrary
-    > architectures. **Backpropagation** is the algorithm that computes the gradient of
-    > a scalar loss with respect to *every* parameter, for *any* differentiable
-    > computation, in a single backward pass — by applying the chain rule
-    > systematically over a **computation graph**. It is, without exaggeration, the
-    > algorithm that makes deep learning possible, and it is exactly what PyTorch's
-    > `loss.backward()` does. We'll build a tiny autodiff engine from scratch, derive
-    > the general layer-wise rules, and verify everything with **gradient checking**.
+    DL-02 calculated every gradient for one fixed network. That was useful, but adding
+    a layer would force us to derive and code another special backward pass.
+
+    This lesson builds the reusable idea underneath `loss.backward()`. We will first
+    trace one tiny graph with ordinary numbers. Then we will teach each operation how
+    to send a gradient backward, arrange those operations in a safe order, and build a
+    small reverse-mode automatic-differentiation engine.
+
+    ### Scope boundary
+
+    We focus on **how gradients are calculated**, not on choosing an optimizer or
+    making a deep model train reliably. DL-04 handles initialization experiments,
+    optimizers, normalization, regularization, clipping, and stable training.
     """),
 
-    # ============================================================ 1. Objectives
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The **chain rule on a computation graph**: every model is a graph of simple ops,
-      and backprop is the chain rule applied node-by-node.
-    - **Reverse-mode automatic differentiation** and why it (not forward mode, not
-      numerical differentiation) is the right tool for training neural nets.
-    - The **forward pass caches, backward pass propagates** structure: "upstream
-      gradient × local gradient" at each node.
-    - The **general layer-wise backprop equations** (generalizing Lesson DL-02 to any
-      depth).
-    - **Gradient checking** with finite differences — the essential correctness tool.
-    - Why **vanishing/exploding gradients** are a *backprop* phenomenon, and the fixes.
+    By the end, you will be able to:
 
-    **Why it matters in industry**
-    - Backprop is the computational engine of *all* deep learning; understanding it is
-      what lets you debug training (NaNs, dead layers, vanishing gradients) that a
-      framework hides.
-    - **Gradient checking** catches subtle bugs in custom layers/losses before they
-      waste a training run.
-    - The **memory–compute tradeoff** (activation caching, checkpointing) is a real
-      production concern for large models.
+    - separate a forward pass, backpropagation, autodiff, and gradient descent;
+    - calculate a small computation graph forward and backward by hand;
+    - distinguish an upstream gradient from a local derivative;
+    - explain why branches must add their gradient contributions;
+    - place graph nodes in topological and reverse-topological order;
+    - explain why reverse mode fits one scalar loss and many parameters;
+    - build scalar operations that record their own backward rules;
+    - implement a reusable reverse-mode autodiff engine;
+    - verify every selected leaf gradient with central finite differences;
+    - derive matrix-multiplication and broadcast-bias gradients by shape;
+    - reproduce scratch gradients with PyTorch autograd;
+    - use `requires_grad`, `.grad`, `retain_grad()`, `detach()`, and `no_grad()` safely;
+    - identify when gradients vanish, explode, accumulate, or stop;
+    - decide when backpropagation is unsuitable or needs another estimator.
 
-    **Typical interview questions**
-    - "Explain backpropagation. Why not just use numerical gradients?"
-    - "What's the difference between forward-mode and reverse-mode autodiff?"
-    - "Walk me through the backward pass of a linear layer."
-    - "What causes vanishing/exploding gradients and how do you fix them?"
-    - "How would you verify your gradient implementation is correct?"
-    """),
-
-    # =================================================== 2. Historical Motivation
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The training bottleneck.** Lesson DL-02 showed a hidden layer can solve XOR — but
-    Minsky & Papert's 1969 critique stood partly because nobody had an efficient way to
-    *train* multilayer networks. How do you compute the gradient of the loss with
-    respect to a weight buried two layers deep?
-
-    **The naive options don't scale.**
-    - **Numerical differentiation**: perturb each parameter, re-run the forward pass,
-      measure the loss change. Correct, but costs *one forward pass per parameter* —
-      hopeless for millions of weights, and numerically noisy.
-    - **Symbolic differentiation**: expand the whole expression and differentiate —
-      the formulas explode in size ("expression swell").
-
-    **Backpropagation (Werbos 1974; popularized by Rumelhart, Hinton & Williams,
-    1986).** The breakthrough: organize the computation as a **graph**, do **one
-    forward pass** caching intermediate values, then **one backward pass** that applies
-    the chain rule locally at each node, reusing shared sub-results. This computes the
-    gradient w.r.t. *all* parameters in time comparable to a *single* forward pass —
-    independent of the number of parameters. That efficiency is what made training
-    deep networks feasible and ignited the connectionist revival.
-
-    **Automatic differentiation, generalized.** Backprop is a special case of
-    **reverse-mode autodiff** — a general technique for differentiating any program
-    expressed as a graph of differentiable primitives. Modern frameworks (PyTorch,
-    JAX, TensorFlow) implement exactly this: you write the forward computation, they
-    record the graph, and `.backward()` (or `grad`) runs reverse-mode AD. Understanding
-    backprop *is* understanding what these frameworks do under the hood.
-    """),
-
-    # ================================================ 3. Intuition & Visual
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **Everything is a graph of simple operations.** A neural network — however
-    complex — is ultimately a composition of elementary ops: add, multiply, matmul,
-    tanh, exp. Draw it as a **computation graph**: inputs and parameters at the leaves,
-    the scalar loss at the root, operations as nodes.
-
-    **The chain rule, locally.** To know how the loss changes when you nudge a deep
-    weight, you multiply together the sensitivities along the path from that weight to
-    the loss. Backprop does this **once, for all weights simultaneously**, by walking
-    the graph backward and applying one rule at every node:
-    $$\text{(gradient at a node's inputs)} = \text{(upstream gradient)} \times \text{(local gradient of this op)}.$$
-    Each node only needs to know how to turn the gradient flowing *into* it (from the
-    loss side) into the gradient flowing to *its* inputs — a purely local computation.
-
-    **Blame assignment flowing backward.** Intuitively, the loss sends "blame" back
-    through the graph. A node receives how much it's blamed (upstream gradient),
-    multiplies by how sensitive its output is to each input (local gradient), and
-    passes the appropriate blame to each input. Forward pass = compute outputs and
-    **cache** them; backward pass = distribute blame using those cached values.
-
-    **Why *reverse* mode.** The loss is a single scalar; the parameters are many.
-    Reverse mode computes the gradient of *one output* w.r.t. *all inputs* in one
-    backward sweep — perfect for "one loss, millions of weights." (Forward mode does
-    the opposite and would need one pass per parameter.)
+    ### Learning path
 
     ```mermaid
     flowchart LR
-        x["x"] --> mul["* (w·x)"]
-        w["w"] --> mul
-        mul --> add["+ b"]
-        b["b"] --> add
-        add --> act["tanh"]
-        act --> loss["loss L"]
-        loss -. "grad=1" .-> act
-        act -. "× local grad" .-> add
-        add -. "×" .-> mul
-        mul -. "× → dL/dw, dL/dx" .-> w
+        A[One numeric graph] --> B[Local chain rules]
+        B --> C[Branches add gradients]
+        C --> D[Reverse graph order]
+        D --> E[Scalar autodiff engine]
+        E --> F[Finite-difference check]
+        F --> G[Tensor and broadcast rules]
+        G --> H[PyTorch equivalence]
+        H --> I[Autodiff mini-project]
+        I --> J[DL-04 stable training]
     ```
 
-    Run the cells: we'll build an autodiff engine that does this automatically.
+    DL-02 two-layer gradients  
+    → required before general backpropagation  
+    → because this lesson turns those repeated chain-rule steps into a reusable graph algorithm.
+
+    Backpropagation  
+    → required before stable neural training  
+    → because training diagnostics only make sense after we know where gradients come from.
+    """),
+
+    md(r"""
+    ## 2 · Four jobs that beginners often mix together
+
+    Imagine adjusting a soup recipe.
+
+    - The **forward pass** cooks the soup and measures its taste score.
+    - **Backpropagation** traces how each ingredient affected that score.
+    - **Automatic differentiation**, or **autodiff**, records the recipe steps and
+      performs that tracing automatically.
+    - **Gradient descent** changes the ingredient amounts using the calculated effects.
+
+    | Job | Question it answers | Does it update parameters? |
+    |---|---|---:|
+    | forward pass | What output and loss do these values produce? | no |
+    | backpropagation | How does the loss change with each earlier value? | no |
+    | reverse-mode autodiff | How can software perform backpropagation for a recorded program? | no |
+    | gradient descent | How should parameters move after gradients are known? | yes |
+    | finite differences | Does a calculated gradient agree with small numerical changes? | no |
+
+    Backpropagation is therefore **not** the optimizer. `loss.backward()` fills
+    gradients; `optimizer.step()` uses them.
     """),
 
     code(r"""
-    import numpy as np
+    import math
+
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import torch
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    np.set_printoptions(precision=5, suppress=True)
+    torch.manual_seed(42)
     """),
 
-    # ============================================ 4. Mathematical Foundations
     md(r"""
-    ## 4 · Mathematical Foundations
+    ## 3 · First calculate one graph with ordinary numbers
 
-    ### 4.1 The chain rule, the whole story
-    For a composition $L=f(g(h(x)))$, the chain rule gives
-    $\frac{dL}{dx}=\frac{dL}{df}\frac{df}{dg}\frac{dg}{dh}\frac{dh}{dx}$. Backprop is
-    nothing more than this, applied to a graph and **organized to reuse shared terms**.
-    Define the **upstream gradient** at a node's output as $\bar v=\partial L/\partial
-    v$. Then for an op $v=\phi(u)$, the gradient at its input is the **vector–Jacobian
-    product**
-    $$\bar u = \Big(\frac{\partial v}{\partial u}\Big)^{\!\top}\bar v.$$
-    Each primitive op only needs to implement this local rule.
+    We will use a one-neuron expression:
 
-    ### 4.2 Forward pass (cache) + backward pass (propagate)
-    1. **Forward:** evaluate the graph leaf-to-root, storing each node's output (needed
-       for local gradients — e.g. $\tanh'(z)=1-\tanh^2 z$ reuses the output).
-    2. **Backward:** set $\bar L=1$ at the root, then visit nodes in **reverse
-       topological order**, each accumulating its inputs' gradients via §4.1.
-    Cost: one forward + one backward ≈ **2× a forward pass**, regardless of parameter
-    count. That is backprop's defining efficiency.
+    $$
+    z=wx+b
+    $$
 
-    ### 4.3 Local gradients of common ops
-    | Op | forward | local backward (given upstream $\bar v$) |
-    |---|---|---|
-    | add $v=a+b$ | $a+b$ | $\bar a{+}{=}\bar v,\ \bar b{+}{=}\bar v$ |
-    | mul $v=ab$ | $ab$ | $\bar a{+}{=}b\,\bar v,\ \bar b{+}{=}a\,\bar v$ |
-    | matmul $V=AW$ | $AW$ | $\bar A{=}\bar V W^\top,\ \bar W{=}A^\top\bar V$ |
-    | tanh $v=\tanh u$ | $\tanh u$ | $\bar u{=}(1-v^2)\bar v$ |
-    | relu $v=\max(0,u)$ | $\max(0,u)$ | $\bar u{=}\mathbb 1[u>0]\,\bar v$ |
+    $$
+    p=\tanh(z)
+    $$
 
-    Note **add distributes** the gradient (used by bias and skip connections) and a node
-    used multiple times **accumulates** gradients (sum over its outgoing edges).
+    $$
+    e=p-y
+    $$
 
-    ### 4.4 General layer-wise backprop (generalizing Lesson DL-02)
-    For an $L$-layer MLP with $Z_l=A_{l-1}W_l+b_l,\ A_l=g(Z_l)$, and loss $J$, the
-    backward recursion is:
-    $$dZ_L = \nabla_{Z_L} J\ \ (\text{e.g. } \hat y-y),\qquad
-    dW_l = \tfrac1n A_{l-1}^\top dZ_l,\quad db_l=\text{mean}(dZ_l),$$
-    $$dA_{l-1}=dZ_l W_l^\top,\qquad dZ_{l-1}=dA_{l-1}\odot g'(Z_{l-1}).$$
-    Start at the output, walk to the input. Lesson DL-02 was the $L=2$ case; this is the
-    same chain rule for any depth.
+    $$
+    L=e^2
+    $$
 
-    ### 4.5 Reverse vs forward mode
-    For $f:\mathbb R^n\to\mathbb R^m$: **forward mode** computes one column of the
-    Jacobian per pass (cost $\propto n$ inputs); **reverse mode** computes one row per
-    pass (cost $\propto m$ outputs). Training has $m=1$ (scalar loss) and $n$ huge
-    (parameters), so **reverse mode wins overwhelmingly** — one backward pass yields the
-    full gradient. (Forward mode is preferable when outputs ≫ inputs.)
+    **Symbols:** $x$ is an input; $w$ and $b$ are adjustable parameters; $z$ is the
+    neuron's raw score; $p$ is its output; $y$ is the target; $e$ is error; and $L$ is
+    scalar loss.
 
-    ### 4.6 Gradient checking
-    To verify an analytic gradient, compare it to the **central finite difference**
-    $$\frac{\partial J}{\partial\theta}\approx\frac{J(\theta+\epsilon)-J(\theta-\epsilon)}{2\epsilon},
-    \quad \epsilon\sim10^{-5},$$
-    and check the **relative error** $\frac{|g_{\text{analytic}}-g_{\text{num}}|}{|g_{\text{analytic}}|+|g_{\text{num}}|}$
-    is tiny (≲$10^{-6}$). This catches almost every backprop bug — indispensable when
-    writing custom layers/losses.
+    Use $w=0.5$, $x=2$, $b=-1$, and $y=1$.
 
-    ### 4.7 Vanishing/exploding gradients
-    The backward recursion **multiplies** Jacobians layer after layer. If their
-    magnitudes are consistently <1 (e.g. saturated sigmoid, $g'\le0.25$), the product
-    shrinks geometrically → **vanishing gradients** (early layers barely learn). If >1,
-    it grows → **exploding gradients** (NaNs). Fixes: non-saturating activations
-    (ReLU), careful init (Xavier/He), normalization, residual connections (Notebook
-    16), and gradient clipping (Lesson FND-04).
-    """),
+    ### Forward pass
 
-    # ============================================ 5. Scratch implementation
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
+    $$
+    z=(0.5)(2)-1=0
+    $$
 
-    Two implementations. First a **tiny scalar autodiff engine** (a `Value` that builds
-    a graph and back-propagates) — this *is* a miniature PyTorch autograd, and the
-    clearest way to see "what `.backward()` does." Then a **general L-layer MLP**
-    backprop, verified by **gradient checking**.
+    $$
+    p=\tanh(0)=0
+    $$
+
+    $$
+    e=0-1=-1
+    $$
+
+    $$
+    L=(-1)^2=1
+    $$
+
+    The forward pass answers, “What happened?” The backward pass asks, “Which earlier
+    values were responsible, and by how much?”
     """),
 
     code(r"""
-    # 5.1 A minimal reverse-mode autodiff engine (micrograd-style).
+    weight_value = 0.5
+    input_value = 2.0
+    bias_value = -1.0
+    target_value = 1.0
+
+    # Follow the four equations in order and keep every intermediate value.
+    raw_score = weight_value * input_value + bias_value
+    prediction = math.tanh(raw_score)
+    error = prediction - target_value
+    loss = error ** 2
+
+    forward_table = pd.DataFrame(
+        [
+            {"node": "z", "calculation": "w*x + b", "value": raw_score},
+            {"node": "p", "calculation": "tanh(z)", "value": prediction},
+            {"node": "e", "calculation": "p - y", "value": error},
+            {"node": "L", "calculation": "e^2", "value": loss},
+        ]
+    )
+    print(forward_table.to_string(index=False))
+
+    assert np.isclose(loss, 1.0)
+    """),
+
+    md(r"""
+    ## 4 · Walk backward: upstream gradient × local derivative
+
+    Start at the loss. A value changes one-for-one with itself, so the seed is:
+
+    $$
+    \frac{\partial L}{\partial L}=1
+    $$
+
+    Each node receives an **upstream gradient**: how sensitive the final loss is to
+    that node's output. It multiplies that number by its **local derivative**: how
+    sensitive the node's output is to one input.
+
+    ```mermaid
+    flowchart LR
+        W[w = 0.5] --> M["multiply"]
+        X[x = 2] --> M
+        M --> A["add b"]
+        B[b = -1] --> A
+        A --> T[tanh]
+        T --> S["subtract y"]
+        Y[y = 1] --> S
+        S --> Q[square]
+        Q --> L[L = 1]
+
+        L -. "seed 1" .-> Q
+        Q -. "× 2e" .-> S
+        S -. "× 1" .-> T
+        T -. "× (1-p²)" .-> A
+        A -. "× 1" .-> M
+        M -. "× x" .-> W
+    ```
+
+    At our values:
+
+    $$
+    \frac{\partial L}{\partial e}=2e=-2
+    $$
+
+    $$
+    \frac{\partial L}{\partial p}=(-2)(1)=-2
+    $$
+
+    $$
+    \frac{\partial L}{\partial z}=(-2)(1-p^2)=(-2)(1-0^2)=-2
+    $$
+
+    $$
+    \frac{\partial L}{\partial w}=(-2)x=-4
+    $$
+
+    $$
+    \frac{\partial L}{\partial x}=(-2)w=-1
+    $$
+
+    $$
+    \frac{\partial L}{\partial b}=(-2)(1)=-2
+    $$
+
+    A negative weight gradient means a small increase in $w$ would locally decrease
+    the loss. Backpropagation calculates that sensitivity; it does not perform the increase.
+    """),
+
+    code(r"""
+    # Work backward from the scalar loss, reusing cached forward values.
+    loss_to_error = 2 * error
+    loss_to_prediction = loss_to_error * 1
+    loss_to_raw_score = loss_to_prediction * (1 - prediction ** 2)
+    loss_to_weight = loss_to_raw_score * input_value
+    loss_to_input = loss_to_raw_score * weight_value
+    loss_to_bias = loss_to_raw_score * 1
+
+    backward_table = pd.DataFrame(
+        [
+            {"gradient": "dL/de", "value": loss_to_error},
+            {"gradient": "dL/dp", "value": loss_to_prediction},
+            {"gradient": "dL/dz", "value": loss_to_raw_score},
+            {"gradient": "dL/dw", "value": loss_to_weight},
+            {"gradient": "dL/dx", "value": loss_to_input},
+            {"gradient": "dL/db", "value": loss_to_bias},
+        ]
+    )
+    print(backward_table.to_string(index=False))
+
+    assert np.allclose(
+        [loss_to_weight, loss_to_input, loss_to_bias],
+        [-4.0, -1.0, -2.0],
+    )
+    """),
+
+    md(r"""
+    ## 5 · A branch must add gradients, not overwrite them
+
+    Consider:
+
+    $$
+    q=a^2+a
+    $$
+
+    The value $a$ reaches $q$ through two paths. The first contributes $2a$; the
+    second contributes $1$.
+
+    $$
+    \frac{dq}{da}=2a+1
+    $$
+
+    At $a=3$, the gradient is $7$.
+
+    Think of two roads delivering water to the same tank. The final amount is the sum
+    arriving through both roads. In a graph, gradients from every outgoing path must
+    accumulate at the shared node.
+
+    ```mermaid
+    flowchart LR
+        A[a] --> S[square]
+        A --> P[add]
+        S --> P
+        P --> Q[q]
+    ```
+
+    This is why autodiff engines use `+=` when updating an input's gradient.
+    """),
+
+    code(r"""
+    branch_input = 3.0
+    square_path_contribution = 2 * branch_input
+    direct_path_contribution = 1.0
+    accumulated_gradient = square_path_contribution + direct_path_contribution
+
+    print("square path contribution:", square_path_contribution)
+    print("direct path contribution:", direct_path_contribution)
+    print("total dq/da:", accumulated_gradient)
+
+    assert accumulated_gradient == 7.0
+    """),
+
+    md(r"""
+    ## 6 · Graph order makes the backward pass safe
+
+    A **topological order** lists every node after its dependencies. The forward pass
+    follows that order because an operation needs its inputs first.
+
+    The backward pass uses the reverse order. A node must receive all gradient
+    contributions from later operations before it sends its completed gradient to
+    earlier inputs.
+
+    For the graph above:
+
+    ```text
+    forward:   leaves → multiply → add → tanh → subtract → square → loss
+    backward:  loss → square → subtract → tanh → add → multiply → leaves
+    ```
+
+    A graph may branch or reuse values, so “reverse the lines of code” is not a general
+    algorithm. We first discover the dependency order, then reverse that order.
+
+    ### The reusable node contract
+
+    Each scalar node will store:
+
+    - its forward value;
+    - its accumulated gradient;
+    - the nodes that produced it;
+    - a small function that knows its local backward rule;
+    - a label and operation name for inspection.
+    """),
+
+    md(r"""
+    ## 7 · Build a scalar reverse-mode autodiff engine
+
+    The class below is intentionally small, but it contains the essential mechanism:
+
+    1. arithmetic creates a result node;
+    2. that node remembers its parents;
+    3. it stores a local backward function;
+    4. `backward()` finds topological order;
+    5. the loss receives seed gradient `1`;
+    6. local functions run in reverse order and accumulate into parents.
+
+    ReLU is not differentiable exactly at zero. Like many frameworks, this engine
+    chooses a derivative of zero there. That is a declared convention, not an ordinary
+    derivative.
+    """),
+
+    code(r"""
     class Value:
-        def __init__(self, data, _children=(), _op=""):
+        '''A scalar value and the graph needed for reverse-mode differentiation.'''
+
+        def __init__(self, data, parents=(), operation="", label=""):
             self.data = float(data)
             self.grad = 0.0
-            self._backward = lambda: None           # how to push grad to inputs
-            self._prev = set(_children)
-            self._op = _op
+            self.parents = tuple(parents)
+            self.operation = operation
+            self.label = label
+            self._backward = lambda: None
+
+        def __repr__(self):
+            return f"Value(data={self.data:.5f}, grad={self.grad:.5f}, label={self.label!r})"
 
         def __add__(self, other):
             other = other if isinstance(other, Value) else Value(other)
-            out = Value(self.data + other.data, (self, other), "+")
+            result = Value(self.data + other.data, (self, other), "+")
+
             def _backward():
-                self.grad += out.grad                # add distributes the upstream grad
-                other.grad += out.grad
-            out._backward = _backward
-            return out
+                # Addition copies the same upstream gradient to both inputs.
+                self.grad += result.grad
+                other.grad += result.grad
+
+            result._backward = _backward
+            return result
 
         def __mul__(self, other):
             other = other if isinstance(other, Value) else Value(other)
-            out = Value(self.data * other.data, (self, other), "*")
+            result = Value(self.data * other.data, (self, other), "*")
+
             def _backward():
-                self.grad += other.data * out.grad   # local grad of a*b w.r.t a is b
-                other.grad += self.data * out.grad
-            out._backward = _backward
-            return out
+                # Each input receives upstream gradient times the other forward value.
+                self.grad += other.data * result.grad
+                other.grad += self.data * result.grad
+
+            result._backward = _backward
+            return result
+
+        def __pow__(self, exponent):
+            if not isinstance(exponent, (int, float)):
+                raise TypeError("This small engine supports only numeric powers.")
+            result = Value(self.data ** exponent, (self,), f"**{exponent}")
+
+            def _backward():
+                self.grad += exponent * self.data ** (exponent - 1) * result.grad
+
+            result._backward = _backward
+            return result
 
         def tanh(self):
-            t = np.tanh(self.data)
-            out = Value(t, (self,), "tanh")
+            output = math.tanh(self.data)
+            result = Value(output, (self,), "tanh")
+
             def _backward():
-                self.grad += (1 - t ** 2) * out.grad  # tanh'(x) = 1 - tanh^2
-            out._backward = _backward
-            return out
+                self.grad += (1 - output ** 2) * result.grad
 
-        def __pow__(self, p):
-            out = Value(self.data ** p, (self,), f"**{p}")
+            result._backward = _backward
+            return result
+
+        def exp(self):
+            output = math.exp(self.data)
+            result = Value(output, (self,), "exp")
+
             def _backward():
-                self.grad += p * self.data ** (p - 1) * out.grad
-            out._backward = _backward
-            return out
+                self.grad += output * result.grad
 
-        def __neg__(self): return self * -1
-        def __sub__(self, other): return self + (-other)
-        def __radd__(self, other): return self + other
-        def __rmul__(self, other): return self * other
+            result._backward = _backward
+            return result
 
-        def backward(self):
-            # reverse topological order, then apply each node's local rule
-            topo, visited = [], set()
-            def build(v):
-                if v not in visited:
-                    visited.add(v)
-                    for c in v._prev:
-                        build(c)
-                    topo.append(v)
-            build(self)
-            self.grad = 1.0
-            for v in reversed(topo):
-                v._backward()
+        def log(self):
+            if self.data <= 0:
+                raise ValueError("log requires a positive value.")
+            result = Value(math.log(self.data), (self,), "log")
 
-    # Demo: f = (w*x + b) passed through tanh, a single neuron.
-    w, x, b = Value(0.5), Value(2.0), Value(-1.0)
-    out = (w * x + b).tanh()
-    out.backward()
-    print(f"output = {out.data:.4f}")
-    print(f"dout/dw = {w.grad:.4f}, dout/dx = {x.grad:.4f}, dout/db = {b.grad:.4f}")
-    """),
+            def _backward():
+                self.grad += (1 / self.data) * result.grad
 
-    code(r"""
-    # 5.2 Verify the autodiff engine against numerical gradients (gradient check).
-    def f_numeric(wv, xv, bv):
-        return np.tanh(wv * xv + bv)
+            result._backward = _backward
+            return result
 
-    eps = 1e-6
-    w0, x0, b0 = 0.5, 2.0, -1.0
-    num_dw = (f_numeric(w0 + eps, x0, b0) - f_numeric(w0 - eps, x0, b0)) / (2 * eps)
-    num_db = (f_numeric(w0, x0, b0 + eps) - f_numeric(w0, x0, b0 - eps)) / (2 * eps)
-    print(f"autodiff dw {w.grad:.6f}  vs numerical {num_dw:.6f}  -> match {np.isclose(w.grad, num_dw)}")
-    print(f"autodiff db {b.grad:.6f}  vs numerical {num_db:.6f}  -> match {np.isclose(b.grad, num_db)}")
-    print("\\nOur 40-line engine computes exact gradients -- this is what loss.backward() does.")
-    """),
+        def relu(self):
+            output = max(0.0, self.data)
+            result = Value(output, (self,), "ReLU")
 
-    code(r"""
-    # 5.3 General L-layer MLP backprop (the Section 4.4 recursion), vectorized in NumPy.
-    def sigmoid(z):
-        return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
+            def _backward():
+                self.grad += (1.0 if self.data > 0 else 0.0) * result.grad
 
-    class DeepMLP:
-        def __init__(self, sizes, seed=0):
-            r = np.random.default_rng(seed)
-            self.W = [r.normal(0, 1, (a, b)) * np.sqrt(2.0 / a)
-                      for a, b in zip(sizes[:-1], sizes[1:])]
-            self.b = [np.zeros(b) for b in sizes[1:]]
+            result._backward = _backward
+            return result
 
-        def forward(self, X):
-            self.Z, self.A = [], [X]                 # cache for the backward pass
-            a = X
-            for i, (W, b) in enumerate(zip(self.W, self.b)):
-                z = a @ W + b
-                a = sigmoid(z) if i == len(self.W) - 1 else np.tanh(z)
-                self.Z.append(z); self.A.append(a)
-            return a
-
-        def backward(self, y):
-            n = len(y); y = y.reshape(-1, 1)
-            grads_W = [None] * len(self.W); grads_b = [None] * len(self.b)
-            dZ = (self.A[-1] - y) / n                 # BCE+sigmoid output error
-            for l in reversed(range(len(self.W))):
-                grads_W[l] = self.A[l].T @ dZ
-                grads_b[l] = dZ.sum(0)
-                if l > 0:
-                    dA = dZ @ self.W[l].T
-                    dZ = dA * (1 - self.A[l] ** 2)    # tanh'
-            return grads_W, grads_b
-
-    # gradient-check the whole network against finite differences
-    Xc = rng.normal(size=(20, 3)); yc = (rng.random(20) > 0.5).astype(float)
-    net = DeepMLP([3, 5, 4, 1], seed=1)
-    def loss_fn(net, X, y):
-        p = np.clip(net.forward(X), 1e-12, 1 - 1e-12); y = y.reshape(-1, 1)
-        return -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
-
-    net.forward(Xc); gW, gb = net.backward(yc)
-    # numerical grad for a few entries of W[0]
-    eps = 1e-5; errs = []
-    for (i, j) in [(0, 0), (1, 2), (2, 3)]:
-        net.W[0][i, j] += eps; lp = loss_fn(net, Xc, yc)
-        net.W[0][i, j] -= 2 * eps; lm = loss_fn(net, Xc, yc)
-        net.W[0][i, j] += eps
-        num = (lp - lm) / (2 * eps)
-        rel = abs(num - gW[0][i, j]) / (abs(num) + abs(gW[0][i, j]) + 1e-12)
-        errs.append(rel)
-        print(f"W0[{i},{j}]: analytic {gW[0][i, j]:+.6f}  numerical {num:+.6f}  rel.err {rel:.2e}")
-    print(f"\\nmax relative error: {max(errs):.2e}  (< 1e-6 => backprop is correct)")
-    """),
-
-    # ============================================ 6. Visualization
-    md(r"""
-    ## 6 · Visualization
-
-    Three pictures: gradient-check agreement (analytic vs numerical), gradients
-    actually training a deep net, and the **vanishing-gradient** phenomenon across
-    depth for sigmoid vs ReLU.
-    """),
-
-    code(r"""
-    # Figure 1 — gradient check: analytic gradients lie exactly on the numerical ones.
-    net2 = DeepMLP([3, 6, 1], seed=2)
-    net2.forward(Xc); gW2, _ = net2.backward(yc)
-    analytic, numerical = [], []
-    for i in range(3):
-        for j in range(6):
-            analytic.append(gW2[0][i, j])
-            net2.W[0][i, j] += 1e-5; lp = loss_fn(net2, Xc, yc)
-            net2.W[0][i, j] -= 2e-5; lm = loss_fn(net2, Xc, yc)
-            net2.W[0][i, j] += 1e-5
-            numerical.append((lp - lm) / (2e-5))
-    fig, ax = plt.subplots(figsize=(5.5, 5.5))
-    ax.scatter(numerical, analytic, s=30)
-    lim = [min(numerical), max(numerical)]
-    ax.plot(lim, lim, "r--", label="y = x (perfect agreement)")
-    ax.set_xlabel("numerical gradient"); ax.set_ylabel("analytic (backprop) gradient")
-    ax.set_title("Figure 1 — Gradient check: backprop matches finite differences")
-    ax.legend()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 1.** Every analytic gradient from backprop lands on the $y=x$ line against
-    its finite-difference estimate — the visual signature of a correct implementation.
-    This is the **first thing to do** when you write a custom layer or loss: if the
-    points scatter off the line, you have a bug *before* you waste GPU-hours training.
-    Finite differences are too slow to train with (one forward pass per parameter,
-    §2) but perfect for *checking* a handful of parameters.
-    """),
-
-    code(r"""
-    # Figure 2 — gradients training the deep net: loss falls as backprop drives GD.
-    Xm = rng.normal(size=(300, 3))
-    ym = (Xm[:, 0] * Xm[:, 1] - Xm[:, 2] + 0.3 * rng.normal(size=300) > 0).astype(float)
-    net3 = DeepMLP([3, 16, 16, 1], seed=3)
-    hist = []
-    for _ in range(2000):
-        net3.forward(Xm)
-        gW, gb = net3.backward(ym)
-        for l in range(len(net3.W)):
-            net3.W[l] -= 0.5 * gW[l]; net3.b[l] -= 0.5 * gb[l]
-        hist.append(loss_fn(net3, Xm, ym))
-    fig, ax = plt.subplots()
-    ax.plot(hist); ax.set_xlabel("epoch"); ax.set_ylabel("cross-entropy")
-    acc = ((net3.forward(Xm) > 0.5).ravel() == ym).mean()
-    ax.set_title(f"Figure 2 — Backprop trains a 3-hidden-layer net (acc {acc:.2f})")
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 2.** Backprop computes the gradients; gradient descent (Lesson FND-04) takes
-    the steps. A 3-hidden-layer network learns a nonlinear (interaction-driven)
-    boundary — the same loop scales to billions of parameters because backprop's cost
-    is independent of depth-times-width beyond the forward pass itself. Every deep
-    model you'll meet (DL-05 through DL-08) trains with this exact inner loop.
-    """),
-
-    code(r"""
-    # Figure 3 — VANISHING gradients: in a deep sigmoid net, early-layer grads shrink.
-    def grad_norms(activation):
-        sizes = [4] + [16] * 8 + [1]                 # 8 hidden layers (deep)
-        r = np.random.default_rng(0)
-        W = [r.normal(0, 1, (a, b)) * np.sqrt(1.0 / a) for a, b in zip(sizes[:-1], sizes[1:])]
-        bs = [np.zeros(b) for b in sizes[1:]]
-        X = r.normal(size=(64, 4)); y = (r.random(64) > 0.5).astype(float).reshape(-1, 1)
-        Z, A = [], [X]; a = X
-        for i, (w, b) in enumerate(zip(W, bs)):
-            z = a @ w + b
-            if i == len(W) - 1:
-                a = sigmoid(z)
+        def sigmoid(self):
+            # Choose the algebraic form that avoids a large positive exponential.
+            if self.data >= 0:
+                output = 1 / (1 + math.exp(-self.data))
             else:
-                a = sigmoid(z) if activation == "sigmoid" else np.maximum(0, z)
-            Z.append(z); A.append(a)
-        dZ = (A[-1] - y) / len(y); norms = []
-        for l in reversed(range(len(W))):
-            norms.append(np.linalg.norm(A[l].T @ dZ))
-            if l > 0:
-                dA = dZ @ W[l].T
-                if activation == "sigmoid":
-                    s = sigmoid(Z[l - 1]); dZ = dA * s * (1 - s)
-                else:
-                    dZ = dA * (Z[l - 1] > 0)
-        return norms[::-1]                            # layer 1 .. L
+                exponential = math.exp(self.data)
+                output = exponential / (1 + exponential)
+            result = Value(output, (self,), "sigmoid")
 
-    fig, ax = plt.subplots()
-    ax.plot(range(1, 10), grad_norms("sigmoid"), "o-", label="sigmoid (vanishes)")
-    ax.plot(range(1, 10), grad_norms("relu"), "s-", label="ReLU (sustained)")
-    ax.set_yscale("log"); ax.set_xlabel("layer (1 = closest to input)")
-    ax.set_ylabel("||gradient|| (log)")
-    ax.set_title("Figure 3 — Vanishing gradients: sigmoid decays toward early layers")
-    ax.legend()
+            def _backward():
+                self.grad += output * (1 - output) * result.grad
+
+            result._backward = _backward
+            return result
+
+        def topological_order(self):
+            ordered_nodes = []
+            visited_node_ids = set()
+
+            def visit(node):
+                if id(node) in visited_node_ids:
+                    return
+                visited_node_ids.add(id(node))
+                for parent in node.parents:
+                    visit(parent)
+                ordered_nodes.append(node)
+
+            visit(self)
+            return ordered_nodes
+
+        def zero_grad(self):
+            for node in self.topological_order():
+                node.grad = 0.0
+
+        def backward(self, seed=1.0, reset=True):
+            ordered_nodes = self.topological_order()
+            if reset:
+                for node in ordered_nodes:
+                    node.grad = 0.0
+            self.grad = float(seed)
+            for node in reversed(ordered_nodes):
+                node._backward()
+
+        def __neg__(self):
+            return self * -1
+
+        def __sub__(self, other):
+            return self + (-other)
+
+        def __rsub__(self, other):
+            return other + (-self)
+
+        def __truediv__(self, other):
+            other = other if isinstance(other, Value) else Value(other)
+            return self * other ** -1
+
+        def __rtruediv__(self, other):
+            return other * self ** -1
+
+        def __radd__(self, other):
+            return self + other
+
+        def __rmul__(self, other):
+            return self * other
+    """),
+
+    md(r"""
+    ## 8 · Rebuild the manual graph and inspect the result
+
+    The expression below is the same graph calculated in Sections 3 and 4. This time,
+    normal arithmetic constructs the graph automatically.
+
+    Notice what the engine does **not** know:
+
+    - It does not know what a neuron is.
+    - It does not contain a special formula for this complete expression.
+    - It only knows local rules for multiplication, addition, tanh, subtraction, and power.
+
+    Complex derivatives emerge by composing simple local rules.
+    """),
+
+    code(r"""
+    weight = Value(0.5, label="w")
+    input_feature = Value(2.0, label="x")
+    bias = Value(-1.0, label="b")
+    target = Value(1.0, label="y")
+
+    # Ordinary operators now build the same graph we previously calculated by hand.
+    score = weight * input_feature + bias
+    score.label = "z"
+    model_output = score.tanh()
+    model_output.label = "p"
+    model_error = model_output - target
+    model_error.label = "e"
+    graph_loss = model_error ** 2
+    graph_loss.label = "L"
+    graph_loss.backward()
+
+    leaf_report = pd.DataFrame(
+        [
+            {"leaf": node.label, "value": node.data, "gradient": node.grad}
+            for node in [weight, input_feature, bias, target]
+        ]
+    )
+    graph_order = [node.label or node.operation or "constant" for node in graph_loss.topological_order()]
+
+    print("forward loss:", graph_loss.data)
+    print("topological order:", " -> ".join(graph_order))
+    print(leaf_report.to_string(index=False))
+
+    assert np.allclose([weight.grad, input_feature.grad, bias.grad], [-4.0, -1.0, -2.0])
+    """),
+
+    md(r"""
+    ## 9 · Confirm that reused values accumulate gradients
+
+    Our earlier branch was $q=a^2+a$. In code, `a` appears twice. Both paths reach the
+    same object, and both local backward rules use `+=`.
+
+    If either rule overwrote `a.grad`, the result would be `6` or `1` instead of `7`.
+    Skip connections, tied weights, recurrent use, and many ordinary expressions rely
+    on this same accumulation rule.
+    """),
+
+    code(r"""
+    shared_value = Value(3.0, label="a")
+    branch_result = shared_value ** 2 + shared_value
+    branch_result.label = "q"
+    branch_result.backward()
+
+    print("q:", branch_result.data)
+    print("dq/da:", shared_value.grad)
+
+    assert branch_result.data == 12.0
+    assert shared_value.grad == 7.0
+    """),
+
+    md(r"""
+    ## 10 · Gradient checking is an independent measurement
+
+    Backpropagation gives an analytical gradient. A central finite difference estimates
+    the same gradient by measuring two nearby forward passes:
+
+    $$
+    g_{\text{numeric}}=
+    \frac{L(\theta+\varepsilon)-L(\theta-\varepsilon)}{2\varepsilon}
+    $$
+
+    **Symbols:** $\theta$ is one checked scalar; $\varepsilon$ is a small change; and
+    $L$ is the same scalar objective used by backpropagation.
+
+    Relative error is:
+
+    $$
+    \operatorname{relative\ error}=
+    \frac{|g_{\text{autodiff}}-g_{\text{numeric}}|}
+    {\max(10^{-8},|g_{\text{autodiff}}|+|g_{\text{numeric}}|)}
+    $$
+
+    Gradient checking is too expensive for training because it needs extra forward
+    passes for every checked scalar. Its value is independence: a backward bug usually
+    disagrees with the measured loss change.
+
+    We use values away from zero and saturation so the test is informative. We check
+    every selected leaf, not three convenient entries from one layer.
+    """),
+
+    code(r"""
+    def numeric_expression(weight_number, input_number, bias_number, target_number):
+        prediction_number = math.tanh(weight_number * input_number + bias_number)
+        return (prediction_number - target_number) ** 2
+
+
+    gradient_check_values = {
+        "weight": 0.7,
+        "input": 1.5,
+        "bias": -0.2,
+        "target": 0.4,
+    }
+
+    # Build the analytical graph once at the unperturbed values.
+    checked_weight = Value(gradient_check_values["weight"], label="weight")
+    checked_input = Value(gradient_check_values["input"], label="input")
+    checked_bias = Value(gradient_check_values["bias"], label="bias")
+    checked_target = Value(gradient_check_values["target"], label="target")
+    checked_prediction = (checked_weight * checked_input + checked_bias).tanh()
+    checked_loss = (checked_prediction - checked_target) ** 2
+    checked_loss.backward()
+
+    checked_leaves = {
+        "weight": checked_weight,
+        "input": checked_input,
+        "bias": checked_bias,
+        "target": checked_target,
+    }
+    epsilon = 1e-5
+    check_rows = []
+
+    for leaf_name, leaf_node in checked_leaves.items():
+        # Change only one leaf so the measured loss difference isolates its derivative.
+        plus_values = gradient_check_values.copy()
+        minus_values = gradient_check_values.copy()
+        plus_values[leaf_name] += epsilon
+        minus_values[leaf_name] -= epsilon
+
+        plus_loss = numeric_expression(
+            plus_values["weight"], plus_values["input"], plus_values["bias"], plus_values["target"]
+        )
+        minus_loss = numeric_expression(
+            minus_values["weight"], minus_values["input"], minus_values["bias"], minus_values["target"]
+        )
+        numerical_gradient = (plus_loss - minus_loss) / (2 * epsilon)
+        relative_error = abs(leaf_node.grad - numerical_gradient) / max(
+            1e-8,
+            abs(leaf_node.grad) + abs(numerical_gradient),
+        )
+        check_rows.append(
+            {
+                "leaf": leaf_name,
+                "autodiff": leaf_node.grad,
+                "finite_difference": numerical_gradient,
+                "relative_error": relative_error,
+            }
+        )
+
+    gradient_check_report = pd.DataFrame(check_rows)
+    print(gradient_check_report.to_string(index=False))
+    print("maximum relative error:", f"{gradient_check_report['relative_error'].max():.2e}")
+
+    assert gradient_check_report["relative_error"].max() < 1e-6
+    """),
+
+    md(r"""
+    ### What a failed check tells you
+
+    Suppose tanh incorrectly used local derivative `1` everywhere. At the check values,
+    the weight gradient would be about `0.874`, while the measured gradient is about
+    `0.456`. The disagreement localizes a mathematical or implementation bug.
+
+    Before blaming the backward rule, also verify:
+
+    - both methods use the exact same loss;
+    - randomness is frozen;
+    - dropout and batch-statistic updates are disabled;
+    - checked values are not exactly at a nondifferentiable point;
+    - $\varepsilon$ is neither so large that curvature dominates nor so small that
+      floating-point rounding dominates.
+    """),
+
+    md(r"""
+    ## 11 · Why reverse mode fits neural-network training
+
+    For a function with many inputs and many outputs, all first derivatives form a
+    **Jacobian**: a table whose rows correspond to outputs and columns to inputs.
+
+    Neural-network training usually has millions of parameter inputs but one scalar
+    loss output.
+
+    - **Forward mode** efficiently carries the effect of one chosen input direction
+      toward all outputs. This is a Jacobian–vector product, or JVP.
+    - **Reverse mode** carries one chosen output sensitivity toward all inputs. This is
+      a vector–Jacobian product, or VJP.
+
+    ```mermaid
+    flowchart LR
+        P[Many parameters] --> G[Recorded computation]
+        G --> L[One scalar loss]
+        L -. "one reverse seed" .-> G
+        G -. "all parameter gradients" .-> P
+    ```
+
+    Reverse mode does **not** make computation independent of model size. Both forward
+    and backward work scale with the operations and parameters used. Its advantage is
+    that one reverse sweep reuses intermediate results instead of perturbing parameters
+    one at a time.
+
+    Forward mode can be preferable when inputs are few and outputs are many, or when a
+    directional derivative is the desired result. We do not need to materialize a full
+    Jacobian for either JVPs or VJPs.
+    """),
+
+    md(r"""
+    ## 12 · Move from scalars to tensors by following shapes
+
+    For a batched affine layer:
+
+    $$
+    Z=XW+b
+    $$
+
+    Let:
+
+    - $X$ have shape $(B,d)$;
+    - $W$ have shape $(d,h)$;
+    - $b$ have shape $(h,)$;
+    - $Z$ have shape $(B,h)$;
+    - upstream gradient $G=\partial L/\partial Z$ have shape $(B,h)$.
+
+    Then:
+
+    $$
+    \frac{\partial L}{\partial X}=GW^T
+    $$
+
+    $$
+    \frac{\partial L}{\partial W}=X^TG
+    $$
+
+    $$
+    \frac{\partial L}{\partial b}=\sum_{i=1}^{B}G_i
+    $$
+
+    Bias is broadcast across all $B$ rows during the forward pass. Its backward rule
+    reverses that broadcast by summing the row contributions. A useful general rule is:
+
+    **Backward must reduce a broadcast gradient back to the original input shape.**
+
+    Matrix multiplication is not elementwise multiplication. The formulas follow the
+    dependency paths and must also return arrays shaped exactly like their inputs.
+    """),
+
+    code(r"""
+    batch_inputs = np.array([[1.0, 2.0], [3.0, 4.0]])
+    layer_weights = np.array([[0.5, -1.0, 2.0], [1.5, 0.0, -0.5]])
+    layer_bias = np.array([0.1, 0.2, 0.3])
+    upstream_gradient = np.array([[1.0, -2.0, 0.5], [0.25, 1.0, -1.0]])
+
+    # Forward broadcasts one bias vector across both batch rows.
+    layer_output = batch_inputs @ layer_weights + layer_bias
+
+    # Backward returns one gradient array for each original input shape.
+    input_gradient = upstream_gradient @ layer_weights.T
+    weight_gradient = batch_inputs.T @ upstream_gradient
+    bias_gradient = upstream_gradient.sum(axis=0)
+
+    shape_report = pd.DataFrame(
+        [
+            {"value": "X", "forward_shape": batch_inputs.shape, "gradient_shape": input_gradient.shape},
+            {"value": "W", "forward_shape": layer_weights.shape, "gradient_shape": weight_gradient.shape},
+            {"value": "b", "forward_shape": layer_bias.shape, "gradient_shape": bias_gradient.shape},
+            {"value": "Z", "forward_shape": layer_output.shape, "gradient_shape": upstream_gradient.shape},
+        ]
+    )
+    print(shape_report.to_string(index=False))
+    print("bias gradient:", bias_gradient)
+
+    assert input_gradient.shape == batch_inputs.shape
+    assert weight_gradient.shape == layer_weights.shape
+    assert bias_gradient.shape == layer_bias.shape
+    """),
+
+    md(r"""
+    ## 13 · Verify the same graph with PyTorch
+
+    PyTorch autograd uses the same central strategy—record differentiable operations
+    during the forward pass and apply local backward rules in reverse—but it is not
+    merely our class on a GPU. It additionally handles tensors, broadcasting, devices,
+    custom kernels, graph-lifetime rules, complex operators, and performance concerns.
+
+    A tensor created directly with `requires_grad=True` is normally a **leaf**. Model
+    parameters are leaves. Results of operations are normally **non-leaf tensors**.
+    After backward, leaf gradients are retained in `.grad`. A non-leaf gradient is
+    available only if we explicitly call `retain_grad()`.
+    """),
+
+    code(r"""
+    torch_weight = torch.tensor(0.5, dtype=torch.float64, requires_grad=True)
+    torch_input = torch.tensor(2.0, dtype=torch.float64, requires_grad=True)
+    torch_bias = torch.tensor(-1.0, dtype=torch.float64, requires_grad=True)
+    torch_target = torch.tensor(1.0, dtype=torch.float64)
+
+    # Recreate the scratch expression with identical values and double precision.
+    torch_score = torch_weight * torch_input + torch_bias
+    torch_score.retain_grad()
+    torch_prediction = torch.tanh(torch_score)
+    torch_loss = (torch_prediction - torch_target) ** 2
+    torch_loss.backward()
+
+    pytorch_comparison = pd.DataFrame(
+        [
+            {"value": "w", "scratch_gradient": weight.grad, "pytorch_gradient": torch_weight.grad.item()},
+            {"value": "x", "scratch_gradient": input_feature.grad, "pytorch_gradient": torch_input.grad.item()},
+            {"value": "b", "scratch_gradient": bias.grad, "pytorch_gradient": torch_bias.grad.item()},
+            {"value": "z", "scratch_gradient": loss_to_raw_score, "pytorch_gradient": torch_score.grad.item()},
+        ]
+    )
+    print(pytorch_comparison.to_string(index=False))
+    print("w is leaf:", torch_weight.is_leaf)
+    print("z is leaf:", torch_score.is_leaf)
+
+    assert np.allclose(
+        pytorch_comparison["scratch_gradient"],
+        pytorch_comparison["pytorch_gradient"],
+    )
+    """),
+
+    md(r"""
+    ## 14 · Gradient state: accumulation, detaching, and no-grad work
+
+    PyTorch accumulates into `.grad` because the same parameter may receive
+    contributions from several microbatches or graph branches. In an ordinary training
+    step, reset gradients before the next backward pass.
+
+    | Tool | What it does | Common use |
+    |---|---|---|
+    | `parameter.grad = None` or optimizer zeroing | clears old accumulated gradients | start a new update |
+    | `tensor.detach()` | returns a tensor sharing data but disconnected from this graph | logging or intentional stop-gradient |
+    | `torch.no_grad()` | disables graph recording inside a block | parameter updates or evaluation |
+    | `torch.inference_mode()` | stronger evaluation-oriented graph disabling | model inference |
+
+    Detaching by accident is not a numerical problem: it removes the dependency path,
+    so no gradient can cross it.
+    """),
+
+    code(r"""
+    accumulated_parameter = torch.tensor(3.0, requires_grad=True)
+
+    first_loss = accumulated_parameter ** 2
+    first_loss.backward()
+    gradient_after_first_backward = accumulated_parameter.grad.item()
+
+    second_loss = accumulated_parameter ** 2
+    second_loss.backward()
+    gradient_after_second_backward = accumulated_parameter.grad.item()
+
+    # Reset before a logically new gradient calculation.
+    accumulated_parameter.grad = None
+    third_loss = accumulated_parameter ** 2
+    third_loss.backward()
+    gradient_after_reset = accumulated_parameter.grad.item()
+
+    detached_value = accumulated_parameter.detach()
+    with torch.no_grad():
+        updated_value = accumulated_parameter - 0.1 * accumulated_parameter.grad
+
+    print("after first backward:", gradient_after_first_backward)
+    print("after second backward without reset:", gradient_after_second_backward)
+    print("after reset and backward:", gradient_after_reset)
+    print("detached requires_grad:", detached_value.requires_grad)
+    print("updated value recorded a graph:", updated_value.requires_grad)
+
+    assert [gradient_after_first_backward, gradient_after_second_backward, gradient_after_reset] == [6.0, 12.0, 6.0]
+    """),
+
+    md(r"""
+    ## 15 · Gradient flow is repeated multiplication
+
+    Along one path, backpropagation multiplies local derivatives and weight effects.
+    If a typical magnitude is $s$ across $k$ steps, the path magnitude behaves like:
+
+    $$
+    s^k
+    $$
+
+    - If $|s|<1$, repeated multiplication tends to shrink: **vanishing gradients**.
+    - If $|s|>1$, it tends to grow: **exploding gradients**.
+    - If a path contains an exact zero local derivative, no gradient crosses that step.
+
+    The plot below isolates this multiplication effect. It is not a claim that every
+    real network has one constant slope. Actual gradient flow depends on weights,
+    activations, data, normalization, residual paths, depth, and floating-point scale.
+    DL-04 will test practical remedies under controlled experiments.
+    """),
+
+    code(r"""
+    path_depths = np.arange(0, 13)
+    local_effects = {
+        "shrinking effect: 0.25": 0.25,
+        "mild shrinking effect: 0.80": 0.80,
+        "growing effect: 1.10": 1.10,
+    }
+
+    fig, axis = plt.subplots(figsize=(8, 4.5))
+    for effect_name, effect_size in local_effects.items():
+        # Holding one factor constant reveals only the repeated-product mechanism.
+        axis.plot(path_depths, effect_size ** path_depths, marker="o", label=effect_name)
+
+    axis.set_yscale("log")
+    axis.set_xlabel("number of backward multiplications")
+    axis.set_ylabel("relative path-gradient magnitude")
+    axis.set_title("Repeated local effects can shrink or grow a gradient path")
+    axis.legend()
+    plt.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 3.** Backprop multiplies a Jacobian at every layer. With **sigmoid**
-    (derivative $\le 0.25$, and smaller when saturated), these factors compound and the
-    gradient reaching the **early layers** is orders of magnitude smaller than at the
-    output — those layers barely learn (the **vanishing-gradient** problem that long
-    stalled deep networks). **ReLU** (derivative 1 on the active side) keeps gradients
-    far healthier across depth. This is *why* ReLU, careful initialization, batch/layer
-    normalization, and **residual connections** (Lesson DL-05) were invented — all of
-    them are really fixes to backprop's multiplicative gradient flow.
+    ## 16 · Memory: store activations or recompute them
+
+    Backward rules often need forward values. Tanh backward, for example, reused its
+    forward output. Saving every activation makes backward fast but consumes memory.
+
+    **Activation checkpointing** saves selected points and recomputes missing forward
+    sections during backward.
+
+    ```mermaid
+    flowchart TD
+        A[Store every activation] --> B[More memory]
+        A --> C[Less recomputation]
+        D[Store selected checkpoints] --> E[Less memory]
+        D --> F[More recomputation]
+    ```
+
+    The overhead is not one universal percentage. It depends on which sections are
+    saved, their cost, hardware, communication, and implementation. Use checkpointing
+    when activation memory is the bottleneck and extra computation is acceptable.
     """),
 
-    # ============================================ 7. Failure Modes
     md(r"""
-    ## 7 · Failure Modes
+    ## 17 · When backpropagation helps—and when it does not directly apply
 
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Vanishing gradients** | Early layers don't learn; loss plateaus | Jacobian factors <1 compound (Fig 3) | ReLU/GELU; Xavier/He init; normalization; residuals |
-    | **Exploding gradients** | Loss → NaN/Inf; spikes | Jacobian factors >1 compound | Gradient clipping (FND-04); init; normalization |
-    | **Wrong gradient (bug)** | Trains poorly / weirdly | Backprop math error in a custom op | **Gradient checking** (§4.6, Fig 1) |
-    | **Forgot to zero grads** | Gradients accumulate across steps | Frameworks *accumulate* by default | `optimizer.zero_grad()` each step |
-    | **In-place op breaks graph** | Autograd error / wrong grad | Overwrote a value needed for backward | Avoid in-place ops on graph tensors |
-    | **No-grad where grad needed** | Parameter never updates | Accidental `detach`/`stop_gradient` | Check `requires_grad`/graph connectivity |
-    | **Memory blowup** | OOM on deep/long models | Caching all activations for backward | Gradient checkpointing (recompute vs store) |
-    | **Numerical instability** | NaN in log/exp/div | Unstable op (e.g. log of 0) | Stable softmax/log-sum-exp; clip |
+    ### Use reverse-mode backpropagation when
 
-    The cell shows the **"forgot to zero gradients"** trap that frameworks make easy
-    to hit (gradients accumulate by default).
+    - a differentiable model produces a scalar training objective;
+    - many parameters influence that objective;
+    - exact program derivatives are more useful than parameter-by-parameter estimates;
+    - custom differentiable components need verified gradients.
+
+    ### Do not expect ordinary backpropagation to solve
+
+    - a discrete choice with no differentiable path, such as an `argmax` action;
+    - a black-box system whose internal computation is unavailable;
+    - a truly nondifferentiable objective without a declared surrogate or estimator;
+    - model selection, data leakage, or poor evaluation design;
+    - optimization by itself—gradients still need an update rule.
+
+    Alternatives depend on the problem: differentiable relaxations, surrogate losses,
+    policy-gradient estimators, evolutionary or derivative-free search, or direct
+    enumeration for tiny spaces. These methods have different bias, variance, and cost.
+    """),
+
+    md(r"""
+    ## 18 · Mini-project: use the engine to learn the OR rule
+
+    This project tests whether the engine supports a changing graph across many
+    examples—not whether OR is an important machine-learning benchmark.
+
+    **Goal:** train one sigmoid neuron with the scratch engine and confirm that autodiff
+    supplies useful gradients.
+
+    **Dataset columns:** `first_bit`, `second_bit`, and `or_target`.
+
+    | first_bit | second_bit | or_target |
+    |---:|---:|---:|
+    | 0 | 0 | 0 |
+    | 0 | 1 | 1 |
+    | 1 | 0 | 1 |
+    | 1 | 1 | 1 |
+
+    **Workflow:**
+
+    1. initialize two weights and one bias;
+    2. build a fresh graph for all four rows;
+    3. calculate mean binary cross-entropy;
+    4. call `backward()` once;
+    5. update only the three parameters;
+    6. rebuild the graph on the next step;
+    7. inspect probabilities and decisions.
+
+    The first implementation stays deliberately small. A production system would use
+    stable logit loss, vectorized tensors, an optimizer, and tested framework kernels.
     """),
 
     code(r"""
-    # Why frameworks need zero_grad: gradients ACCUMULATE unless reset. Demonstrate with our engine.
-    a = Value(3.0)
-    L1 = a * a                     # dL1/da = 2a = 6
-    L1.backward()
-    print(f"after 1st backward: a.grad = {a.grad:.1f}  (correct: 2a = 6)")
-    L2 = a * a
-    L2.backward()                  # WITHOUT resetting a.grad, it accumulates
-    print(f"after 2nd backward (no reset): a.grad = {a.grad:.1f}  (WRONG: 6+6=12, double-counted)")
-    a.grad = 0.0                   # the fix: zero gradients between steps
-    L3 = a * a; L3.backward()
-    print(f"after reset + backward: a.grad = {a.grad:.1f}  (correct again)")
-    print("\\nPyTorch accumulates grads by design (useful for RNNs/grad accumulation),")
-    print("which is why you must call optimizer.zero_grad() every training step.")
+    or_features = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+    or_targets = [0.0, 1.0, 1.0, 1.0]
+
+    or_weight_one = Value(0.1, label="w1")
+    or_weight_two = Value(-0.1, label="w2")
+    or_bias = Value(0.0, label="b")
+    or_parameters = [or_weight_one, or_weight_two, or_bias]
+    project_losses = []
+    project_learning_rate = 0.2
+
+    for training_step in range(300):
+        example_losses = []
+
+        for (first_bit, second_bit), target_bit in zip(or_features, or_targets):
+            # Each row contributes a fresh prediction path into one shared mean loss.
+            example_logit = or_weight_one * first_bit + or_weight_two * second_bit + or_bias
+            example_probability = example_logit.sigmoid()
+            example_loss = -(
+                target_bit * example_probability.log()
+                + (1 - target_bit) * (1 - example_probability).log()
+            )
+            example_losses.append(example_loss)
+
+        mean_project_loss = sum(example_losses) / len(example_losses)
+        mean_project_loss.backward()
+        project_losses.append(mean_project_loss.data)
+
+        # Parameter updates happen outside the graph, just like a no-grad optimizer step.
+        for parameter in or_parameters:
+            parameter.data -= project_learning_rate * parameter.grad
+
+    final_or_probabilities = []
+    for first_bit, second_bit in or_features:
+        final_logit = (
+            or_weight_one.data * first_bit
+            + or_weight_two.data * second_bit
+            + or_bias.data
+        )
+        final_or_probabilities.append(1 / (1 + math.exp(-final_logit)))
+
+    final_or_decisions = [int(probability >= 0.5) for probability in final_or_probabilities]
+    project_report = pd.DataFrame(
+        {
+            "features": or_features,
+            "target": or_targets,
+            "probability": final_or_probabilities,
+            "decision": final_or_decisions,
+        }
+    )
+    print("first loss:", round(project_losses[0], 5))
+    print("final loss:", round(project_losses[-1], 5))
+    print(project_report.to_string(index=False))
+
+    assert project_losses[-1] < project_losses[0]
+    assert final_or_decisions == [0, 1, 1, 1]
     """),
 
-    # ============================================ 8. Production Library
     md(r"""
-    ## 8 · Production Library Implementation
+    ## 19 · Common mistakes and how to reason through them
 
-    PyTorch's **autograd** is exactly our `Value` engine, scaled to tensors on GPU:
-    each operation records itself on a dynamic graph, and `loss.backward()` runs
-    reverse-mode AD to populate every parameter's `.grad`. We confirm PyTorch's
-    gradients match our hand-derived/numerical ones. The import is guarded so the
-    notebook runs without torch.
-    """),
-
-    code(r"""
-    # PyTorch autograd reproduces our scratch gradients exactly. Guarded import.
-    try:
-        import torch
-        wt = torch.tensor(0.5, requires_grad=True)
-        xt = torch.tensor(2.0, requires_grad=True)
-        bt = torch.tensor(-1.0, requires_grad=True)
-        out_t = torch.tanh(wt * xt + bt)
-        out_t.backward()                              # reverse-mode AD over the recorded graph
-        print(f"PyTorch  dw={wt.grad.item():.6f}  dx={xt.grad.item():.6f}  db={bt.grad.item():.6f}")
-        print(f"scratch  dw={w.grad:.6f}  dx={x.grad:.6f}  db={b.grad:.6f}")
-        print("identical -> our engine implements the same algorithm as torch.autograd")
-    except Exception as e:
-        print(f"[torch not available: {type(e).__name__}] "
-              f"the scratch Value engine already demonstrates reverse-mode autodiff.")
+    - **Calling backpropagation an optimizer.** Ask whether the operation calculates a
+      gradient or changes a parameter.
+    - **Starting the loss with gradient zero.** The correct scalar seed is one because
+      $\partial L/\partial L=1$.
+    - **Overwriting a shared node's gradient.** Contributions from different paths add.
+    - **Running backward in forward order.** A node must first receive every later contribution.
+    - **Forgetting cached forward values.** Local derivatives often depend on them.
+    - **Ignoring broadcast reduction.** Return each gradient to its input's original shape.
+    - **Checking only one convenient weight.** Test all parameter families, including biases.
+    - **Using different losses for analytical and numerical gradients.** The comparison
+      is valid only when objectives match exactly.
+    - **Checking at a ReLU kink.** A finite difference can disagree with a chosen
+      subgradient exactly at zero without proving the implementation is wrong.
+    - **Forgetting to clear framework gradients.** `.grad` accumulates by design.
+    - **Detaching a needed path.** No graph edge means no gradient can cross it.
+    - **Claiming backward is independent of model size.** Reverse mode is efficient
+      because it reuses work, but it still executes the model's graph.
     """),
 
     md(r"""
-    **Scratch vs production.** Our `Value` class and `torch.autograd` implement the
-    *same* algorithm — build a graph on the forward pass, traverse it in reverse,
-    apply local gradient rules — and produce identical gradients. What the framework
-    adds: tensor/GPU ops, hundreds of differentiable primitives, dynamic graphs,
-    memory management (and **gradient checkpointing** to trade compute for memory on
-    huge models), and `.backward()` in one line. The reason to build it from scratch:
-    when training breaks (NaNs, vanishing gradients, a custom layer that won't learn),
-    you debug it by reasoning about the graph and gradient flow — and you reach for
-    **gradient checking** to localize the bug.
+    ## 20 · Practice, solutions, and mastery checkpoint
+
+    ### Worked example
+
+    Sections 3 and 4 are the complete worked example: they calculate
+    $L=(\tanh(wx+b)-y)^2$ forward and then trace every derivative back to $w$, $x$,
+    and $b$. Recalculate that example once without looking before starting the exercises.
+
+    ### Guided practice
+
+    1. For $L=(3w-2)^2$ at $w=1$, calculate the forward loss and $dL/dw$.
+    2. For $q=a^2+2a$ at $a=4$, list both path contributions and their sum.
+
+    ### Independent practice
+
+    3. Add a `sin()` operation to `Value` and gradient-check it away from extrema.
+    4. Explain why bias gradient for a batch is a sum across rows.
+    5. Create a deliberate wrong multiplication rule and show which finite-difference
+       checks fail. Restore the correct rule afterward.
+
+    ### Challenge
+
+    Add a scalar `softplus()` operation,
+
+    $$
+    \operatorname{softplus}(x)=\log(1+e^x),
+    $$
+
+    using existing engine operations. Check inputs `-3`, `0.5`, and `2`; compare every
+    gradient with PyTorch; and explain how operation composition creates the backward
+    rule without writing a special `softplus` derivative.
+
+    ### Solution and scoring rubric
+
+    1. Forward loss is $(3-2)^2=1$. Let $e=3w-2$; then $dL/dw=2e(3)=6$.
+    2. The square path contributes $2a=8$ and the linear path contributes $2$; total is `10`.
+    3. `sin()` uses local derivative $\cos(x)$ multiplied by its upstream gradient.
+    4. One shared bias affects every batch row, so every row contributes to the same bias element.
+    5. A correct independent finite-difference check disagrees wherever the broken rule
+       lies on a path from the checked leaf to the loss.
+
+    Award one point for each correct guided or independent answer, three points for a
+    correctly checked `sin()` operation, and four points for the softplus challenge.
+    Explanations must name both the local derivative and upstream gradient.
+
+    ### Self-check
+
+    Explain without notes:
+
+    1. What is the difference between backpropagation and gradient descent?
+    2. What are upstream and local gradients?
+    3. Why must graph branches accumulate gradients?
+    4. Why does backward use reverse topological order?
+    5. Why is the scalar-loss seed one?
+    6. Why is reverse mode suitable for many parameters and one loss?
+    7. Why does broadcast bias use a sum in backward?
+    8. What does gradient checking establish—and what does it not establish?
+    9. What is the difference between a PyTorch leaf and non-leaf tensor?
+    10. What happens when a tensor is detached?
+    11. Why can repeated Jacobian effects shrink or grow gradients?
+
+    ### Readiness threshold
+
+    Award two points for each self-check answer. Score at least **18/22**, and complete
+    the OR project plus one fully checked new operation before moving on.
     """),
 
-    # ============================================ 9. Business Case Study
     md(r"""
-    ## 9 · Realistic Business Case Study — Why Backprop Made Modern AI Economically Possible
+    ## Ready to move on?
 
-    **Scenario.** A team trains a 100-million-parameter model. The choice of gradient
-    method isn't academic — it determines whether training is feasible *at all*.
+    ### Quick check
 
-    **The economics of the gradient.**
-    - **Numerical differentiation:** ~1 forward pass *per parameter* → $10^8$ forward
-      passes *per gradient step*, times thousands of steps. Completely infeasible —
-      training would take longer than the age of the universe.
-    - **Backpropagation:** **one** forward + **one** backward pass per step (≈2× a
-      forward pass) gives the gradient for *all* $10^8$ parameters at once. Training
-      becomes a matter of hours/days on GPUs instead of impossible.
-    This ~$10^8$× efficiency gap is *why* deep learning is a business reality and not a
-    theoretical curiosity. Every LLM, recommender, and vision model in production is
-    economically viable because of this one algorithm.
+    Without running code, explain why $q=a^2+a$ gives two gradient contributions to
+    the same leaf, and state the order in which its graph must run backward.
 
-    **Business objectives:** train large models within a fixed time/GPU budget;
-    catch implementation bugs before they burn that budget.
+    ### Teach it back
 
-    **Cost of mistakes:**
-    - A **wrong custom-layer gradient** silently degrades the model — caught cheaply by
-      **gradient checking** before a multi-day run, or discovered expensively after.
-    - **Exploding gradients** NaN-out a run mid-training, wasting the entire budget —
-      hence clipping/normalization as standard insurance (Lesson FND-04).
-    - **Memory mismanagement** (caching all activations) OOMs large models —
-      gradient checkpointing trades recompute for memory.
+    Draw a branched computation graph. Calculate it forward, seed the scalar loss with
+    one, walk backward in reverse topological order, and show where two gradient paths
+    add. Then explain how a `Value` object automates those same steps.
 
-    **Constraints:** GPU memory (activation caching scales with depth × batch × width),
-    wall-clock budget, numerical stability at scale.
+    ### Final readiness gate
 
-    **KPIs:** training throughput (steps/sec), peak memory, run reliability (no NaNs),
-    and gradient-check pass-rate for any custom component before launch.
-    """),
+    You are ready for DL-04 when you can:
 
-    # ============================================ 10. Production Considerations
-    md(r"""
-    ## 10 · Production Considerations
+    - calculate one graph manually;
+    - distinguish local and upstream gradients;
+    - explain accumulation and graph order;
+    - implement and gradient-check one new scalar operation;
+    - derive affine-layer gradients by shape;
+    - match the same graph in PyTorch;
+    - explain accumulation, detaching, and no-grad updates;
+    - describe vanishing and exploding gradients without claiming one activation fixes everything.
 
-    - **Gradient checking is a CI step for custom ops.** Before shipping a new layer or
-      loss, verify analytic vs numerical gradients (Fig 1). Cheap; prevents
-      catastrophically wasted training runs.
-    - **Memory ↔ compute (checkpointing).** Backward needs cached forward activations;
-      memory scales with depth × batch × width. **Gradient checkpointing** stores only
-      some activations and *recomputes* the rest in the backward pass — trading ~33%
-      more compute for large memory savings, essential for big models.
-    - **Numerical stability.** Use stable primitives (log-sum-exp softmax, BCE-with-
-      logits) so backprop doesn't propagate NaNs from `log(0)`/overflow.
-    - **Gradient clipping & normalization** keep the multiplicative gradient flow in a
-      healthy range (vanishing/exploding, §4.7) — standard for deep/recurrent models
-      (FND-04 and DL-06).
-    - **Zero gradients each step.** Frameworks accumulate by default; forgetting
-      `zero_grad()` silently corrupts training (§7).
-    - **Mixed precision** speeds training but can underflow small gradients — use loss
-      scaling.
-    - **Don't reimplement autograd** in production — use the framework; *do* understand
-      it so you can debug gradient-flow pathologies the framework surfaces.
-    """),
+    ### Memory aid
 
-    # ============================================ 11. Tradeoff Analysis
-    md(r"""
-    ## 11 · Tradeoff Analysis
+    **Record the forward path, seed the loss with one, reverse the graph, multiply local
+    effects, and add every path that meets.**
 
-    **Gradient computation methods:**
+    ### Next dependency
 
-    | Method | Cost for $P$ params | Accuracy | Use for |
-    |---|---|---|---|
-    | Numerical (finite diff) | $O(P)$ forward passes | Approximate, noisy | **Checking** only, never training |
-    | Symbolic | Expression swell | Exact | Tiny expressions |
-    | **Reverse-mode AD (backprop)** | ~2× one forward pass | Exact | **Training** (scalar loss, many params) |
-    | Forward-mode AD | $O(\text{inputs})$ passes | Exact | Few inputs, many outputs |
-
-    **Reverse vs forward mode:**
-
-    | | Reverse (backprop) | Forward |
-    |---|---|---|
-    | Best when | outputs ≪ inputs (loss, params) | inputs ≪ outputs |
-    | One pass gives | grad of 1 output w.r.t. all inputs | derivs of all outputs w.r.t. 1 input |
-    | Memory | caches activations (high) | low |
-    | Deep learning | **the choice** | rare |
-
-    **Memory–compute tradeoff (checkpointing):**
-
-    | Strategy | Memory | Compute |
-    |---|---|---|
-    | Store all activations | High | 1× backward |
-    | Gradient checkpointing | **Low** | ~1.33× (recompute) |
-
-    **Senior lesson:** backprop = reverse-mode AD, chosen because the loss is scalar and
-    parameters are many. Its costs (activation memory, multiplicative gradient flow) are
-    exactly what production techniques — checkpointing, clipping, normalization,
-    gradient checking — exist to manage.
-    """),
-
-    # ============================================ 12. Interview Prep
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
-
-    **Common questions**
-    - *Explain backprop.* → Forward pass caches activations; backward pass applies the
-      chain rule node-by-node in reverse topological order, computing all gradients in
-      ~one extra forward-pass of cost (§3, §4.2).
-    - *Why not numerical gradients?* → $O(P)$ forward passes per step and noisy — fine
-      for *checking*, infeasible for *training* (§9).
-
-    **Deep-dive questions**
-    - *Forward vs reverse mode?* → Reverse computes grad of one scalar output w.r.t.
-      many inputs in one pass — ideal for training (§4.5).
-    - *Backward pass of a linear layer?* → $dW=A^\top dZ$, $dA_{prev}=dZ\,W^\top$
-      (§4.3–4.4).
-    - *Vanishing/exploding gradients — cause and fixes?* → Multiplied Jacobians compound
-      (§4.7, Fig 3); ReLU, init, normalization, residuals, clipping.
-
-    **Whiteboard questions**
-    - "Implement a scalar autograd `Value` with +, *, and tanh." (Section 5.1.)
-    - "How would you gradient-check a custom layer?" (Central differences; §4.6, Fig 1.)
-
-    **Strong vs weak answers**
-    - *"Your custom loss trains badly."*
-      - **Weak:** "Tune the learning rate."
-      - **Strong:** "First **gradient-check** the custom loss/layer against finite
-        differences — a wrong analytic gradient is the most likely cause. If it
-        passes, then I look at LR, init, and gradient flow."
-    - *"Why did adding more layers stop training?"*
-      - **Weak:** "Too complex."
-      - **Strong:** "Likely vanishing gradients — backprop multiplies Jacobians, so deep
-        sigmoid stacks shrink early-layer gradients. I'd switch to ReLU/GELU, use He
-        init, add normalization or residual connections."
-
-    **Follow-ups:** "Memory cost of backward?" (caches activations → checkpointing).
-    "Why zero_grad?" (frameworks accumulate). "When forward-mode?" (outputs ≫ inputs,
-    e.g. Jacobian-vector products).
-
-    **Common mistakes:** confusing backprop (the algorithm) with gradient descent (the
-    optimizer); thinking numerical gradients are used for training; forgetting
-    activation caching/zeroing; not knowing reverse vs forward mode; assuming deeper is
-    always better (vanishing gradients).
-    """),
-
-    # ============================================ 13. Teach-Back
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
-
-    1. **What is it?** Define backpropagation as reverse-mode AD on a computation graph.
-    2. **Why was it invented?** Why are numerical/symbolic gradients inadequate for
-       training?
-    3. **How does it work?** Describe the forward-cache / backward-propagate structure
-       and the per-node rule.
-    4. **Why does it work?** Why does reverse mode give all parameter gradients in ~one
-       backward pass?
-    5. **When to use it?** Reverse vs forward mode — when each.
-    6. **When NOT to use it?** When do numerical gradients have a (limited) role?
-    7. **Tradeoffs?** Memory vs compute (checkpointing); accuracy vs cost of gradient
-       methods.
-    8. **How would you productionize it?** Gradient checking, clipping, checkpointing,
-       stable ops, and zeroing gradients.
-    """),
-
-    # ============================================ 14. Exercises
-    md(r"""
-    ## 14 · Exercises
-
-    **Beginner (conceptual)**
-    1. For $L=(wx+b-y)^2$, derive $\partial L/\partial w$ and $\partial L/\partial b$ by
-       hand, then confirm with the `Value` engine.
-    2. Explain why a node used in two places must *accumulate* (sum) its gradients.
-
-    **Beginner → Intermediate (coding)**
-    3. Add `exp`, `relu`, and division to the `Value` engine and gradient-check each.
-    4. Use the engine to build a 2-input/1-hidden-neuron network and train it on AND/OR
-       by manual gradient descent.
-
-    **Intermediate (analysis)**
-    5. Reproduce Figure 3 and quantify the per-layer gradient-decay factor for sigmoid;
-       show He-initialized ReLU keeps it near 1.
-    6. Implement **gradient checkpointing** for the `DeepMLP`: don't cache all
-       activations, recompute them in `backward`, and verify gradients still match.
-
-    **Senior (interview + production design)**
-    7. *Whiteboard:* derive the general layer-wise backprop recursion (§4.4) from the
-       chain rule and state the per-step compute/memory cost.
-    8. *Design:* a CI pipeline that gradient-checks every custom layer/loss before a
-       training run; specify tolerances, which params to check, and how you'd catch a
-       regression.
-    9. *Debug:* training NaNs at step 500. Walk through how you'd localize it
-       (clipping off? unstable softmax? exploding gradients?) and the fix for each.
-    """),
-
-    # ---------------------------------------------------------------- Footer
-    md(r"""
-    ---
-    ### Summary
-    Backpropagation is **reverse-mode automatic differentiation**: represent the model
-    as a computation graph, run a forward pass that **caches** activations, then a
-    backward pass that applies the chain rule **locally at each node** in reverse,
-    computing the gradient w.r.t. *every* parameter in roughly one extra forward-pass of
-    cost. That efficiency (vs $O(P)$ for numerical gradients) is what makes training
-    large models possible. Its byproducts — activation memory and multiplicative
-    gradient flow — drive the production toolkit: **gradient checking**, clipping,
-    normalization, residuals, and checkpointing. Our 40-line `Value` engine is, in
-    miniature, exactly what `loss.backward()` runs.
-
-    **Related lesson:** `DL-05 · CNNs` — we specialize the network's architecture for spatial data
-    (images): weight-sharing convolutions and pooling that build translation-invariant,
-    hierarchical features — trained, of course, by the backprop we just built.
+    Verified gradient flow  
+    → required before stable neural training  
+    → because DL-04 changes initialization, activations, optimizers, normalization, and
+    regularization while measuring how those choices affect optimization and generalization.
     """),
 ]
+
 
 build("04_deep_learning/03_backpropagation.ipynb", cells)
