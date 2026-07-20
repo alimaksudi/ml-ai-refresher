@@ -32,7 +32,7 @@
     {"id":"DL-04","path":"04_deep_learning/04_stable_neural_training.ipynb","prerequisites":["DL-01","DL-02","DL-03"],"gate":"deep_learning"},
     {"id":"DL-05","path":"04_deep_learning/05_convolutional_neural_networks.ipynb","prerequisites":["DL-03","DL-04"],"gate":"deep_learning"},
     {"id":"NLP-01","path":"05_nlp_and_llms/01_tfidf_and_word_embeddings.ipynb","prerequisites":["FND-01","CML-02","MLE-01"],"gate":"deep_learning"},
-    {"id":"DL-06","path":"04_deep_learning/06_rnn_and_lstm.ipynb","prerequisites":["DL-04","NLP-01"],"gate":"deep_learning"},
+    {"id":"DL-06","path":"04_deep_learning/06_rnn_and_lstm.ipynb","prerequisites":["FND-01","FND-04","DL-01","DL-02","DL-03","DL-04"],"gate":"deep_learning"},
     {"id":"DL-07","path":"04_deep_learning/07_attention_mechanism.ipynb","prerequisites":["FND-01","DL-06"],"gate":"deep_learning"},
     {"id":"DL-08","path":"04_deep_learning/08_transformers.ipynb","prerequisites":["DL-04","DL-07","NLP-01"],"gate":"deep_learning"},
     {"id":"NLP-06","path":"05_nlp_and_llms/06_transformer_model_families.ipynb","prerequisites":["DL-07","DL-08","NLP-01"],"gate":"llm_rag"},
