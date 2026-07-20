@@ -32,7 +32,9 @@ make tiny-lm-kv-cache
 ```
 
 The training command writes model weights, tokenizer vocabulary, configuration,
-dataset hash, learning curves, baseline loss, and limitations under `artifacts/`.
+partition fingerprints, one-batch diagnostic, learning curves, selected epoch,
+baseline loss, environment, elapsed time, artifact hashes, and limitations under
+`artifacts/`.
 The tokenizer command trains the same decoder once with characters and once with a
 from-scratch BPE vocabulary, then writes a controlled comparison report.
 The KV-cache command proves cached and uncached logits agree, verifies identical greedy
@@ -92,6 +94,7 @@ recomputes the retained window instead of reusing stale cache entries.
 - The causal-mask test must show that changing future tokens cannot change earlier logits.
 - The one-batch diagnostic must sharply reduce its loss.
 - The saved checkpoint must reproduce generation under the same seed and settings.
+- Artifact hashes must match the saved weights and tokenizer.
 - The bigram baseline must be reported even if the Transformer does not beat it.
 - The tokenizer comparison must report compression, context coverage, parameter count,
   and bits per character; token-level perplexity may only be compared within one

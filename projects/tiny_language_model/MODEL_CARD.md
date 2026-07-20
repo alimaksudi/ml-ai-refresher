@@ -34,9 +34,11 @@ from this model is not evidence of truth or understanding.
 
 ## Evaluation
 
-The artifact reports initial and best validation loss, token-level perplexity, bits per
-character, a smoothed bigram baseline, token compression, context coverage, parameter
-count, full learning history, configuration, seed, and corpus hash. Token-level
+The artifact reports initial and best validation loss, the selected epoch, token-level
+perplexity, bits per character, a smoothed bigram baseline, the one-batch wiring
+diagnostic, token compression, context coverage, parameter count, full learning
+history, optimizer configuration, seed, partition fingerprints, environment, elapsed
+time, and artifact hashes. Token-level
 perplexity is not compared across tokenizers. Human assessment is defined in
 `MASTERY_CHECKPOINT.md`.
 

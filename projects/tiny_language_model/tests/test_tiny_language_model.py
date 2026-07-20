@@ -8,11 +8,13 @@ from tiny_language_model.model import (
     tokenizer_from_dict,
 )
 from tiny_language_model.training import (
+    file_sha256,
     load_checkpoint,
     make_next_token_windows,
     overfit_one_batch,
     save_checkpoint,
     split_text_contiguously,
+    train,
 )
 
 
@@ -149,3 +151,36 @@ def test_cached_generation_resets_correctly_at_context_limit():
     naive = model.generate(prompt.clone(), 5, temperature=0)
     cached = model.generate_with_cache(prompt.clone(), 5, temperature=0)
     assert torch.equal(naive, cached)
+
+
+def test_real_training_checkpoint_records_and_reproduces_evidence(tmp_path):
+    text = ("a model predicts the next token. validation selects weights. " * 18)
+    model, tokenizer, metadata = train(
+        text,
+        seed=23,
+        max_epochs=4,
+        batch_size=8,
+        config_overrides={"block_size": 12, "d_model": 16, "n_heads": 4, "n_layers": 1},
+    )
+    save_checkpoint(model, tokenizer, metadata, tmp_path)
+    loaded_model, loaded_tokenizer, loaded_metadata = load_checkpoint(tmp_path)
+
+    assert loaded_metadata["best_validation_loss"] < loaded_metadata["initial_validation_loss"]
+    assert loaded_metadata["best_epoch"] in range(1, 5)
+    assert loaded_metadata["one_batch_diagnostic"]["final_loss"] < (
+        loaded_metadata["one_batch_diagnostic"]["initial_loss"] * 0.25
+    )
+    assert loaded_metadata["training_config"]["selection_metric"] == (
+        "validation bits per source character"
+    )
+    assert loaded_metadata["split"]["train_sha256"] != loaded_metadata["split"]["validation_sha256"]
+    assert loaded_metadata["elapsed_seconds"] > 0
+    assert loaded_metadata["artifact_sha256"] == {
+        "model": file_sha256(tmp_path / "model.pt"),
+        "tokenizer": file_sha256(tmp_path / "tokenizer.json"),
+    }
+
+    prompt = torch.tensor([loaded_tokenizer.encode("a model")], dtype=torch.long)
+    original_tokens = model.generate(prompt, 5, temperature=0)
+    loaded_tokens = loaded_model.generate(prompt, 5, temperature=0)
+    assert torch.equal(original_tokens, loaded_tokens)

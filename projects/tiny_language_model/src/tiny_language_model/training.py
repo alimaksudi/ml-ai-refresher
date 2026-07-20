@@ -5,7 +5,9 @@ import argparse
 import hashlib
 import json
 import math
+import platform
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +36,15 @@ def seed_everything(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+
+
+def sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return sha256_bytes(path.read_bytes())
 
 
 def split_text_contiguously(text: str, validation_fraction: float = 0.15) -> TextSplit:
@@ -133,6 +144,7 @@ def overfit_one_batch(model: TinyLanguageModel, batch: tuple[torch.Tensor, torch
     """Diagnostic: a correct small model should substantially reduce one-batch loss."""
     inputs, targets = batch
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-3, weight_decay=0.0)
+    model.eval()
     _, initial = model(inputs, targets)
     assert initial is not None
     for _ in range(steps):
@@ -143,7 +155,9 @@ def overfit_one_batch(model: TinyLanguageModel, batch: tuple[torch.Tensor, torch
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
-    _, final = model(inputs, targets)
+    model.eval()
+    with torch.no_grad():
+        _, final = model(inputs, targets)
     assert final is not None
     return {"initial_loss": initial.item(), "final_loss": final.item()}
 
@@ -158,6 +172,7 @@ def train(
     tokenizer_type: str = "character",
     bpe_vocab_size: int = 80,
 ) -> tuple[TinyLanguageModel, Tokenizer, dict]:
+    experiment_started = time.perf_counter()
     seed_everything(seed)
     split = split_text_contiguously(text)
     if tokenizer_type == "character":
@@ -182,11 +197,18 @@ def train(
     )
     validation_loader = DataLoader(validation_data, batch_size=batch_size)
 
+    # Run the wiring diagnostic on a separate model so it cannot improve the model
+    # later reported as trained on the full development data.
+    diagnostic_model = TinyLanguageModel(config)
+    diagnostic_batch = next(iter(training_loader))
+    one_batch_diagnostic = overfit_one_batch(diagnostic_model, diagnostic_batch)
+    seed_everything(seed)
     model = TinyLanguageModel(config)
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-2)
     initial_validation = evaluate_metrics(model, validation_loader, tokenizer)
     best_validation = initial_validation
     best_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
+    best_epoch = 0
     history = []
 
     for epoch in range(1, max_epochs + 1):
@@ -213,6 +235,7 @@ def train(
         })
         if validation["bits_per_character"] < best_validation["bits_per_character"]:
             best_validation = validation
+            best_epoch = epoch
             best_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
 
     model.load_state_dict(best_state)
@@ -220,11 +243,26 @@ def train(
     baseline = bigram_validation_metrics(train_ids, validation_ids, tokenizer)
     tokenizer_name = "bpe" if isinstance(tokenizer, BPETokenizer) else "character"
     metadata = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "seed": seed,
         "corpus_sha256": text_hash,
-        "split": {"method": "contiguous before windowing", "train_characters": len(split.train), "validation_characters": len(split.validation)},
+        "split": {
+            "method": "contiguous before windowing",
+            "train_characters": len(split.train),
+            "validation_characters": len(split.validation),
+            "train_sha256": sha256_bytes(split.train.encode("utf-8")),
+            "validation_sha256": sha256_bytes(split.validation.encode("utf-8")),
+        },
         "config": config.to_dict(),
+        "training_config": {
+            "max_epochs": max_epochs,
+            "batch_size": batch_size,
+            "optimizer": "AdamW",
+            "learning_rate": 0.002,
+            "weight_decay": 0.01,
+            "gradient_clip_norm": 1.0,
+            "selection_metric": "validation bits per source character",
+        },
         "parameter_count": parameter_count(model),
         "tokenizer": {
             "type": tokenizer_name,
@@ -240,9 +278,18 @@ def train(
         "best_validation_loss": best_validation["loss_per_token"],
         "best_validation_perplexity": best_validation["perplexity_per_token"],
         "best_validation_bits_per_character": best_validation["bits_per_character"],
+        "best_epoch": best_epoch,
         "bigram_validation_loss": baseline["loss_per_token"],
         "bigram_validation_bits_per_character": baseline["bits_per_character"],
         "history": history,
+        "one_batch_diagnostic": one_batch_diagnostic,
+        "environment": {
+            "python": platform.python_version(),
+            "numpy": np.__version__,
+            "torch": torch.__version__,
+            "device": "cpu",
+        },
+        "elapsed_seconds": time.perf_counter() - experiment_started,
         "limitations": [
             "The curriculum-authored corpus is tiny and synthetic.",
             "Loss reduction demonstrates mechanics, not general language ability.",
@@ -256,7 +303,11 @@ def save_checkpoint(model: TinyLanguageModel, tokenizer: Tokenizer, metadata: di
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), output_dir / "model.pt")
     (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer.to_dict(), indent=2), encoding="utf-8")
-    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    metadata["artifact_sha256"] = {
+        "model": file_sha256(output_dir / "model.pt"),
+        "tokenizer": file_sha256(output_dir / "tokenizer.json"),
+    }
+    (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
 def load_checkpoint(output_dir: Path) -> tuple[TinyLanguageModel, Tokenizer, dict]:
