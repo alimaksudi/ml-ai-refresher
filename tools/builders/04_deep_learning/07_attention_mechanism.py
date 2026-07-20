@@ -1,663 +1,805 @@
-"""Builder for Lesson DL-07 — Attention Mechanism.
+"""Build DL-07: attention from weighted retrieval to verified multi-head code."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
     md(r"""
     # DL-07 · The Attention Mechanism
-    ### Section 04 — Deep Learning Foundations · *ML/AI Senior Mastery Curriculum*
 
-    > Lesson DL-06 ended with a hard limit: RNNs must process sequences **one step at
-    > a time**, and all past context is squeezed through a fixed-size hidden state
-    > bottleneck. Long-range dependencies still bleed out, even with an LSTM. The
-    > **attention mechanism** removes *both* constraints: every position can look
-    > directly at every other position in a single parallel operation, with no fixed
-    > memory bottleneck. Bahdanau et al. introduced the idea for machine translation
-    > in 2015; the Transformer (Lesson DL-08) replaced the recurrence entirely with
-    > **self-attention stacks** and became the backbone of all modern LLMs. This
-    > notebook derives attention from scratch — query, key, value, scaled dot-product,
-    > softmax, causal masking, multi-head — and shows why each choice matters.
+    **Prerequisites:** FND-01, DL-01, DL-02, DL-03, and DL-06  
+    **Estimated mastery time:** 9–12 hours, including practice  
+    **Next lesson:** DL-08 · Transformers
+
+    An RNN carries one compressed note through a sequence. Attention offers a different
+    operation: ask a question, score every available item, and blend the useful
+    information. A position can therefore access another position through one direct
+    weighted retrieval instead of waiting for information to travel through many
+    recurrent steps.
+
+    We will not start by memorizing $Q$, $K$, and $V$. We will start with a weighted
+    average, calculate one attention row by hand, introduce learned projections only
+    when their purpose is clear, and verify the NumPy implementation against PyTorch.
+
+    ### Scope
+
+    This lesson teaches the attention operation. Positional representations, residual
+    blocks, normalization, feed-forward sublayers, training objectives, and a complete
+    causal Transformer belong to DL-08.
     """),
 
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · What you will be able to do
 
-    **What you will master**
-    - The two RNN limits attention was invented to fix: **sequential computation** and
-      the **fixed-size memory bottleneck** (Lesson DL-06 link).
-    - The **query / key / value** abstraction and what each represents.
-    - **Scaled dot-product attention**: $\text{Attention}(Q,K,V)=\text{softmax}\!\left(\tfrac{QK^\top}{\sqrt{d_k}}\right)V$ — derived from cosine-similarity intuition (Lesson FND-01).
-    - *Why* divide by $\sqrt{d_k}$: variance of the dot-product and softmax saturation.
-    - **Causal (decoder) masking** for autoregressive generation.
-    - **Multi-head attention**: run $H$ independent heads, concatenate, project.
-    - **Self-attention vs cross-attention** — and where each appears.
-    - The **O(T²) cost** of attention and why it matters at scale.
+    By the end, you will be able to:
 
-    **Why it matters**
-    - Attention is the core primitive of every modern LLM (GPT, Claude, Gemini).
-      Section 05 (NLP/LLMs) and Sections 06–07 (RAG, Agents) all assume fluent understanding
-      of what attention computes and how it scales.
-    - Retrieval-augmented generation (Section 06) is conceptually an external attention
-      over a document store; cross-attention in encoder–decoder models is the original
-      application.
-
-    **Typical interview questions**
-    - "Walk me through scaled dot-product attention from scratch."
-    - "Why do we divide by √d_k?"
-    - "What is multi-head attention and why use multiple heads?"
-    - "Self-attention vs cross-attention — when is each used?"
-    - "What is the computational complexity of self-attention and why does it matter?"
-    """),
-
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **The RNN bottleneck (recap of Lesson DL-06).** An LSTM processes tokens one by one
-    and compresses all past context into a fixed-size vector $h_t$. Two problems remain:
-    (1) token $t$ can only reach token $1$ by traversing $t{-}1$ sequential steps —
-    an $O(T)$ information path, and gradients along it still attenuate; (2) the
-    fixed-size $h_t$ is a *lossy* summary of an arbitrarily long sequence.
-
-    **Bahdanau attention (2015).** In neural machine translation, the decoder needs to
-    focus on *different parts of the source sentence* at each output step. Bahdanau
-    et al. learned a soft alignment — a **weighted sum of all encoder hidden states**,
-    with weights computed by a small network. Suddenly the decoder could skip the
-    bottleneck and look directly at any source token. Accuracy jumped sharply on long
-    sentences.
-
-    **Luong attention, self-attention, "Attention Is All You Need" (2017).** After
-    Bahdanau, attention was applied not just from decoder to encoder (cross-attention)
-    but *within* the same sequence (**self-attention**). Vaswani et al. removed
-    recurrence entirely: a **Transformer** built exclusively from self-attention and
-    feed-forward layers, trainable fully in parallel. It outperformed LSTM models on
-    translation and sparked the entire modern LLM era — GPT, BERT, Claude, etc.
-
-    **The key insight: direct access, parallel computation.** Every position can
-    attend to every other position in *one matrix multiply* — $O(1)$ information
-    path, $O(T^2)$ total computation (the new cost). Training is fully parallel across
-    positions, which is why Transformers scale to billions of parameters on modern
-    hardware in ways RNNs fundamentally cannot.
-    """),
-
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The library analogy.** You walk into a library with a **query** ("books about
-    gradient descent"). Each book has a **key** on its spine (the title/topic). You
-    compare your query to every key and decide how *relevant* each book is (a score).
-    You then take a **weighted blend of the books' contents** (values), concentrating
-    on the most relevant ones. Attention does exactly this — for every token in a
-    sequence, it computes a soft match against all other tokens and retrieves a
-    weighted sum of their representations.
-
-    **Three roles in the computation:**
-    - **Q (query)**: what this position is *looking for*.
-    - **K (key)**: what each position *advertises as its content*.
-    - **V (value)**: what each position *contributes when attended to*.
-
-    **Self-attention**: Q, K, V all come from the *same* sequence (each token queries
-    the others in the same sentence). **Cross-attention**: Q comes from one sequence
-    (decoder), K and V from another (encoder).
-
-    **Why dot-product similarity?** Lesson FND-01 showed that $\cos\theta=\mathbf u^\top\mathbf v/(\|\mathbf u\|\|\mathbf v\|)$ measures how aligned two vectors are. The dot product $q^\top k$ is the unnormalized version — directly measuring how well a query matches a key. Softmax turns these scores into a probability distribution over which positions to attend.
-
-    **Multi-head: parallel perspectives.** A single head learns one pattern of
-    relationships. Multiple heads learn different patterns simultaneously (syntax,
-    coreference, position, …) and the outputs are concatenated — more expressive and
-    more robust.
+    - explain attention as content-based weighted retrieval;
+    - calculate scores, scaling, softmax weights, and an output manually;
+    - distinguish queries, keys, values, attention weights, and outputs;
+    - trace batch, head, query-length, key-length, and feature dimensions;
+    - explain why dot products are scaled by $\sqrt{d_k}$;
+    - implement stable batched scaled dot-product attention in NumPy;
+    - distinguish causal masks from key-padding masks and combine them safely;
+    - prove with a behavioral test that a causal output ignores changed future values;
+    - implement batched multi-head attention and match PyTorch numerically;
+    - distinguish self-attention, cross-attention, and retrieval augmentation;
+    - explain permutation equivariance without calling it invariance;
+    - calculate quadratic score-matrix growth;
+    - explain what Flash Attention and KV caching improve—and what they do not;
+    - use attention maps as diagnostics without treating them as causal explanations.
 
     ```mermaid
     flowchart LR
-        X["input X"] --> Wq["× W_Q"] --> Q["Q"]
-        X --> Wk["× W_K"] --> K["K"]
-        X --> Wv["× W_V"] --> V["V"]
-        Q --> Scores["QK^T / sqrt(d_k)"]
-        K --> Scores
-        Scores --> Mask["+ mask (opt)"]
-        Mask --> SM["softmax"]
-        SM --> AttnW["attention weights"]
-        AttnW --> Out["× V = output"]
+        A[Weighted average] --> B[Content scores]
+        B --> C[Softmax weights]
+        C --> D[Query, key, value roles]
+        D --> E[Scaling]
+        E --> F[Causal and padding masks]
+        F --> G[Multiple heads]
+        G --> H[Verified PyTorch match]
+        H --> I[Position and cost limits]
+        I --> J[Transformer block]
     ```
     """),
 
+    md(r"""
+    ## 2 · Begin with the problem, not the letters
+
+    Imagine three sensor records. You need a summary for the current event, but not
+    every record is equally relevant.
+
+    | Record | Value vector | Relevance weight |
+    |---|---:|---:|
+    | A | $[10,0]$ | $0.6$ |
+    | B | $[0,6]$ | $0.3$ |
+    | C | $[2,2]$ | $0.1$ |
+
+    The retrieved summary is a weighted average:
+
+    $$
+    0.6[10,0]+0.3[0,6]+0.1[2,2]=[6.2,2.0]
+    $$
+
+    The weights are non-negative and sum to 1. The missing piece is how to calculate
+    them from the current need. Attention learns representations that make useful
+    query–key matches score highly, then softmax converts scores into weights.
+
+    ### The library analogy
+
+    - **Query:** what the reader is looking for.
+    - **Key:** what each book advertises on its label.
+    - **Value:** the information retrieved from that book.
+
+    A key is not necessarily the information returned. It is the address used for
+    matching; the value is the payload.
+    """),
+
     code(r"""
-    import numpy as np
+    import math
+
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import torch
+    from torch import nn
 
-    rng = np.random.default_rng(0)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-    print("NumPy", np.__version__)
+    np.set_printoptions(precision=5, suppress=True)
+    generator = np.random.default_rng(17)
 
-    def softmax(x, axis=-1):
-        x = x - x.max(axis=axis, keepdims=True)   # numerical stability
-        e = np.exp(x)
-        return e / e.sum(axis=axis, keepdims=True)
+
+    def stable_softmax(values, axis=-1):
+        values = np.asarray(values, dtype=float)
+        shifted = values - np.max(values, axis=axis, keepdims=True)
+        exponentials = np.exp(shifted)
+        return exponentials / exponentials.sum(axis=axis, keepdims=True)
+
+
+    sensor_values = np.array([[10.0, 0.0], [0.0, 6.0], [2.0, 2.0]])
+    chosen_weights = np.array([0.6, 0.3, 0.1])
+    weighted_summary = chosen_weights @ sensor_values
+
+    print("weights sum:", chosen_weights.sum())
+    print("weighted summary:", weighted_summary)
+    assert np.allclose(weighted_summary, [6.2, 2.0])
     """),
 
     md(r"""
-    ## 4 · Mathematical Foundations
+    ## 3 · One attention calculation by hand
 
-    ### 4.1 Scaled dot-product attention
-    Given matrices $Q\in\mathbb R^{T_q\times d_k}$, $K\in\mathbb R^{T_k\times d_k}$,
-    $V\in\mathbb R^{T_k\times d_v}$:
-    $$\boxed{\text{Attention}(Q,K,V)=\text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V}$$
-    The $T_q\times T_k$ score matrix contains the raw dot-product similarity of each
-    query to each key; softmax normalizes across keys (rows) to get attention weights;
-    the result is a weighted sum of values.
+    Use one query, three keys, and three values:
 
-    ### 4.2 Why divide by √d_k?
-    If $q,k$ are independent with zero mean and unit variance, then
-    $q^\top k=\sum_{i=1}^{d_k}q_i k_i$ has variance $d_k$ (sum of $d_k$ unit-variance
-    terms). For large $d_k$ the pre-softmax logits grow large in magnitude, pushing
-    softmax into the **saturation region** (gradient ≈ 0 — the sigmoid problem again,
-    Lesson DL-03). Dividing by $\sqrt{d_k}$ restores variance ≈ 1 regardless of
-    embedding dimension.
+    $$
+    q=[1,0]
+    $$
 
-    ### 4.3 Causal (auto-regressive) masking
-    For a *decoder* generating one token at a time, position $t$ must not attend to
-    future positions $t{+}1,\dots,T$. We add $-\infty$ (implemented as a large
-    negative constant) to those entries *before* the softmax; they become exactly 0
-    in the attention weights. This is the upper-triangular mask.
+    $$
+    K=
+    \begin{bmatrix}
+    2&0\\
+    1&0\\
+    0&1
+    \end{bmatrix},\qquad
+    V=
+    \begin{bmatrix}
+    10&0\\
+    0&6\\
+    2&2
+    \end{bmatrix}
+    $$
 
-    ### 4.4 Multi-head attention
-    Run $H$ attention heads in parallel, each with its own projections:
-    $$\text{head}_i=\text{Attention}(QW_i^Q,\,KW_i^K,\,VW_i^V),\qquad
-    \text{MultiHead}=\text{Concat}(\text{head}_1,\dots,\text{head}_H)W^O.$$
-    Each head sees a lower-dimensional space ($d_k = d_{\text{model}}/H$) and can
-    specialise on different relationship types. The output projection $W^O$ mixes
-    the heads back.
+    The key dimension is $d_k=2$. First calculate dot-product scores:
 
-    ### 4.5 Self-attention vs cross-attention
-    - **Self-attention**: $Q=K=V=XW$ (same sequence; every token attends to all
-      others). Used inside Transformer encoder/decoder layers.
-    - **Cross-attention**: $Q$ from one sequence (decoder), $K,V$ from another
-      (encoder outputs or retrieved documents). Original Bahdanau use case; reappears
-      in RAG (Section 06) as external attention over retrieved chunks.
+    $$
+    qK^\top=[2,1,0]
+    $$
 
-    ### 4.6 Complexity
-    The score matrix $QK^\top$ is $O(T^2 d_k)$ in time and $O(T^2)$ in memory. For
-    short sequences this is fine; for long contexts ($T>4096$) it's the binding
-    constraint driving research into **sparse attention**, **linear attention**,
-    **Flash Attention** (IO-aware), and **Mamba** (state-space models).
+    Scale them:
+
+    $$
+    \frac{qK^\top}{\sqrt{d_k}}
+    =\frac{[2,1,0]}{\sqrt 2}
+    \approx[1.414,0.707,0]
+    $$
+
+    Apply softmax:
+
+    $$
+    \alpha\approx[0.576,0.284,0.140]
+    $$
+
+    Retrieve the weighted value:
+
+    $$
+    \alpha V
+    \approx0.576[10,0]+0.284[0,6]+0.140[2,2]
+    \approx[6.04,1.98]
+    $$
+
+    Softmax does not “pick” one record. It produces a differentiable blend. It may
+    become sharp, but the operation remains a weighted sum.
+    """),
+
+    code(r"""
+    manual_query = np.array([[1.0, 0.0]])
+    manual_keys = np.array([[2.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+    manual_values = sensor_values.copy()
+
+    manual_scores = manual_query @ manual_keys.T
+    manual_scaled_scores = manual_scores / np.sqrt(manual_query.shape[-1])
+    manual_weights = stable_softmax(manual_scaled_scores, axis=-1)
+    manual_output = manual_weights @ manual_values
+
+    print("dot-product scores:", manual_scores)
+    print("scaled scores:     ", manual_scaled_scores)
+    print("attention weights: ", manual_weights)
+    print("weights sum:       ", manual_weights.sum(axis=-1))
+    print("retrieved output:  ", manual_output)
     """),
 
     md(r"""
-    ## 5 · Manual Implementation from Scratch
+    ## 4 · The complete scaled dot-product operation
 
-    We implement **scaled dot-product attention**, **causal masking**, and
-    **multi-head attention** entirely in NumPy — then verify multi-head against
-    a reference projection and confirm shape + masking correctness.
+    For batched attention:
+
+    $$
+    Q\in\mathbb{R}^{B\times T_q\times d_k},\quad
+    K\in\mathbb{R}^{B\times T_k\times d_k},\quad
+    V\in\mathbb{R}^{B\times T_k\times d_v}
+    $$
+
+    $$
+    S=\frac{QK^\top}{\sqrt{d_k}}
+    $$
+
+    $$
+    A=\operatorname{softmax}(S+M)
+    $$
+
+    $$
+    O=AV
+    $$
+
+    | Symbol | Meaning | Shape |
+    |---|---|---:|
+    | $B$ | batch size | scalar |
+    | $T_q$ | number of query positions | scalar |
+    | $T_k$ | number of key/value positions | scalar |
+    | $d_k$ | query and key feature width | scalar |
+    | $d_v$ | value feature width | scalar |
+    | $S$ | compatibility scores | $(B,T_q,T_k)$ |
+    | $M$ | broadcastable mask bias | compatible with $(B,T_q,T_k)$ |
+    | $A$ | attention weights | $(B,T_q,T_k)$ |
+    | $O$ | retrieved outputs | $(B,T_q,d_v)$ |
+
+    Softmax runs across the **key axis**, the last axis. Every query row distributes
+    its weight over available keys.
+
+    ### Where $Q$, $K$, and $V$ come from
+
+    In self-attention, learned projections start from the same input $X$:
+
+    $$
+    Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V
+    $$
+
+    “Same source” does not mean $Q=K=V$. The projection matrices usually differ, so
+    matching and retrieved content can learn different representations.
     """),
 
     code(r"""
-    # 5.1 Scaled dot-product attention from scratch (the core formula).
-    def scaled_dot_product_attention(Q, K, V, mask=None):
-        d_k = Q.shape[-1]
-        scores = Q @ K.swapaxes(-2, -1) / np.sqrt(d_k)    # (batch, T_q, T_k)
-        if mask is not None:
-            scores = scores + mask                          # -1e9 where masked
-        weights = softmax(scores, axis=-1)
-        return weights @ V, weights                         # output and weights for viz
+    def scaled_dot_product_attention(queries, keys, values, allowed=None):
+        # Batched attention; True entries in allowed may receive probability.
+        if queries.shape[-1] != keys.shape[-1]:
+            raise ValueError("Queries and keys must have the same feature width.")
+        if keys.shape[-2] != values.shape[-2]:
+            raise ValueError("Keys and values must have the same sequence length.")
 
-    # toy sequence: T=6 tokens, d_model=8
-    T, d_model = 6, 8
-    X = rng.normal(size=(T, d_model))                       # input sequence (no batch dim)
-    # random projection weights (no bias for simplicity)
-    Wq = rng.normal(size=(d_model, d_model))
-    Wk = rng.normal(size=(d_model, d_model))
-    Wv = rng.normal(size=(d_model, d_model))
-    Q, K, V = X @ Wq, X @ Wk, X @ Wv                      # project: shape (T, d_model)
+        scores = queries @ np.swapaxes(keys, -2, -1)
+        scores = scores / np.sqrt(queries.shape[-1])
 
-    out, attn_w = scaled_dot_product_attention(Q, K, V)
-    print(f"input  shape: {X.shape}")
-    print(f"Q/K/V  shape: {Q.shape}")
-    print(f"output shape: {out.shape}")
-    print(f"attn weights sum per row (should be 1.0): {attn_w.sum(axis=-1)}")
-    """),
+        if allowed is not None:
+            allowed = np.asarray(allowed, dtype=bool)
+            allowed = np.broadcast_to(allowed, scores.shape)
+            if np.any(~allowed.any(axis=-1)):
+                raise ValueError("Every query must be allowed to attend to at least one key.")
+            scores = np.where(allowed, scores, -np.inf)
 
-    code(r"""
-    # 5.2 Why sqrt(d_k) matters: variance of dot-products grows with d_k.
-    d_ks = [8, 32, 128, 512]
-    for d in d_ks:
-        q_test = rng.normal(size=(100, d))
-        k_test = rng.normal(size=(100, d))
-        dots = (q_test * k_test).sum(axis=1)               # dot product per pair
-        scaled = dots / np.sqrt(d)
-        print(f"d_k={d:4d}:  var(q.k)={dots.var():.1f}   "
-              f"var(q.k/sqrt(d))={scaled.var():.2f}  "
-              f"max_softmax_logit={abs(dots).max():.1f}")
-    print("\\nWithout scaling: logits explode -> softmax saturates (like sigmoid, DL-03).")
-    print("With 1/sqrt(d_k): variance stays ~1 regardless of embedding size.")
-    """),
+        weights = stable_softmax(scores, axis=-1)
+        outputs = weights @ values
+        return outputs, weights, scores
 
-    code(r"""
-    # 5.3 Causal mask: position t cannot see t+1, t+2, ...
-    def causal_mask(T):
-        mask = np.triu(np.ones((T, T)), k=1) * -1e9        # upper-tri = -inf
-        return mask
 
-    mask = causal_mask(T)
-    out_causal, attn_causal = scaled_dot_product_attention(Q, K, V, mask=mask)
-    print("Causal attention weight matrix (row i = where token i attends):")
-    print(np.round(attn_causal, 3))
-    print("\\nUpper triangle is ~0 (future positions masked out) -> autoregressive safe.")
-    """),
+    batched_queries = manual_query[None, :, :]
+    batched_keys = manual_keys[None, :, :]
+    batched_values = manual_values[None, :, :]
+    batched_output, batched_weights, _ = scaled_dot_product_attention(
+        batched_queries, batched_keys, batched_values
+    )
 
-    code(r"""
-    # 5.4 Multi-head attention from scratch.
-    def multi_head_attention(X, n_heads, d_model, mask=None, seed=0):
-        r = np.random.default_rng(seed)
-        assert d_model % n_heads == 0
-        d_k = d_model // n_heads
-        T = X.shape[0]
-        # independent projection weights per head
-        Wqs = [r.normal(0, 0.1, (d_model, d_k)) for _ in range(n_heads)]
-        Wks = [r.normal(0, 0.1, (d_model, d_k)) for _ in range(n_heads)]
-        Wvs = [r.normal(0, 0.1, (d_model, d_k)) for _ in range(n_heads)]
-        Wo  = r.normal(0, 0.1, (d_model, d_model))
-        head_outputs = []
-        all_weights = []
-        for i in range(n_heads):
-            Qi, Ki, Vi = X @ Wqs[i], X @ Wks[i], X @ Wvs[i]
-            head_i, w_i = scaled_dot_product_attention(Qi, Ki, Vi, mask=mask)
-            head_outputs.append(head_i)             # (T, d_k)
-            all_weights.append(w_i)                 # (T, T) — one per head
-        concat = np.concatenate(head_outputs, axis=-1)  # (T, d_model)
-        return concat @ Wo, all_weights
-
-    n_heads = 4
-    out_mha, head_weights = multi_head_attention(X, n_heads=n_heads, d_model=d_model)
-    print(f"Multi-head attention output shape: {out_mha.shape}  (T x d_model)")
-    print(f"Number of attention maps: {len(head_weights)} heads, each {head_weights[0].shape}")
+    print("Q shape:", batched_queries.shape)
+    print("K shape:", batched_keys.shape)
+    print("V shape:", batched_values.shape)
+    print("A shape:", batched_weights.shape)
+    print("O shape:", batched_output.shape)
+    assert np.allclose(batched_output[0], manual_output)
+    assert np.allclose(batched_weights.sum(axis=-1), 1.0)
     """),
 
     md(r"""
-    ## 6 · Visualization
+    ## 5 · Why divide by $\sqrt{d_k}$?
 
-    Four figures: the **$\sqrt{d_k}$ softmax-saturation** effect, the **attention
-    weight heatmap** (self-attention over a toy sentence), the **causal mask** zeroing
-    upper-triangle entries, and **four heads** specialising on different patterns.
+    Suppose query and key components are independent, with mean 0 and variance 1.
+    Their dot product is a sum of $d_k$ products:
+
+    $$
+    q\cdot k=\sum_{j=1}^{d_k}q_jk_j
+    $$
+
+    Under those assumptions its variance grows approximately like $d_k$. Dividing by
+    $\sqrt{d_k}$ keeps the variance near 1. This is a variance argument, not a claim
+    that learned components remain perfectly independent or unit variance.
+
+    Large score differences make softmax very sharp. For the softmax Jacobian:
+
+    $$
+    \frac{\partial a_i}{\partial s_j}=a_i(\mathbf{1}_{i=j}-a_j)
+    $$
+
+    probabilities near 0 or 1 often produce small local derivatives. Scaling makes
+    severe early saturation less likely.
     """),
 
     code(r"""
-    # Figure 1 — softmax saturation: large logits -> peaked distribution, tiny gradients.
-    z_scales = [("no scaling (d=128)", np.linspace(-20, 20, 200)),
-                ("with /sqrt(d) scaling", np.linspace(-3, 3, 200))]
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-    for ax, (label, z) in zip(axes, z_scales):
-        sm = softmax(z)
-        ax.plot(z, sm)
-        ax.set_xlabel("logit"); ax.set_ylabel("softmax output")
-        ax.set_title(label)
-    plt.suptitle("Figure 1 — Why sqrt(d_k): without scaling, softmax saturates -> near-zero gradients")
+    scaling_rows = []
+    for key_width in (8, 32, 128, 512):
+        queries = generator.normal(size=(2000, key_width))
+        keys = generator.normal(size=(2000, key_width))
+        raw_scores = np.sum(queries * keys, axis=1)
+        scaled_scores = raw_scores / np.sqrt(key_width)
+        scaling_rows.append(
+            {
+                "d_k": key_width,
+                "raw variance": raw_scores.var(),
+                "scaled variance": scaled_scores.var(),
+            }
+        )
+
+    scaling_table = pd.DataFrame(scaling_rows)
+    display(scaling_table)
+
+    # Use many independent score rows, rather than plotting one softmax distribution
+    # over an arbitrary linspace, to measure sharpness honestly.
+    score_rows = generator.normal(size=(500, 64)) * np.sqrt(128)
+    unscaled_probabilities = stable_softmax(score_rows, axis=1)
+    scaled_probabilities = stable_softmax(score_rows / np.sqrt(128), axis=1)
+
+    def mean_entropy(probabilities):
+        return float(np.mean(-np.sum(probabilities * np.log(probabilities + 1e-12), axis=1)))
+
+    print("mean maximum probability without scaling:", unscaled_probabilities.max(axis=1).mean())
+    print("mean maximum probability with scaling:   ", scaled_probabilities.max(axis=1).mean())
+    print("mean entropy without scaling:", mean_entropy(unscaled_probabilities))
+    print("mean entropy with scaling:   ", mean_entropy(scaled_probabilities))
+    """),
+
+    md(r"""
+    ## 6 · Masks answer two different questions
+
+    A mask says which key positions a query may use. Apply it **before softmax**.
+
+    ### Causal mask
+
+    In next-token generation, query position $t$ may use positions $0$ through $t$,
+    but not later positions. This prevents future-target leakage during parallel
+    training.
+
+    ### Key-padding mask
+
+    Batches pad short sequences. A real query must not retrieve a padded key. Padding
+    rules depend on each example, while a causal pattern usually depends on query and
+    key indices.
+
+    These masks can be combined with logical AND. An entirely masked query is invalid:
+    softmax over all $-\infty$ values is undefined. The scratch function raises an
+    explicit error instead of silently creating `NaN`.
+    """),
+
+    code(r"""
+    def causal_allowed(query_length, key_length=None):
+        key_length = query_length if key_length is None else key_length
+        query_positions = np.arange(query_length)[:, None]
+        key_positions = np.arange(key_length)[None, :]
+        return key_positions <= query_positions
+
+
+    batch_size, sequence_length, feature_width = 2, 5, 4
+    mask_inputs = generator.normal(size=(batch_size, sequence_length, feature_width))
+    key_is_real = np.array(
+        [[True, True, True, False, False], [True, True, True, True, True]]
+    )
+    causal = causal_allowed(sequence_length)
+    combined_allowed = causal[None, :, :] & key_is_real[:, None, :]
+
+    masked_outputs, masked_weights, _ = scaled_dot_product_attention(
+        mask_inputs, mask_inputs, mask_inputs, allowed=combined_allowed
+    )
+
+    print("combined mask shape:", combined_allowed.shape)
+    print("attention shape:    ", masked_weights.shape)
+    print("example 1 weights on padded keys:", masked_weights[0, :, 3:].max())
+    print("maximum future weight:", masked_weights[:, np.triu_indices(sequence_length, 1)[0],
+                                                    np.triu_indices(sequence_length, 1)[1]].max())
+    assert np.all(masked_weights[~combined_allowed] == 0.0)
+    """),
+
+    code(r"""
+    # Behavioral causal test: changing the future must not change an earlier output.
+    original = generator.normal(size=(1, 6, 4))
+    changed_future = original.copy()
+    changed_future[:, 4:, :] += 1000.0
+    causal_six = causal_allowed(6)[None, :, :]
+
+    original_output, _, _ = scaled_dot_product_attention(
+        original, original, original, allowed=causal_six
+    )
+    changed_output, _, _ = scaled_dot_product_attention(
+        changed_future, changed_future, changed_future, allowed=causal_six
+    )
+
+    print("largest change through position 3:", np.max(np.abs(original_output[:, :4] - changed_output[:, :4])))
+    assert np.allclose(original_output[:, :4], changed_output[:, :4])
+    """),
+
+    md(r"""
+    ## 7 · Multi-head attention
+
+    One head creates one attention-weight matrix. Multiple heads learn separate
+    projection spaces:
+
+    $$
+    \operatorname{head}_r=
+    \operatorname{Attention}(XW_Q^{(r)},XW_K^{(r)},XW_V^{(r)})
+    $$
+
+    $$
+    \operatorname{MHA}(X)=
+    \operatorname{Concat}(\operatorname{head}_1,\ldots,\operatorname{head}_H)W_O
+    $$
+
+    With $d_{model}=8$ and $H=2$, each head commonly uses $d_h=4$. Shapes:
+
+    ```text
+    X                 (B, T, 8)
+      ↓ three projections
+    Q, K, V           (B, T, 8)
+      ↓ split heads
+    Qh, Kh, Vh        (B, 2, T, 4)
+      ↓ attention
+    head outputs      (B, 2, T, 4)
+      ↓ merge heads
+    concatenated      (B, T, 8)
+      ↓ output projection
+    final output      (B, T, 8)
+    ```
+
+    Multiple heads provide capacity for different routing patterns. They do not
+    guarantee human-readable specialization, and different-looking random maps are not
+    evidence that a head has learned syntax or meaning.
+    """),
+
+    code(r"""
+    def split_heads(projected, number_of_heads):
+        batch, length, model_width = projected.shape
+        head_width = model_width // number_of_heads
+        return projected.reshape(batch, length, number_of_heads, head_width).transpose(0, 2, 1, 3)
+
+
+    def merge_heads(head_outputs):
+        batch, heads, length, head_width = head_outputs.shape
+        return head_outputs.transpose(0, 2, 1, 3).reshape(batch, length, heads * head_width)
+
+
+    def multi_head_attention_numpy(inputs, W_q, W_k, W_v, W_o, number_of_heads, allowed=None):
+        queries = split_heads(inputs @ W_q, number_of_heads)
+        keys = split_heads(inputs @ W_k, number_of_heads)
+        values = split_heads(inputs @ W_v, number_of_heads)
+        if allowed is not None:
+            allowed = np.asarray(allowed, dtype=bool)
+            if allowed.ndim == 3:
+                allowed = allowed[:, None, :, :]
+        head_outputs, head_weights, _ = scaled_dot_product_attention(
+            queries, keys, values, allowed=allowed
+        )
+        merged = merge_heads(head_outputs)
+        return merged @ W_o, head_weights
+
+
+    B, T, D, H = 2, 4, 8, 2
+    multi_inputs = generator.normal(size=(B, T, D))
+    W_q = generator.normal(0, 0.2, size=(D, D))
+    W_k = generator.normal(0, 0.2, size=(D, D))
+    W_v = generator.normal(0, 0.2, size=(D, D))
+    W_o = generator.normal(0, 0.2, size=(D, D))
+    numpy_multi_output, numpy_head_weights = multi_head_attention_numpy(
+        multi_inputs, W_q, W_k, W_v, W_o, H
+    )
+
+    print("multi-head output:", numpy_multi_output.shape)
+    print("per-head weights: ", numpy_head_weights.shape)
+    """),
+
+    code(r"""
+    # Copy the exact NumPy matrices into PyTorch. A close match verifies projection,
+    # head splitting, scaling, softmax axis, merging, and output projection together.
+    torch_mha = nn.MultiheadAttention(D, H, bias=False, batch_first=True, dropout=0.0)
+    with torch.no_grad():
+        torch_mha.in_proj_weight.copy_(
+            torch.tensor(np.concatenate([W_q.T, W_k.T, W_v.T], axis=0), dtype=torch.float32)
+        )
+        torch_mha.out_proj.weight.copy_(torch.tensor(W_o.T, dtype=torch.float32))
+
+    torch_output, torch_head_weights = torch_mha(
+        torch.tensor(multi_inputs, dtype=torch.float32),
+        torch.tensor(multi_inputs, dtype=torch.float32),
+        torch.tensor(multi_inputs, dtype=torch.float32),
+        need_weights=True,
+        average_attn_weights=False,
+    )
+
+    maximum_output_difference = np.max(
+        np.abs(numpy_multi_output - torch_output.detach().numpy())
+    )
+    maximum_weight_difference = np.max(
+        np.abs(numpy_head_weights - torch_head_weights.detach().numpy())
+    )
+    print("maximum output difference:", maximum_output_difference)
+    print("maximum weight difference:", maximum_weight_difference)
+    assert maximum_output_difference < 1e-6
+    assert maximum_weight_difference < 1e-6
+    """),
+
+    md(r"""
+    ## 8 · Self-attention, cross-attention, and retrieval are related but different
+
+    ### Self-attention
+
+    Queries, keys, and values are projected from one sequence. Encoder self-attention
+    may be bidirectional. A causal decoder uses a future mask.
+
+    ### Cross-attention
+
+    Queries come from one sequence; keys and values come from another. In an
+    encoder–decoder translation model, decoder states query encoder states. Usually
+    $T_q\ne T_k$, which the general formula already supports.
+
+    ### Retrieval-augmented generation
+
+    Retrieval also matches a query against keys and returns useful values, so the
+    analogy is helpful. But RAG is not necessarily a neural cross-attention layer.
+    Many decoder-only systems retrieve text, place it in the prompt, and then use
+    ordinary causal self-attention over the combined tokens. Keep the conceptual
+    analogy separate from the implemented architecture.
+    """),
+
+    code(r"""
+    # Cross-attention has different query and source lengths.
+    decoder_queries = generator.normal(size=(2, 3, 6))
+    encoder_keys = generator.normal(size=(2, 5, 6))
+    encoder_values = generator.normal(size=(2, 5, 9))
+    cross_output, cross_weights, _ = scaled_dot_product_attention(
+        decoder_queries, encoder_keys, encoder_values
+    )
+    print("cross-attention weights:", cross_weights.shape, "= (B, T_query, T_source)")
+    print("cross-attention output: ", cross_output.shape, "= (B, T_query, d_value)")
+    """),
+
+    md(r"""
+    ## 9 · Attention alone does not know order
+
+    Without position information, self-attention is **permutation-equivariant**:
+
+    > Permute the input rows and the output rows are permuted in the same way.
+
+    It is not permutation-invariant because the ordered output tensor changes. If you
+    later sum or average all rows, that pooled result becomes permutation-invariant.
+
+    This is why a Transformer adds position information. DL-08 will compare sinusoidal
+    positions and learned positions and will explain causal order separately from
+    positional identity.
+    """),
+
+    code(r"""
+    order_inputs = generator.normal(size=(1, 6, 8))
+    identity = np.eye(8)
+    original_order_output, _ = multi_head_attention_numpy(
+        order_inputs, identity, identity, identity, identity, number_of_heads=2
+    )
+    permutation = np.array([3, 0, 5, 1, 4, 2])
+    permuted_inputs = order_inputs[:, permutation, :]
+    permuted_output, _ = multi_head_attention_numpy(
+        permuted_inputs, identity, identity, identity, identity, number_of_heads=2
+    )
+
+    equivariant = np.allclose(permuted_output, original_order_output[:, permutation, :])
+    pooled_invariant = np.allclose(permuted_output.mean(axis=1), original_order_output.mean(axis=1))
+    print("permutation equivariant:", equivariant)
+    print("mean-pooled result invariant:", pooled_invariant)
+    assert equivariant and pooled_invariant
+    """),
+
+    md(r"""
+    ## 10 · Cost: direct access is not free
+
+    For one head, the score matrix has $T_qT_k$ entries. Self-attention with length $T$
+    therefore stores or processes $T^2$ pair scores.
+
+    | Length $T$ | Scores per head | Float32 size for scores only |
+    |---:|---:|---:|
+    | 512 | 262,144 | 1 MiB |
+    | 4,096 | 16,777,216 | 64 MiB |
+    | 32,768 | 1,073,741,824 | 4 GiB |
+
+    Those numbers exclude batches, heads, gradients, Q/K/V tensors, and other layers.
+
+    **Flash Attention** changes how exact attention is tiled and moved through the GPU
+    memory hierarchy. It can avoid materializing the full score matrix in expensive
+    high-bandwidth memory, reducing auxiliary memory traffic. It does **not** turn dense
+    attention's pairwise arithmetic into linear-time computation.
+
+    **KV caching** stores past keys and values during autoregressive inference. The new
+    token does not recompute their projections. It still compares its query with the
+    growing history, so per-token attention work and cache size grow with context.
+
+    Sparse, sliding-window, linearized, and state-space approaches change other parts
+    of the tradeoff. They are alternatives to evaluate, not free upgrades.
+    """),
+
+    code(r"""
+    cost_rows = []
+    for length in (512, 4096, 32768):
+        score_count = length * length
+        cost_rows.append(
+            {
+                "T": length,
+                "scores per head": score_count,
+                "float32 MiB": score_count * 4 / (1024**2),
+            }
+        )
+    display(pd.DataFrame(cost_rows))
+    """),
+
+    md(r"""
+    ## 11 · Reading attention maps responsibly
+
+    An attention map answers:
+
+    > For this head and query, how were value vectors mixed at this layer?
+
+    It does not by itself prove:
+
+    - which token caused the final prediction;
+    - that the model used a human-like reason;
+    - that one head has a stable semantic role;
+    - that low-weight tokens were unimportant through other layers or residual paths.
+
+    Use maps for shape checks, mask checks, routing diagnostics, and hypothesis
+    generation. For decision explanation, combine interventions, gradients, controlled
+    ablations, and task-specific evaluation. Attention weight is not causal importance.
+    """),
+
+    code(r"""
+    fig, axes = plt.subplots(1, H, figsize=(10, 4))
+    for head_index, axis in enumerate(axes):
+        image = axis.imshow(numpy_head_weights[0, head_index], cmap="viridis")
+        axis.set_title(f"random head {head_index + 1}")
+        axis.set_xlabel("key position")
+        axis.set_ylabel("query position")
+        plt.colorbar(image, ax=axis)
+    plt.suptitle("Different random maps are not evidence of learned specialization")
     plt.tight_layout()
     plt.show()
     """),
 
     md(r"""
-    **Figure 1.** Without scaling (left), large logits push softmax into its flat
-    extremes — the output is almost one-hot and the gradient is nearly zero, exactly
-    the vanishing-gradient saturation we saw with sigmoid in Lesson DL-03. Dividing by
-    $\sqrt{d_k}$ (right) keeps logits near zero and the softmax in its curved, high-
-    gradient region — so attention can be trained effectively regardless of $d_k$. This
-    one design choice is the difference between a trainable and an untrainable system.
-    """),
+    ## 12 · When to use attention—and when not to
 
-    code(r"""
-    # Figure 2 — self-attention heatmap on a toy sentence (token similarities).
-    words = ["the", "cat", "sat", "on", "the", "mat"]
-    # give each word a simple embedding (random but reproducible)
-    embed = rng.normal(size=(len(words), 16))
-    # make "the" embeddings similar to each other
-    embed[4] = embed[0] + 0.1 * rng.normal(size=16)
-    Wq2 = rng.normal(size=(16, 16)); Wk2 = rng.normal(size=(16, 16)); Wv2 = rng.normal(size=(16, 16))
-    Q2, K2, V2 = embed @ Wq2, embed @ Wk2, embed @ Wv2
-    _, weights2 = scaled_dot_product_attention(Q2, K2, V2)
-
-    fig, ax = plt.subplots(figsize=(6.5, 5.5))
-    im = ax.imshow(weights2, cmap="viridis", vmin=0, vmax=weights2.max())
-    ax.set_xticks(range(len(words))); ax.set_yticks(range(len(words)))
-    ax.set_xticklabels(words); ax.set_yticklabels(words)
-    ax.set_xlabel("keys (attended to)"); ax.set_ylabel("queries (attending from)")
-    plt.colorbar(im, ax=ax, label="attention weight")
-    ax.set_title("Figure 2 — Self-attention heatmap: each row sums to 1")
-    plt.show()
-    print("Rows sum to 1 (probability distributions):", np.round(weights2.sum(axis=1), 3))
-    """),
-
-    md(r"""
-    **Figure 2.** Each **row** is a query token's probability distribution over all
-    key tokens — where it "looks." Each **column** is how much each token is attended
-    to. The pattern encodes relationships: tokens that share semantics or syntactic
-    role attract higher weights. In a trained Transformer these patterns are
-    task-driven (e.g., a pronoun attends strongly to its referent, a verb attends to
-    its subject). Visualizing attention weights is a standard interpretability tool —
-    though note they explain the model's *routing*, not the world's meaning (see §7).
-    """),
-
-    code(r"""
-    # Figure 3 — causal mask: show the upper-triangle zeroed out.
-    _, causal_w = scaled_dot_product_attention(Q2, K2, V2, mask=causal_mask(len(words)))
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    for ax, (w, title) in zip(axes, [(weights2, "Bi-directional (encoder)"),
-                                      (causal_w, "Causal / masked (decoder)")]):
-        im = ax.imshow(w, cmap="viridis", vmin=0, vmax=w.max())
-        ax.set_xticks(range(len(words))); ax.set_yticks(range(len(words)))
-        ax.set_xticklabels(words, rotation=30); ax.set_yticklabels(words)
-        ax.set_title(title); plt.colorbar(im, ax=ax)
-    plt.suptitle("Figure 3 — Causal masking zeros upper-triangle (future tokens) for generation")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** The **encoder** (left) allows every token to attend to every other —
-    full bidirectional context, as in BERT. The **decoder** (right) applies a causal
-    mask: token $t$ can only attend to positions $\le t$ (the lower triangle), so
-    auto-regressive generation never "cheats" by peeking at future tokens. The mask is
-    added *before* softmax so masked entries become exactly 0 weight. This is the
-    structural difference between GPT-style (decoder-only, causal) and BERT-style
-    (encoder-only, bidirectional) models.
-    """),
-
-    code(r"""
-    # Figure 4 — multi-head: each head specialises on a different part of the sequence.
-    _, hw = multi_head_attention(embed, n_heads=4, d_model=16, seed=7)
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-    for i, ax in enumerate(axes):
-        im = ax.imshow(hw[i], cmap="viridis")
-        ax.set_xticks(range(len(words))); ax.set_yticks(range(len(words)))
-        ax.set_xticklabels(words, fontsize=7, rotation=30)
-        ax.set_yticklabels(words, fontsize=7)
-        ax.set_title(f"head {i+1}")
-    plt.suptitle("Figure 4 — Multi-head: each head attends to different relationship patterns")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 4.** With random (untrained) weights the four heads are already different;
-    after training each head specialises on a distinct type of relationship — positional
-    proximity, syntactic agreement, coreference, semantic similarity, etc. This is why
-    multi-head attention is more expressive than a single head: it captures multiple
-    aspects of context in parallel and then mixes them via the output projection $W^O$.
-    The number of heads $H$ and the head dimension $d_k = d_{model}/H$ are
-    hyperparameters; practical models use $H\in\{8,16,32\}$.
-    """),
-
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
+    | Method | Main advantage | Main limitation | Good fit |
     |---|---|---|---|
-    | **Softmax saturation** | Gradients vanish, attention collapses to one-hot | Large dot-products without $\sqrt{d_k}$ | Always divide by $\sqrt{d_k}$ |
-    | **O(T²) memory OOM** | Out-of-memory on long contexts | Full T×T attention matrix | Flash Attention, sparse/local attention, sliding window |
-    | **Attention is not causal** | Model peeks at future; inflated eval | Missing upper-triangular mask in decoder | Verify causal mask applied before softmax |
-    | **Attention ≠ explanation** | Wrong reasoning from weight maps | High attention weight ≠ causal importance | Use gradient-based attribution (MLE-05) |
-    | **Head collapse** | All heads learn the same pattern | Insufficient diversity signal | Layer-wise LR, entropy regularisation |
-    | **Positional unawareness** | Permutation-invariant model on order-sensitive task | Attention has no notion of position | Add positional encoding (DL-08) |
-    | **Cross-attention mismatch** | Decoder attends to garbage | Wrong K/V source (e.g., wrong layer) | Verify encoder-decoder wiring |
+    | recurrence | compact streaming state | serial training path | low-latency streams, modest data |
+    | temporal CNN | parallel local pattern detection | designed receptive field | local motifs and signals |
+    | dense attention | direct content-based access | quadratic pair matrix | moderate sequences, long relations |
+    | local/sparse attention | cheaper structured access | may miss global links | very long locally structured inputs |
+    | retrieval system | external searchable memory | retrieval errors and system complexity | changing or very large corpora |
 
-    The cell shows **positional blindness** — self-attention treats permuted sequences
-    identically without positional encodings.
-    """),
-
-    code(r"""
-    # Self-attention is permutation-invariant WITHOUT positional encoding.
-    X_perm = X[[3, 0, 5, 1, 4, 2], :]                     # shuffle rows
-    Q_p = X_perm @ Wq; K_p = X_perm @ Wk; V_p = X_perm @ Wv
-    out_orig, _ = scaled_dot_product_attention(Q, K, V)
-    out_perm, _ = scaled_dot_product_attention(Q_p, K_p, V_p)
-    perm_idx = [3, 0, 5, 1, 4, 2]
-    equal = np.allclose(out_orig[perm_idx], out_perm)
-    print(f"attention(permuted input) == permuted attention(original): {equal}")
-    print("Without positional encoding, self-attention is ORDER-AGNOSTIC.")
-    print("'the cat sat' and 'sat cat the' produce the same token embeddings (just shuffled).")
-    print("This is why Transformers (DL-08) add sinusoidal or RoPE positional encodings.")
+    Use attention when relationships between positions should be selected dynamically
+    from their content. Do not use dense attention automatically when order is absent,
+    a simple aggregate is sufficient, sequences are too long for the budget, or a
+    streaming state model better matches latency and memory constraints.
     """),
 
     md(r"""
-    ## 8 · Production Library Implementation
+    ## 13 · Failure modes
 
-    In production, attention lives inside `torch.nn.MultiheadAttention` (PyTorch) or
-    the HuggingFace Transformers library. The critical production-scale addition is
-    **Flash Attention** — an IO-aware exact attention algorithm that tiles the $T\times T$
-    computation to fit in SRAM, reducing memory from $O(T^2)$ to $O(T)$ without
-    approximation. The import is guarded; if PyTorch is absent the scratch
-    implementation above already demonstrates the full mechanism.
-    """),
+    | Symptom | Likely cause | Check | Response |
+    |---|---|---|---|
+    | validation leaks future targets | causal mask absent or reversed | perturb future-token test | fix Boolean direction; test behavior |
+    | `NaN` attention row | every key masked | allowed count per query | reject or define a valid fallback |
+    | padding receives weight | key-padding mask missing | inspect padded columns | combine padding and causal masks |
+    | shapes broadcast silently | head or batch axis misplaced | print `(B,H,T,d_h)` stages | assert every contract |
+    | outputs ignore word/order changes | no positional representation | permutation test | add and verify positions in DL-08 |
+    | memory grows quadratically | dense score matrix | estimate $BHT^2$ | Flash, local/sparse design, shorter context |
+    | all heads look alike | redundant learned projections | compare trained maps and ablations | validate fewer heads or regularization |
+    | explanation claim is unstable | weights treated as causality | intervention test | use multiple explanation methods |
 
-    code(r"""
-    # Multi-head attention in PyTorch (guarded import).
-    try:
-        import torch
-        import torch.nn as nn
-        torch.manual_seed(0)
-        d = 32; T = 8; H = 4
-        mha = nn.MultiheadAttention(embed_dim=d, num_heads=H, batch_first=True)
-        Xt = torch.randn(1, T, d)                          # (batch, T, d)
-        with torch.no_grad():
-            out_t, w_t = mha(Xt, Xt, Xt)                  # self-attention
-        print(f"torch MHA output: {out_t.shape}")
-        print(f"torch MHA weight: {w_t.shape}  (averaged across heads by default)")
-        print("Same scaled-dot-product-attention formula, but fused CUDA kernel + Flash Attention option.")
-    except Exception as e:
-        print(f"[torch not available: {type(e).__name__}] "
-              f"the scratch NumPy implementation above is the full mechanism.")
+    Mask values also need dtype care. Boolean masks express intent clearly. Frameworks
+    may accept additive masks, but large finite negatives can behave differently across
+    low-precision dtypes, and mask conventions differ between APIs. Test the behavior,
+    not just the mask's printed triangle.
     """),
 
     md(r"""
-    **Scratch vs production.** Our 20-line NumPy implementation computes the exact same
-    formula as `nn.MultiheadAttention`; what the framework adds is a fused CUDA kernel,
-    Flash Attention (IO-aware tiling for long contexts), `key_padding_mask` for
-    variable-length batches, and `attn_mask` for causal generation — all wrapping the
-    same mathematical object. The senior skill is understanding *what it computes* so
-    you can debug attention patterns, tune head counts, and reason about when O(T²)
-    cost becomes the binding constraint.
+    ## 14 · Real scenario: matching a question to evidence
+
+    A support system has a question representation and several candidate evidence
+    representations. Content-based weighting can help a model mix the most relevant
+    evidence.
+
+    Before calling this a production RAG system, separate the stages:
+
+    1. retrieval chooses candidate documents from an external index;
+    2. optional reranking refines candidate order;
+    3. the generator consumes evidence, often as prompt tokens in a decoder-only model;
+    4. grounded evaluation checks whether claims are supported.
+
+    The generator's internal attention does not repair missing evidence. High attention
+    to an irrelevant chunk does not make the answer grounded. Measure retrieval recall,
+    answer faithfulness, citation correctness, latency, context usage, and failure under
+    adversarial or conflicting evidence.
     """),
 
     md(r"""
-    ## 9 · Realistic Business Case Study — Document Q&A (Cross-Attention over Retrieved Docs)
+    ## 15 · Check your understanding
 
-    **Scenario.** A legal-document assistant answers user questions by retrieving
-    relevant clauses and generating a grounded answer. The generation step uses
-    **cross-attention** from the decoder (query = user question embedding) to the
-    encoder outputs (key/value = retrieved clause embeddings), letting the model focus
-    on the most relevant legal language.
-
-    **Why attention is the right tool:**
-    - The relevant clause can be *anywhere* in the retrieved set — the model must
-      attend selectively, not just read a fixed window.
-    - Cross-attention gives a **soft, differentiable "search"** over retrieved content —
-      the intuition behind RAG (Section 06).
-    - Attention weights provide a *partial* audit trail: which clauses the model focused
-      on (caveat §7: weight ≠ causal importance).
-
-    **Business objectives:** accurate, grounded answers with traceable sources; low
-    hallucination (Section 05, Lesson NLP-05).
-
-    **Cost of mistakes:** wrong legal interpretation → liability; slow response →
-    user trust; source mis-attribution → compliance risk.
-
-    **Constraints:** context length limits (O(T²) — must chunk documents, Lesson RAG-02);
-    latency (Flash Attention, caching); and the need to expose source citations.
-
-    **KPIs:** answer faithfulness (grounded in retrieved text), retrieval precision/
-    recall (Lesson EVAL-03), latency, hallucination rate (Lesson NLP-05), and user-
-    satisfaction surveys.
+    1. Why are keys and values separate roles?
+    2. Which axis receives softmax, and why?
+    3. Calculate the shape of $QK^\top$ for $Q:(8,12,16)$ and $K:(8,20,16)$.
+    4. Why does the scale use $\sqrt{d_k}$ rather than $d_k$?
+    5. What differs between a causal mask and a key-padding mask?
+    6. Why is an entirely masked row invalid?
+    7. Trace `(B,T,d_model)` through four heads.
+    8. Why is self-attention permutation-equivariant rather than invariant?
+    9. What does Flash Attention improve without changing quadratic arithmetic?
+    10. Why is an attention map not automatically an explanation?
     """),
 
     md(r"""
-    ## 10 · Production Considerations
+    ## 16 · Practice and mini-project
 
-    - **Flash Attention** is the standard for long contexts: $O(T)$ memory (vs $O(T^2)$),
-      ~2–4× faster on GPU, exact (no approximation). Use `scaled_dot_product_attention`
-      in PyTorch ≥2.0 which dispatches to Flash Attention automatically when possible.
-    - **KV caching** for inference: in autoregressive generation, K and V of all past
-      tokens are cached; only the new token's Q is computed per step. Without this,
-      inference is $O(T^2)$ per token instead of $O(T)$.
-    - **Context length and chunking** (Lesson RAG-02): even with Flash Attention, very
-      long documents must be chunked because the model was trained on a finite context
-      length; splitting strategy is a key production decision.
-    - **Positional encoding** is required (attention is permutation-invariant); modern
-      models use RoPE or ALiBi (Lesson DL-08) for length-extrapolation.
-    - **Batch padding masks**: in batched inference, sequences are padded to the same
-      length; mask out padding positions to prevent them from influencing attention.
-    - **Attention monitoring**: track attention entropy (all-flat = underspecified,
-      all-peaked = over-attended), and use gradient-based attribution (Lesson MLE-05) for
-      explanation — not raw attention weights.
+    ### Beginner
+
+    1. Recalculate Section 3 after changing the query to $[0,1]$.
+    2. Draw a `4×4` causal mask using `True` for allowed positions.
+
+    ### Intermediate
+
+    3. Add a finite-difference check for one query element. Explain which weights and
+       output coordinates change.
+    4. Extend the PyTorch comparison to a combined causal and padding mask. Verify both
+       weights and outputs.
+
+    ### Challenge
+
+    5. Train one- and four-head models on a small key–value retrieval task across three
+       seeds. Compare validation accuracy, variation, parameter count, and latency.
+       Inspect maps only after measuring task performance.
+
+    ### Mini-project · Evidence selector
+
+    **Goal:** select supporting policy clauses for a customer question.
+
+    **Columns:** `question_id`, `question_vector`, `clause_id`, `clause_vector`,
+    `is_supporting`, `document_id`, and `policy_version`.
+
+    **Workflow:** split by policy version or document before training; create negative
+    candidates; compare cosine retrieval, single-head scoring, and multi-head scoring;
+    mask padding; report Recall@k and MRR; test missing-evidence and conflicting-evidence
+    cases; never claim answer faithfulness from attention weights alone.
+
+    **Expected output:** shape assertions, mask behavior tests, multi-seed metrics,
+    latency and memory estimates, attention diagnostics, and a written limitation.
+
+    **Evaluation:** no document leakage, correct masks, fair candidate sets, validation-
+    only selection, and claims supported by retrieval metrics.
     """),
 
     md(r"""
-    ## 11 · Tradeoff Analysis
+    ## 17 · Summary and memory aid
 
-    **Attention complexity:**
+    Attention is a learned weighted retrieval operation:
 
-    | Method | Time | Memory | Quality | Use case |
-    |---|---|---|---|---|
-    | Full (dense) attention | $O(T^2 d)$ | $O(T^2)$ | Exact | Short/medium contexts |
-    | Flash Attention | $O(T^2 d)$ compute, $O(T)$ HBM | $O(T)$ | Exact | **Default for training** |
-    | Sparse / sliding window | $O(T \cdot w \cdot d)$ | $O(Tw)$ | Approx | Very long documents |
-    | Linear attention / Mamba | $O(Td)$ | $O(d)$ | Approx | Streaming, ultra-long |
+    $$
+    \operatorname{Attention}(Q,K,V)
+    =\operatorname{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V
+    $$
 
-    **Number of heads vs head dimension:**
+    Queries express what is needed, keys support matching, and values carry retrieved
+    content. Scaling controls score variance. Masks define legal information flow.
+    Multiple heads repeat the operation in different learned projection spaces. Dense
+    access shortens information paths and parallelizes full-sequence training, but its
+    score matrix grows quadratically and causal generation remains sequential across
+    newly produced tokens.
 
-    | Config | Pros | Cons |
-    |---|---|---|
-    | Many heads, small $d_k$ | More diverse relationship types | Each head has less capacity |
-    | Fewer heads, large $d_k$ | Rich per-head representations | Less diversity |
-    | GQA (grouped-query) | Fewer KV heads → smaller cache | Slightly less expressive |
+    **Memory aid:** *Query the labels, soften the scores, and blend the values—only from
+    positions the mask allows.*
 
-    **Self-attention vs cross-attention:**
-
-    | | Self-attention | Cross-attention |
-    |---|---|---|
-    | Q/K/V source | Same sequence | Q from one, K/V from another |
-    | Use in encoder | **Yes** (full bidirectional) | No |
-    | Use in decoder | **Yes** (causal, autoregressive) | **Yes** (attend to encoder) |
-    | Use in RAG | — | **Yes** (query over retrieved docs) |
-
-    **Senior lesson:** attention is a parallel, direct-access operation — it solves the
-    RNN bottleneck but introduces $O(T^2)$ cost that Flash Attention tames in practice.
-    Understanding the Q/K/V mechanics, causal masking, and multi-head design is
-    mandatory for working with any modern LLM.
-    """),
-
-    md(r"""
-    ## 12 · Senior-Level Interview Preparation
-
-    **Common questions**
-    - *Walk me through scaled dot-product attention.* → $\text{softmax}(QK^\top/\sqrt{d_k})V$;
-      Q queries, K advertises, V contributes; softmax gives attention distribution
-      (§4.1, §5.1).
-    - *Why divide by $\sqrt{d_k}$?* → dot-product variance grows with $d_k$; without
-      scaling, softmax saturates and gradients vanish (§4.2, Fig 1, §5.2).
-
-    **Deep-dive questions**
-    - *Self-attention vs cross-attention?* → Same formula; source of Q vs K/V differs
-      (§4.5).
-    - *Multi-head attention — why and how?* → $H$ parallel heads with independent
-      projections capture diverse relationship types; concatenate, project (§4.4).
-    - *O(T²) cost and how to address it?* → Flash Attention (exact, IO-aware); sparse/
-      linear attention (approx); KV caching for inference (§10, §11).
-
-    **Whiteboard questions**
-    - "Implement scaled dot-product attention in NumPy." (Section 5.1.)
-    - "Add a causal mask to the attention." (Section 5.3.)
-
-    **Strong vs weak answers**
-    - *"Why did Transformers replace RNNs?"*
-      - **Weak:** "Transformers are more powerful."
-      - **Strong:** "Self-attention gives $O(1)$ information paths between any two
-        positions (vs $O(T)$ for RNNs) and is fully parallel — both removing the
-        sequential bottleneck and fixed-size memory limits of Lesson DL-06. The cost is
-        $O(T^2)$, addressed by Flash Attention for training and KV caching for
-        inference."
-    - *"Can we use attention weights to explain a model decision?"*
-      - **Weak:** "Yes, high weights mean the model focused there."
-      - **Strong:** "Not reliably — high attention weight correlates with but doesn't
-        equal causal importance; use gradient-based attribution (Lesson MLE-05) for
-        explainability. Attention weights are a useful *debugging* signal, not a
-        trustworthy explanation."
-
-    **Follow-ups:** "GQA/MQA?" (fewer KV heads → smaller cache). "RoPE vs sinusoidal?"
-    (rotation-based position encoding, length extrapolation). "Flash Attention — what
-    makes it fast?" (IO-aware tiling to SRAM, avoids writing full T² matrix to HBM).
-
-    **Common mistakes:** forgetting $\sqrt{d_k}$; missing causal mask in decoder;
-    treating attention as explanation; ignoring positional encoding's necessity; not
-    knowing O(T²) cost; confusing self- and cross-attention.
-    """),
-
-    md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
-
-    1. **What is it?** Define attention in one sentence using query/key/value.
-    2. **Why was it invented?** What two RNN limits (Lesson DL-06) does it fix?
-    3. **How does it work?** Walk the formula: scores → scale → mask → softmax → mix.
-    4. **Why does it work?** Why does $\sqrt{d_k}$ scaling matter?
-    5. **When to use it?** Self vs cross-attention and when each appears.
-    6. **When NOT to use it (or be careful)?** O(T²) scaling and the explanation caveat.
-    7. **Tradeoffs?** Multi-head (diversity vs capacity); Flash Attention; KV caching.
-    8. **How would you productionize it?** Flash Attention, KV cache, context chunking,
-       positional encoding, padding masks.
-    """),
-
-    md(r"""
-    ## 14 · Exercises
-
-    **Beginner (conceptual)**
-    1. Verify by hand (3 tokens, $d_k=2$) that the attention weights sum to 1 and the
-       output is a convex combination of the value rows.
-    2. Explain in two sentences why removing the $\sqrt{d_k}$ factor hurts training.
-
-    **Beginner → Intermediate (coding)**
-    3. Extend `scaled_dot_product_attention` to handle a **batch dimension** (inputs of
-       shape `(batch, T, d)`) and verify the output shapes.
-    4. Implement **additive (Bahdanau) attention** — $e_{ij}=v^\top\tanh(W_q q_i+W_k k_j)$ —
-       and compare its attention patterns to scaled dot-product.
-
-    **Intermediate (analysis)**
-    5. Show empirically that multi-head attention with $H=4$ heads learns qualitatively
-       different patterns than a single full-$d_{model}$ head on the same toy sequence.
-    6. Profile the wall-clock cost of the scratch `scaled_dot_product_attention` as
-       $T$ grows from 64 to 2048 and fit an $O(T^2)$ curve to the measurements.
-
-    **Senior (interview + production design)**
-    7. *Whiteboard:* derive the gradient of the attention output w.r.t. $Q$ using the
-       chain rule through softmax — show why $\sqrt{d_k}$ is needed for stable gradients.
-    8. *Design:* the document Q&A system of §9 — chunking strategy (Lesson RAG-02),
-       cross-attention wiring, KV caching for multi-turn, context-length budget, and
-       how to expose clause-level citations.
-    9. *Debug:* a generation model produces the same token every step after position 5.
-       Diagnose (missing causal mask? collapsed attention to one token?) and propose
-       the diagnostic steps.
-    """),
-
-    md(r"""
-    ---
-    ### Summary
-    Attention gives every position **direct, parallel access** to every other position
-    via a soft weighted sum — $\text{softmax}(QK^\top/\sqrt{d_k})V$ — fixing both the
-    sequential bottleneck and the fixed-size memory limit of RNNs (Lesson DL-06).
-    Dividing by $\sqrt{d_k}$ prevents softmax saturation (the DL-03 vanishing-
-    gradient pattern, reappearing in a new form). **Causal masking** zeros future
-    positions for autoregressive generation. **Multi-head attention** learns diverse
-    relationship types in parallel. The cost is $O(T^2)$, addressed in production by
-    Flash Attention (training) and KV caching (inference). Self-attention is
-    **permutation-invariant**, so positional encoding is required (Lesson DL-08).
-
-    **Related lesson:** `DL-08 · Transformers` — attention + positional encoding + layer norm +
-    feed-forward residual blocks, stacked into the architecture that runs every modern
-    LLM. We'll build a miniature GPT-style Transformer from scratch.
+    DL-08 comes next because attention alone has no position representation, residual
+    pathway, normalization, feed-forward transformation, or language-model objective.
     """),
 ]
+
 
 build("04_deep_learning/07_attention_mechanism.ipynb", cells)
