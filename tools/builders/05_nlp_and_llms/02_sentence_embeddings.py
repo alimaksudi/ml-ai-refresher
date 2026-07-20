@@ -135,13 +135,41 @@ cells = [
       \frac{\exp(z_{ii})}{\sum_{j=1}^{B}\exp(z_{ij})}.$$
 
     $B$ is batch size and $\tau>0$ is temperature. Smaller $\tau$ sharpens score
-    differences and gradients. Off-diagonal documents become **in-batch negatives**.
+    differences and multiplies logit sensitivity by $1/\tau$, but it can also produce
+    saturated probabilities or unstable updates. Temperature is validated, not assumed.
+    Off-diagonal documents become **in-batch negatives**.
     This is efficient, but a mislabeled off-diagonal relevant document becomes a
     **false negative** and teaches the wrong geometry.
 
     An explicit hard negative $n_i$ is handled per query in this project. We add a
-    softplus penalty when $\cos(q_i,n_i)$ exceeds $\cos(q_i,d_i)$. Scoring every hard
-    negative against every query can create accidental false negatives.
+    softplus penalty:
+
+    $$
+    \ell_{hard,i}=\operatorname{softplus}\left(
+    \frac{\cos(q_i,n_i)-\cos(q_i,d_i)}{\tau}
+    \right).
+    $$
+
+    If the negative outranks the positive, the argument is positive and the penalty
+    grows. Softplus remains above zero even when ordering is correct, so compare values
+    rather than expecting an exact zero. Scoring every hard negative against every
+    query can create accidental false negatives.
+    """),
+    code(r"""
+    # Verify masked pooling and normalization with a batch-shaped example.
+    import numpy as np
+
+    token_states = np.array([[[2.0, 0.0], [4.0, 2.0], [100.0, 100.0], [100.0, 100.0]]])
+    padding_mask = np.array([[1.0, 1.0, 0.0, 0.0]])
+    mask_with_feature_axis = padding_mask[..., None]
+    pooled = (token_states * mask_with_feature_axis).sum(axis=1) / mask_with_feature_axis.sum(axis=1)
+    normalized = pooled / np.linalg.norm(pooled, axis=1, keepdims=True)
+
+    print("pooled vector:", pooled)
+    print("normalized vector:", normalized)
+    print("normalized norm:", np.linalg.norm(normalized, axis=1))
+    assert np.allclose(pooled, [[3.0, 1.0]])
+    assert np.allclose(np.linalg.norm(normalized, axis=1), 1.0)
     """),
     code(r"""
     import numpy as np
@@ -153,6 +181,18 @@ cells = [
     similarity_matrix = query_vectors @ document_vectors.T
     print(np.round(similarity_matrix, 3))
     print("Correct scores are diagonal:", np.round(np.diag(similarity_matrix), 3))
+
+    temperature = 0.2
+    logits = similarity_matrix / temperature
+    shifted_logits = logits - logits.max(axis=1, keepdims=True)
+    row_probabilities = np.exp(shifted_logits) / np.exp(shifted_logits).sum(axis=1, keepdims=True)
+    correct_probabilities = row_probabilities[np.arange(len(row_probabilities)), np.arange(len(row_probabilities))]
+    losses = -np.log(correct_probabilities)
+    print("\nrow probabilities:\n", np.round(row_probabilities, 3))
+    print("correct-match probabilities:", np.round(correct_probabilities, 3))
+    print("per-query losses:", np.round(losses, 3))
+    print("mean MNR loss:", round(float(losses.mean()), 3))
+    assert np.allclose(row_probabilities.sum(axis=1), 1.0)
     """),
     md(r"""
     ## 7 · Python Implementation from Scratch
@@ -199,7 +239,7 @@ cells = [
     print("Per-intent ranks:", {name: row["rank"] for name, row in report["evaluation_slices"].items()})
     """),
     md(r"""
-    ## 8 · Code Walkthrough and Expected Result
+    ## 8 · Reading the Retrieval Evidence
 
     `run_experiment` first evaluates random encoder weights. It then fits TF-IDF only
     for comparison, trains the dense encoder, and evaluates all systems against the
@@ -318,7 +358,7 @@ cells = [
 
     1. Why must mean pooling multiply by the padding mask before summing?
     2. Why does the MNR target for row `i` normally equal column `i`?
-    3. What changes when temperature becomes smaller?
+    3. What changes when temperature becomes smaller, and why can “smaller” become harmful?
     4. Why can TF-IDF outperform a dense model on identifiers or exact product names?
     5. What evidence distinguishes memorizing training pairs from learning useful geometry?
 
@@ -376,7 +416,8 @@ cells = [
     **Memory aid:** *Encode separately, pool with the mask, normalize, contrast, then
     trust only held-out retrieval.*
 
-    **Next:** RAG-01 uses these normalized vectors for exact and approximate similarity
+    **Next canonical lesson:** NLP-03 follows the complete LLM pretraining and data
+    lifecycle. RAG-01 later uses normalized vectors for exact and approximate similarity
     search. Complete `projects/sentence_embeddings/MASTERY_CHECKPOINT.md` first.
     """),
 ]
