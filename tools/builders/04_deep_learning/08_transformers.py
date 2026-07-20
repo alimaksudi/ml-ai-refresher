@@ -1,774 +1,813 @@
-"""Builder for Lesson DL-08 — Transformers.
+"""Build DL-08: assemble and train an inspectable causal Transformer."""
 
-"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from nbbuild import build, code, md  # noqa: E402
 
+
 cells = [
     md(r"""
     # DL-08 · Transformers
-    ### Section 04 — Deep Learning Foundations · *ML/AI Senior Mastery Curriculum*
 
-    > Lesson DL-07 derived the **attention mechanism**. The Transformer (Vaswani et al.,
-    > "Attention Is All You Need", 2017) stacks it into a complete architecture: **multi-
-    > head self-attention** + **position-wise feed-forward** sub-layers, each wrapped in
-    > a **residual connection** and **layer normalisation**, repeated $N$ times, topped
-    > by token embeddings and **positional encoding** so the otherwise order-agnostic
-    > attention knows where each token sits. Variations of this block underpin GPT,
-    > BERT, T5, and many modern language models. We first expose a single-head forward
-    > pass in NumPy, then train a real multi-head **GPT-style** decoder with PyTorch
-    > autograd on a tiny character-level corpus. The two levels separate transparent
-    > arithmetic from a complete learning experiment.
+    **Prerequisites:** FND-01, FND-02, FND-04, DL-01 through DL-04, DL-06, DL-07, and NLP-01  
+    **Estimated mastery time:** 12–16 hours, including the checkpoint  
+    **Required next checkpoint:** `projects/tiny_language_model/MASTERY_CHECKPOINT.md`
+
+    Attention retrieves information across positions. It is not yet a complete model.
+    A Transformer adds position information, residual paths, normalization,
+    position-wise feed-forward networks, repeated blocks, and a task-specific output
+    head.
+
+    We will assemble those pieces twice: first as transparent NumPy arithmetic, then as
+    a small GPT-style decoder written directly in this notebook. We will expose the
+    tokenizer, shifted targets, mask, loss, optimization, checkpoint selection,
+    generation loop, and KV cache. No hosted model or API key is needed.
     """),
 
     md(r"""
-    ## 1 · Learning Objectives
+    ## 1 · Mastery outcomes
 
-    **What you will master**
-    - The **Transformer block** anatomy: multi-head self-attention + FFN sub-layers,
-      each with a **pre-norm** residual connection.
-    - **Positional encoding**: why attention needs it (Lesson DL-07's permutation-
-      invariance) and the sinusoidal formula.
-    - **Token embeddings** and the **language-model head** (tied-weight linear layer).
-    - **GPT (decoder-only, causal)** vs **BERT (encoder-only, bidirectional)** vs
-      **encoder–decoder** — when each is used.
-    - A transparent single-head forward pass in NumPy followed by a real miniature
-      multi-head GPT trained with backpropagation and AdamW.
-    - Greedy, temperature, top-k, and top-p generation from learned weights.
-    - Naive autoregressive decoding versus an equivalent per-layer **KV cache**.
-    - **Scaling laws**, **pre-training vs fine-tuning**, and the production landscape
-      of LLMs that Section 05 builds on.
+    You will be able to:
 
-    **Why it matters**
-    - Every topic in Sections 05–07 (LLMs, RAG, Agents) assumes fluent understanding of
-      the Transformer architecture. Section 05 starts with how Transformers are trained
-      on text (Lesson NLP-03) and extended with prompting and safeguards (NLP-04 and
-      NLP-05).
-
-    **Typical interview questions**
-    - "Walk me through a Transformer block from scratch."
-    - "Why are residual connections and layer norm essential?"
-    - "GPT vs BERT — when would you use each?"
-    - "What are scaling laws and what do they predict?"
-    - "How does positional encoding work and why does the Transformer need it?"
-    """),
-
-    md(r"""
-    ## 2 · Historical Motivation
-
-    **Before the Transformer.** NLP in 2017 combined LSTMs (Lesson DL-06) with attention
-    (Lesson DL-07), using recurrence to process sequences and attention to let the
-    decoder look at the encoder. Training was slow (sequential), and very long-range
-    dependencies still degraded.
-
-    **"Attention Is All You Need" (Vaswani et al., 2017).** The key step: remove the
-    recurrence entirely. Build a model *only* from self-attention and feed-forward
-    layers. Every layer is fully parallel, every position attends to every other, and
-    depth replaces sequential memory. The Transformer outperformed the best RNN models
-    on translation in both quality and training speed — and it scaled.
-
-    **BERT (Devlin et al., 2018)** showed that a *bidirectional* Transformer encoder
-    pre-trained on masked-language modelling could be fine-tuned to dominate nearly
-    every NLP benchmark. **GPT (Radford et al., 2018–2020)** showed that a *decoder-
-    only* Transformer pre-trained on next-token prediction, scaled to billions of
-    parameters, developed remarkable few-shot abilities. Both branches led to today's
-    LLMs.
-
-    **The scaling-law era.** Kaplan et al. (2020) found that model performance follows
-    smooth **power laws** in model size, dataset size, and compute — giving practitioners
-    principled budget allocation. Chinchilla (Hoffmann et al., 2022) showed models had
-    been over-sized and under-trained; compute-optimal models train on ~20 tokens per
-    parameter.
-
-    **Why the Transformer dominates.** Three properties: (1) **fully parallel** training
-    (no sequential dependency); (2) **direct long-range access** (attention in $O(1)$
-    paths); (3) **scales smoothly** with data and compute following power laws. These
-    three together are why it displaced CNNs for vision and LSTMs for text.
-    """),
-
-    md(r"""
-    ## 3 · Intuition & Visual Understanding
-
-    **The Transformer block as a two-stage filter.** Each block does two things:
-    (1) **mix information across positions** (multi-head self-attention — "what context
-    from other tokens is relevant here?"); (2) **transform each position independently**
-    (FFN — "given the gathered context, how should I update this token's representation?").
-    The residual connection ensures each block only needs to learn the *correction* to
-    the input — like ResNets (Lesson DL-03's vanishing-gradient fix) applied to NLP.
-
-    **Layer norm stabilises the residual stream.** Without normalisation the residual
-    stream's scale grows with depth; layer norm keeps each sub-layer's input well-
-    conditioned (analogous to standardisation in FND-04 and MLE-03).
-
-    **Positional encoding is the "address label."** Attention is permutation-invariant
-    (Lesson DL-07, §7); to give positions meaning, we add a positional signal to each
-    token embedding — sinusoidal patterns at different frequencies so each position has
-    a unique, smooth fingerprint that generalises to unseen lengths.
-
-    **Stacking blocks = hierarchical representation.** Early layers learn local,
-    syntactic patterns; later layers learn global, semantic ones — the same hierarchy
-    as CNNs (Lesson DL-05), but in semantic space.
+    - trace token IDs through embeddings, positions, blocks, logits, and loss;
+    - explain what attention mixing and the feed-forward network each contribute;
+    - calculate sinusoidal positions and LayerNorm manually;
+    - distinguish learned absolute, sinusoidal, relative-bias, and rotary positions;
+    - write a pre-normalized residual Transformer block;
+    - align input tokens with next-token targets without an off-by-one error;
+    - prove that a causal decoder cannot use future tokens;
+    - overfit one batch as a pipeline diagnostic;
+    - train with a development split and restore the best validation checkpoint;
+    - implement greedy, temperature, and top-k decoding;
+    - explain why teacher-forced training is parallel across positions while generation is sequential;
+    - implement a per-layer KV cache and verify cached logits against full recomputation;
+    - compare encoder-only, decoder-only, and encoder–decoder families;
+    - state when a simpler model is the better engineering choice.
 
     ```mermaid
     flowchart LR
-        TokEmb["token embedding"] --> PosEnc["+ positional encoding"]
-        PosEnc --> B1["Transformer Block 1\n(Attn → Add&Norm → FFN → Add&Norm)"]
-        B1 --> B2["Block 2 ... Block N"]
-        B2 --> Head["LM head (linear + softmax)"]
-        Head --> NextTok["next-token distribution"]
+        A[Text] --> B[Token IDs]
+        B --> C[Token + position vectors]
+        C --> D[Pre-norm attention]
+        D --> E[Residual add]
+        E --> F[Pre-norm FFN]
+        F --> G[Residual add]
+        G --> H[Repeat blocks]
+        H --> I[Final norm]
+        I --> J[LM logits]
+        J --> K[Shifted cross-entropy]
     ```
     """),
 
-    code(r"""
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    rng = np.random.default_rng(42)
-    plt.rcParams["figure.figsize"] = (7, 5)
-    plt.rcParams["axes.grid"] = True
-    plt.rcParams["grid.alpha"] = 0.3
-
-    def softmax(x, axis=-1):
-        x = x - x.max(axis=axis, keepdims=True)
-        e = np.exp(x)
-        return e / e.sum(axis=axis, keepdims=True)
-
-    def layer_norm(x, eps=1e-5):
-        # Simplified LayerNorm without learned scale or shift.
-        mean = x.mean(axis=-1, keepdims=True)
-        variance = ((x - mean) ** 2).mean(axis=-1, keepdims=True)
-        return (x - mean) / np.sqrt(variance + eps)
-
-    def gelu(x):
-        return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x ** 3)))
-
-    print("NumPy", np.__version__)
-    print("helpers defined: softmax, layer_norm, gelu")
-    """),
-
     md(r"""
-    ## 4 · Mathematical Foundations
+    ## 2 · Why every part exists
 
-    ### 4.1 Sinusoidal positional encoding
-    For position $p$ and dimension $i$ (out of $d_{model}$):
-    $$PE(p,2i)=\sin\!\left(\frac{p}{10000^{2i/d}}\right),\quad
-    PE(p,2i{+}1)=\cos\!\left(\frac{p}{10000^{2i/d}}\right).$$
-    Different dimensions oscillate at different frequencies; each position gets a unique
-    vector. $PE(p+k)$ has a structured relationship to $PE(p)$, which gives the model
-    a useful relative-position signal. This structure permits evaluation beyond the
-    trained length, but does not guarantee that the model will perform well there.
-    Modern models often use
-    **RoPE** (Rotary Position Embedding) which bakes relative position into the Q/K
-    dot product itself.
-
-    ### 4.2 Transformer block (pre-norm formulation)
-    $$\tilde x = x + \text{MHA}(\text{LayerNorm}(x)),\quad
-    x' = \tilde x + \text{FFN}(\text{LayerNorm}(\tilde x)).$$
-    The **FFN** is a two-layer MLP applied *position-wise*:
-    $\text{FFN}(x)=W_2\,\text{GELU}(W_1 x+b_1)+b_2$, with $d_{ff}=4d_{model}$ typically.
-
-    ### 4.3 Language model objective (next-token prediction)
-    For a sequence $x_1,\dots,x_T$, the cross-entropy loss (Lesson FND-02) is
-    $$J = -\frac{1}{T-1}\sum_{t=1}^{T-1}\log p(x_{t+1}\mid x_1,\dots,x_t).$$
-    With causal masking (Lesson DL-07), all $T-1$ next-token predictions are computed
-    in parallel — the teacher-forcing trick that makes GPT training fully parallel.
-
-    ### 4.4 GPT vs BERT vs encoder–decoder
-    | Architecture | Masking | Training objective | Use case |
-    |---|---|---|---|
-    | **GPT** (decoder-only) | Causal | Next-token prediction | Generation, in-context learning, general-purpose |
-    | **BERT** (encoder-only) | Bidirectional | Masked LM + NSP | Classification, extraction, embeddings |
-    | **Encoder-decoder** | Enc: bi-dir; Dec: causal | Seq2seq (source→target) | Translation, summarisation |
-
-    ### 4.5 Scaling laws
-    Kaplan et al. observed empirical power-law relationships between validation loss
-    and model size, data, and compute over the regimes they measured. Hoffmann et al.
-    later found that their studied compute-optimal models used roughly 20 training
-    tokens per parameter. Treat this as historical empirical guidance, not a universal
-    formula: architecture, data quality, objective, and the measured scale all matter.
-    """),
-
-    md(r"""
-    ## 5 · Manual Implementation from Scratch
-
-    First inspect a minimal single-head causal forward pass in NumPy. This level is not
-    trainable because NumPy does not supply the autograd path used here. We then use a
-    directly implemented PyTorch decoder—without `nn.Transformer` or a hosted model—to
-    perform real multi-head training, validation, checkpoint preparation, and decoding.
-    """),
-
-    code(r"""
-    # 5.1 Sinusoidal positional encoding.
-    def positional_encoding(T, d_model):
-        PE = np.zeros((T, d_model))
-        positions = np.arange(T)[:, None]
-        div_term = np.power(10000, np.arange(0, d_model, 2) / d_model)
-        PE[:, 0::2] = np.sin(positions / div_term)
-        PE[:, 1::2] = np.cos(positions / div_term[:d_model // 2])
-        return PE
-
-    # 5.2 Self-attention (causal).
-    def causal_self_attention(x, Wq, Wk, Wv, Wo):
-        T, d = x.shape
-        Q, K, V = x @ Wq, x @ Wk, x @ Wv
-        scale = Q.shape[-1] ** 0.5
-        scores = Q @ K.T / scale
-        mask = np.triu(np.ones((T, T)), k=1) * -1e9
-        weights = softmax(scores + mask, axis=-1)
-        attn_out = weights @ V
-        return attn_out @ Wo
-
-    # 5.3 Feed-forward network (position-wise).
-    def ffn(x, W1, b1, W2, b2):
-        return gelu(x @ W1 + b1) @ W2 + b2
-
-    # 5.4 A single Transformer block (pre-norm).
-    def transformer_block(x, params):
-        Wq, Wk, Wv, Wo, W1, b1, W2, b2 = params
-        x = x + causal_self_attention(layer_norm(x), Wq, Wk, Wv, Wo)
-        x = x + ffn(layer_norm(x), W1, b1, W2, b2)
-        return x
-
-    # 5.5 Educational single-head decoder forward pass (1 block, no training yet).
-    def init_params(vocab, d_model, d_ff, seed=0):
-        r = np.random.default_rng(seed)
-        s = 0.02
-        tok_emb = r.normal(0, s, (vocab, d_model))
-        Wq = r.normal(0, s, (d_model, d_model))
-        Wk = r.normal(0, s, (d_model, d_model))
-        Wv = r.normal(0, s, (d_model, d_model))
-        Wo = r.normal(0, s, (d_model, d_model))
-        W1 = r.normal(0, s, (d_model, d_ff))
-        b1 = np.zeros(d_ff)
-        W2 = r.normal(0, s, (d_ff, d_model))
-        b2 = np.zeros(d_model)
-        lm_head = tok_emb                               # weight tying: share with embedding
-        return tok_emb, (Wq, Wk, Wv, Wo, W1, b1, W2, b2), lm_head
-
-    def forward(token_ids, params_all):
-        tok_emb, block_params, lm_head = params_all
-        T = len(token_ids)
-        x = tok_emb[token_ids] + positional_encoding(T, tok_emb.shape[1])
-        x = transformer_block(x, block_params)
-        x = layer_norm(x)
-        logits = x @ lm_head.T                          # (T, vocab_size)
-        return logits
-
-    vocab_size = 27                                      # a-z + space
-    d_model, d_ff = 32, 64
-    params_all = init_params(vocab_size, d_model, d_ff)
-    # Test forward pass shape
-    dummy = np.array([0, 1, 2, 3, 4])
-    logits = forward(dummy, params_all)
-    print(f"Forward pass shape: {logits.shape}  (T x vocab_size) -- OK")
-    """),
-
-    code(r"""
-    # 5.6 Real training: import the inspectable project implementation.
-    import sys
-    from pathlib import Path
-    import torch
-
-    candidates = [Path.cwd(), *Path.cwd().parents]
-    repo_root = next(path for path in candidates if (path / "projects/tiny_language_model").exists())
-    project_root = repo_root / "projects" / "tiny_language_model"
-    sys.path.insert(0, str(project_root / "src"))
-
-    from tiny_language_model.training import train
-
-    corpus = (project_root / "data" / "learning_corpus.txt").read_text(encoding="utf-8")
-    trained_model, tokenizer, training_report = train(
-        corpus,
-        seed=42,
-        max_epochs=8,
-        batch_size=16,
-        config_overrides={"block_size": 32, "d_model": 32, "n_heads": 4, "n_layers": 1},
-    )
-    first_epoch = training_report["history"][0]
-    last_epoch = training_report["history"][-1]
-    print("initial validation loss:", round(training_report["initial_validation_loss"], 3))
-    print("first epoch:", {key: round(value, 3) if isinstance(value, float) else value for key, value in first_epoch.items()})
-    print("last epoch:", {key: round(value, 3) if isinstance(value, float) else value for key, value in last_epoch.items()})
-    print("best validation loss:", round(training_report["best_validation_loss"], 3))
-    print("bigram validation loss:", round(training_report["bigram_validation_loss"], 3))
-    assert training_report["best_validation_loss"] < training_report["initial_validation_loss"]
-    """),
-
-    code(r"""
-    # 5.7 Generation from learned weights. Greedy is the deterministic baseline.
-    prompt = "the model"
-    prompt_ids = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long)
-    greedy_ids = trained_model.generate(prompt_ids.clone(), 50, temperature=0)
-    top_k_ids = trained_model.generate(
-        prompt_ids.clone(), 50, temperature=0.8, top_k=8,
-        generator=torch.Generator().manual_seed(42),
-    )
-    top_p_ids = trained_model.generate(
-        prompt_ids.clone(), 50, temperature=0.8, top_p=0.9,
-        generator=torch.Generator().manual_seed(42),
-    )
-    print("greedy:", tokenizer.decode(greedy_ids[0].tolist()))
-    print("top-k :", tokenizer.decode(top_k_ids[0].tolist()))
-    print("top-p :", tokenizer.decode(top_p_ids[0].tolist()))
-    print("These samples demonstrate learned continuation mechanics, not factual reliability.")
-    """),
-
-    md(r"""
-    ### 5.8 KV caching: reuse past attention projections during decoding
-
-    Naive generation reruns every retained token after each new token. Cached generation
-    performs one prompt **prefill**, stores every layer's keys and values, and then sends
-    only the newest token through the decoder. A past query is not cached because it was
-    consumed once; past keys and values are reused by every later query.
-
-    For $L$ layers, batch $B$, heads $H$, cached tokens $T$, head width $D$, and $s$
-    bytes per number, cache memory is
-
-    $$M_{KV}=2LBHTDs.$$
-
-    **Read aloud:** two cached tensors—keys and values—times layers, batches, heads,
-    tokens, head dimensions, and bytes per value. With $L=2$, $B=1$, $H=4$, $T=48$,
-    $D=16$, and float32 $s=4$, the cache uses
-    $2(2)(1)(4)(48)(16)(4)=49{,}152$ bytes. This estimate excludes allocator and
-    framework overhead. Caching is useful for autoregressive inference; ordinary
-    teacher-forced training already processes all positions in parallel and needs full
-    activations for backpropagation.
-    """),
-
-    code(r"""
-    # Correctness comes before speed: compare full and token-by-token cached logits.
-    comparison_ids = greedy_ids[:, :24]
-    full_logits, _ = trained_model(comparison_ids)
-    cache = None
-    incremental_parts = []
-    for position in range(comparison_ids.shape[1]):
-        new_logits, cache = trained_model.forward_with_cache(
-            comparison_ids[:, position:position + 1], cache
-        )
-        incremental_parts.append(new_logits)
-    incremental_logits = torch.cat(incremental_parts, dim=1)
-    maximum_difference = (full_logits - incremental_logits).abs().max().item()
-
-    naive_greedy = trained_model.generate(prompt_ids.clone(), 20, temperature=0)
-    cached_greedy = trained_model.generate_with_cache(prompt_ids.clone(), 20, temperature=0)
-    first_key, first_value = cache[0]
-    print("first-layer K shape:", tuple(first_key.shape), "= (B,H,T,D)")
-    print("first-layer V shape:", tuple(first_value.shape), "= (B,H,T,D)")
-    print("maximum logit difference:", maximum_difference)
-    print("greedy generations identical:", torch.equal(naive_greedy, cached_greedy))
-    assert torch.allclose(full_logits, incremental_logits, atol=1e-5, rtol=1e-5)
-    assert torch.equal(naive_greedy, cached_greedy)
-    print("Run `make tiny-lm-kv-cache` for warmed median latency measurements.")
-    """),
-
-    md(r"""
-    ## 6 · Visualization
-
-    Three figures: the sinusoidal positional encoding pattern, scaling laws, and a
-    comparison of the attention-pattern diversity across two blocks in a deeper model.
-    """),
-
-    code(r"""
-    # Figure 1 — Sinusoidal positional encoding: each position has a unique pattern.
-    T, d = 50, 64
-    PE = positional_encoding(T, d)
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
-    axes[0].imshow(PE.T, aspect="auto", cmap="RdBu")
-    axes[0].set_xlabel("position"); axes[0].set_ylabel("dimension")
-    axes[0].set_title("Positional encoding matrix (sinusoidal, d=64)")
-    # frequency structure along a few dimensions
-    for dim in [0, 2, 6, 14]:
-        axes[1].plot(PE[:, dim], label=f"dim {dim}")
-    axes[1].set_xlabel("position"); axes[1].set_ylabel("encoding value")
-    axes[1].set_title("Individual dimensions: high-freq to low-freq")
-    axes[1].legend(fontsize=8)
-    plt.suptitle("Figure 1 — Positional encoding: unique, smooth fingerprint per position")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 1.** The sinusoidal positional encoding assigns each position a unique
-    vector of sine/cosine values at varying frequencies (left: the full matrix —
-    dark/light stripes oscillate faster at low dimensions, slower at high). Individual
-    dimensions (right) show the progression from fast to slow oscillation. The model
-    adds this to the token embedding, so the attention scores $QK^\top$ implicitly
-    depend on position. The smooth pattern can be evaluated beyond the trained length,
-    but useful extrapolation is not guaranteed. Many modern models use **RoPE** (Rotary
-    Position Embedding), which puts relative offsets into Q/K rotations; its behavior at
-    longer lengths must also be measured.
-    """),
-
-    code(r"""
-    # Figure 2 — Scaling law schematic: loss ~ N^(-alpha) (conceptual).
-    Ns = np.logspace(6, 12, 100)                        # 1M to 1T params
-    alpha = 0.076                                       # Kaplan et al. exponent (approx)
-    loss = 2.5 * (Ns / 1e6) ** (-alpha)                # illustrative power law
-    data_balanced = 2.5 * (Ns / 1e6) ** (-alpha * 1.15)  # illustrative, not fitted data
-    fig, ax = plt.subplots()
-    ax.loglog(Ns / 1e9, loss, label="fixed dataset (original GPT3 regime)")
-    ax.loglog(Ns / 1e9, data_balanced, "--", label="illustrative data-balanced curve")
-    ax.set_xlabel("model size (B parameters)"); ax.set_ylabel("validation loss (schematic)")
-    ax.set_title("Figure 2 — Scaling laws: loss is a smooth power law in model size")
-    ax.legend()
-    plt.show()
-    print("Conceptual plot only: these curves are not measurements from this notebook.")
-    print("Scaling exponents and compute-optimal allocations depend on the measured regime.")
-    """),
-
-    md(r"""
-    **Figure 2.** This is a labelled schematic, not benchmark evidence. Published work
-    has observed approximate power-law relationships over specific ranges of models,
-    data, and compute. The useful engineering lesson is to measure a small scaling
-    frontier for the actual architecture and data before extrapolating a large run;
-    a single tokens-per-parameter ratio is not a universal law.
-    """),
-
-    code(r"""
-    # Figure 3 — show that positional encoding makes attention position-sensitive.
-    d_small = 16
-    PE_small = positional_encoding(8, d_small)
-    no_pe = np.zeros_like(PE_small)
-
-    # same tokens but once with PE, once without -> different attention patterns
-    tok_emb_test = rng.normal(0, 0.1, (vocab_size, d_small))
-    ids_test = np.array([0, 1, 2, 3, 4, 5, 6, 7])
-    Wq_t = rng.normal(0, 0.1, (d_small, d_small))
-    Wk_t = rng.normal(0, 0.1, (d_small, d_small))
-
-    def attn_weights(ids, pe, tok_emb, Wq, Wk):
-        x = tok_emb[ids] + pe
-        Q, K = x @ Wq, x @ Wk
-        scores = Q @ K.T / Q.shape[-1] ** 0.5
-        mask = np.triu(np.ones((len(ids), len(ids))), k=1) * -1e9
-        return softmax(scores + mask, axis=-1)
-
-    W_with_pe = attn_weights(ids_test, PE_small, tok_emb_test, Wq_t, Wk_t)
-    W_no_pe   = attn_weights(ids_test, no_pe, tok_emb_test, Wq_t, Wk_t)
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    for ax, (w, title) in zip(axes, [(W_no_pe, "Without PE (only token identity)"),
-                                      (W_with_pe, "With sinusoidal PE (token + position)")]):
-        im = ax.imshow(w, cmap="viridis")
-        ax.set_title(title); plt.colorbar(im, ax=ax)
-    plt.suptitle("Figure 3 — Positional encoding changes attention patterns (position now matters)")
-    plt.tight_layout()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 3.** Without positional encoding the attention pattern depends only on
-    token identity — any permutation of the same tokens would produce an identical
-    heatmap (permuted). With sinusoidal PE the patterns change, because the model can
-    now distinguish "token A at position 2" from "token A at position 6." This is why
-    every Transformer requires positional encoding: the self-attention computation is
-    otherwise *completely* position-agnostic (Lesson DL-07 §7).
-    """),
-
-    md(r"""
-    ## 7 · Failure Modes
-
-    | Failure | Symptom | Root cause | Mitigation |
-    |---|---|---|---|
-    | **Training instability** | Loss spikes / NaN early | Pre-norm not applied; LR too high | Use pre-norm; warm-up LR schedule |
-    | **Attention sink** | All attention to one token ("sink token") | Residual stream bias | Add explicit sink token; SoftMax-off strategies |
-    | **Length generalisation** | Degrades on sequences longer than training | Sinusoidal PE doesn't extrapolate | RoPE/ALiBi encodings; longer training |
-    | **O(T²) OOM** | GPU OOM on long context | Full attention matrix | Flash Attention; sliding-window; chunked attention |
-    | **Catastrophic forgetting** | Fine-tuned model forgets pre-training | Full-parameter fine-tuning | LoRA/PEFT; small learning rate; replay |
-    | **Hallucination** | Plausible but false generation | LM objective only maximises token prob | RLHF/DPO alignment; RAG grounding (NLP-05) |
-    | **Over-smoothing** | Deep models lose token distinction | Layer-norm + residual collapse | Residual dropout; skip connections |
-    | **Data contamination** | Inflated benchmark scores | Test data in pre-training | Decontamination; time-split evaluation |
-    """),
-
-    code(r"""
-    # Demonstrate: without pre-norm, residual stream variance grows with depth.
-    d = 32; T = 10; n_layers = 8
-    x = rng.normal(0, 1, (T, d))
-    # Without layer norm: variance grows
-    x_no_norm = x.copy()
-    vars_no_norm = [x_no_norm.var()]
-    for _ in range(n_layers):
-        W = rng.normal(0, 0.1, (d, d))
-        x_no_norm = x_no_norm + x_no_norm @ W               # residual without norm
-        vars_no_norm.append(x_no_norm.var())
-    # With pre-norm: variance stays controlled
-    x_prenorm = x.copy()
-    vars_prenorm = [x_prenorm.var()]
-    for _ in range(n_layers):
-        W = rng.normal(0, 0.1, (d, d))
-        x_prenorm = x_prenorm + layer_norm(x_prenorm) @ W   # pre-norm residual
-        vars_prenorm.append(x_prenorm.var())
-
-    fig, ax = plt.subplots()
-    ax.plot(vars_no_norm, "o-", label="No LayerNorm (explodes)")
-    ax.plot(vars_prenorm, "s-", label="Pre-norm (stable)")
-    ax.set_xlabel("depth (layer)"); ax.set_ylabel("variance of residual stream")
-    ax.set_title("Figure 4 — LayerNorm prevents residual stream explosion with depth")
-    ax.legend()
-    plt.show()
-    """),
-
-    md(r"""
-    **Figure 4.** Without layer normalisation the residual stream's variance grows
-    exponentially with depth (the same vanishing/exploding problem as Lesson DL-03,
-    now in the *scale* of activations). **Pre-norm** (applying LayerNorm *before*
-    the sub-layer, then adding the un-normed residual) keeps variance controlled
-    across all depths, enabling stable training of 96-layer models. This is one of
-    the key architectural differences between original (post-norm) and modern (pre-
-    norm) Transformers.
-    """),
-
-    md(r"""
-    ## 8 · Production Library Implementation
-
-    In production you never build a Transformer from scratch — you use HuggingFace
-    `transformers` (model loading, fine-tuning, generation) or PyTorch directly.
-    The key production workflow: **load a pretrained checkpoint** → **tokenize**
-    with the model's vocabulary → **generate** or **fine-tune** (LoRA/PEFT for
-    efficiency). The guard ensures the notebook runs without transformers/torch.
-    """),
-
-    code(r"""
-    # Production: load a tiny HuggingFace model and generate text. Guarded.
-    try:
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        import torch
-        # Use a very small model for demo (gpt2 is the smallest widely available)
-        # Note: this requires internet access to download; skip gracefully if not available.
-        model_name = "gpt2"
-        tok = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        model.eval()
-        prompt = "The Transformer architecture"
-        inputs = tok(prompt, return_tensors="pt")
-        with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        print(tok.decode(out[0]))
-        n_params = sum(p.numel() for p in model.parameters())
-        print(f"\\nGPT-2 parameters: {n_params:,}")
-    except Exception as e:
-        print(f"[HuggingFace/torch not available or no network: {type(e).__name__}]")
-        print("In production: AutoModelForCausalLM.from_pretrained('gpt2') + tokenizer")
-        print("is the standard 3-line inference pattern.")
-        print("The scratch mini-GPT above demonstrates the same forward-pass mechanics.")
-    """),
-
-    md(r"""
-    **Teaching model vs production model.** The NumPy forward pass and trained PyTorch
-    project expose the common decoder pattern—embedding, positional information,
-    attention, FFN, normalization, residual paths, and an LM head. Production model
-    families vary in normalization, positional method, attention layout, activation,
-    tokenization, parallelism, and many other details. The project is an architectural
-    microscope, not a small replica of any proprietary model.
-    """),
-
-    md(r"""
-    ## 9 · Realistic Business Case Study — Fine-Tuning a Transformer for Customer Support
-
-    **Scenario.** A company wants to automate tier-1 customer support using an LLM that
-    answers product-specific questions accurately, stays on-brand, and avoids
-    hallucinating policy details.
-
-    **Architecture choice:**
-    - **Decoder-only (GPT-style)** for open-ended response generation.
-    - **Start from a suitable pre-trained base** when its license, data policy,
-      evaluation, and deployment constraints fit. Training cost depends strongly on
-      scale and infrastructure, so estimate it for the actual workload.
-    - **LoRA/PEFT** fine-tuning: freeze base weights and train small adapter matrices.
-      This reduces trainable parameters, but does not guarantee retention or quality.
-
-    **Business objectives:** high factual accuracy on product/policy questions; latency
-    under 2 s; avoid harmful or off-brand outputs.
-
-    **Cost of mistakes (asymmetric):** hallucinated policy → customer churn, legal;
-    slow latency → abandonment; off-brand tone → brand damage.
-
-    **Constraints:** context window (must fit conversation + retrieved docs — Notebook
-    29); fine-tuning compute budget; inference cost per query; monitoring for
-    hallucination and drift (NLP-05 and PROD-05).
-
-    **KPIs:** answer accuracy on a golden QA set, hallucination rate (Lesson NLP-05),
-    P90 latency, customer satisfaction score, and escalation rate to human agents.
-    """),
-
-    md(r"""
-    ## 10 · Production Considerations
-
-    - **Flash Attention** (IO-aware exact attention, Lesson DL-07) is the default for
-      training efficiency — ~2–4× speedup and $O(T)$ memory.
-    - **KV caching** for inference: cache past key/value projections after prompt
-      prefill, prove logit equivalence, then measure decoding latency. Memory grows with
-      layers, batch, context, hidden width, and precision.
-    - **Quantization** (INT8/INT4): reduce model size and inference cost with minimal
-      quality loss — essential for edge/cost-sensitive deployments.
-    - **LoRA/PEFT fine-tuning**: update low-rank adapters rather than every base-model
-      weight. Measure retention and task quality; limited updates do not prevent every
-      form of regression.
-    - **Alignment** (RLHF/DPO): a language model trained on next-token prediction is
-      not intrinsically helpful or safe — alignment is a separate production step
-      (Lesson NLP-05).
-    - **Context window management** (Lesson RAG-02): documents that don't fit the context
-      must be chunked and retrieved (RAG, Section 06), not truncated naively.
-    - **Monitoring**: track output distribution, hallucination rate, and latency; set
-      up RLHF/human-feedback loops for continuous improvement (EVAL-04 and EVAL-05).
-    - **Scaling budget (§4.5)**: use scaling laws to predict quality before committing
-      to a large training run.
-    """),
-
-    md(r"""
-    ## 11 · Tradeoff Analysis
-
-    **Architecture variants:**
-
-    | Architecture | Masking | Parallelism | Use for |
-    |---|---|---|---|
-    | Decoder-only (GPT) | Causal | Full | Generation, ICL, general-purpose LLMs |
-    | Encoder-only (BERT) | Bidirectional | Full | Classification, embeddings, extraction |
-    | Encoder-decoder (T5, BART) | Enc: bi-dir; Dec: causal | Full | Translation, summarisation |
-
-    **Positional encoding:**
-
-    | PE | Pros | Cons |
+    | Part | Problem it solves | What it does not solve alone |
     |---|---|---|
-    | Sinusoidal (original) | No learned params; relative-position expressible | Limited length extrapolation |
-    | Learned absolute | Flexible | Doesn't extrapolate beyond trained length |
-    | **RoPE** | Encodes relative offsets in Q/K rotations; widely used | Long-length behavior still needs evaluation |
-    | ALiBi | Simple distance-dependent score bias | Quality and extrapolation depend on task and training |
+    | token embedding | turns discrete IDs into vectors | order or context |
+    | position representation | distinguishes locations and offsets | content retrieval |
+    | masked self-attention | mixes legal earlier context into each position | per-position nonlinear transformation |
+    | feed-forward network | transforms each position independently | communication across positions |
+    | residual connection | preserves a direct identity and gradient path | activation-scale conditioning |
+    | LayerNorm | normalizes features within each token | data leakage or exploding optimizer steps |
+    | LM head | maps hidden vectors to vocabulary logits | probability calibration or factuality |
 
-    **Fine-tuning strategy:**
+    Attention is permutation-**equivariant** without positions: permuting input rows
+    permutes output rows. Adding positions breaks that symmetry in a controlled way.
 
-    | Strategy | Cost | Risk | Use |
+    A pre-norm block calculates:
+
+    $$
+    r=x+\operatorname{MHA}(\operatorname{LN}(x))
+    $$
+
+    $$
+    y=r+\operatorname{FFN}(\operatorname{LN}(r))
+    $$
+
+    The residual stream stays at width $d_{model}$ so additions are shape-compatible.
+    """),
+
+    code(r"""
+    import copy
+    import math
+    import random
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import torch
+    import torch.nn.functional as F
+    from torch import nn
+
+    np.set_printoptions(precision=5, suppress=True)
+
+
+    def set_reproducible(seed):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.use_deterministic_algorithms(True)
+
+
+    set_reproducible(31)
+    DEVICE = torch.device("cpu")
+    print("device:", DEVICE)
+    """),
+
+    md(r"""
+    ## 3 · Position and normalization by hand
+
+    ### Sinusoidal position
+
+    For position $p$, model width $d$, and pair index $i$:
+
+    $$
+    PE(p,2i)=\sin\left(p/10000^{2i/d}\right)
+    $$
+
+    $$
+    PE(p,2i+1)=\cos\left(p/10000^{2i/d}\right)
+    $$
+
+    At $p=0$, every sine coordinate is 0 and every cosine coordinate is 1. At $d=4$,
+    position 1 is approximately:
+
+    $$
+    [\sin(1),\cos(1),\sin(0.01),\cos(0.01)]
+    \approx[0.8415,0.5403,0.0100,1.0000]
+    $$
+
+    These vectors can be generated beyond training length, but model quality beyond
+    the trained lengths is not guaranteed.
+
+    ### Layer normalization
+
+    For one token vector $x=[1,2,3]$:
+
+    $$
+    \mu=2,\qquad \sigma^2=\frac{(1-2)^2+(2-2)^2+(3-2)^2}{3}=\frac23
+    $$
+
+    $$
+    \widehat{x}=\frac{x-\mu}{\sqrt{\sigma^2+\epsilon}}
+    \approx[-1.225,0,1.225]
+    $$
+
+    A learned LayerNorm then applies feature-wise scale $\gamma$ and shift $\beta$.
+    Unlike dataset standardization, these statistics are calculated inside each token
+    vector, not fitted from training rows.
+    """),
+
+    code(r"""
+    def sinusoidal_positions(length, model_width):
+        if model_width % 2 != 0:
+            raise ValueError("This teaching implementation uses an even model width.")
+        positions = np.arange(length)[:, None]
+        pair_indices = np.arange(0, model_width, 2)[None, :]
+        angles = positions / np.power(10000.0, pair_indices / model_width)
+        encoding = np.empty((length, model_width))
+        encoding[:, 0::2] = np.sin(angles)
+        encoding[:, 1::2] = np.cos(angles)
+        return encoding
+
+
+    def layer_norm_numpy(values, epsilon=1e-5):
+        mean = values.mean(axis=-1, keepdims=True)
+        variance = values.var(axis=-1, keepdims=True)
+        return (values - mean) / np.sqrt(variance + epsilon)
+
+
+    positions = sinusoidal_positions(8, 4)
+    normalized = layer_norm_numpy(np.array([[1.0, 2.0, 3.0]]))
+    print("position 0:", positions[0])
+    print("position 1:", positions[1])
+    print("normalized [1,2,3]:", normalized)
+    print("normalized mean / variance:", normalized.mean(), normalized.var())
+    """),
+
+    code(r"""
+    position_picture = sinusoidal_positions(50, 32)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].imshow(position_picture.T, aspect="auto", cmap="RdBu")
+    axes[0].set_xlabel("position")
+    axes[0].set_ylabel("dimension")
+    axes[0].set_title("Sinusoidal position matrix")
+    for dimension in (0, 2, 8, 16):
+        axes[1].plot(position_picture[:, dimension], label=f"dimension {dimension}")
+    axes[1].set_xlabel("position")
+    axes[1].set_title("Different frequencies")
+    axes[1].legend()
+    plt.tight_layout()
+    plt.show()
+    """),
+
+    md(r"""
+    ## 4 · One transparent NumPy block
+
+    The feed-forward network is the same MLP at every position:
+
+    $$
+    \operatorname{FFN}(x)=\operatorname{GELU}(xW_1+b_1)W_2+b_2
+    $$
+
+    Attention communicates **between** positions. The FFN changes features **within**
+    each position. The following block uses one head for readable shapes; DL-07 already
+    verified the multi-head operation against PyTorch.
+    """),
+
+    code(r"""
+    def softmax_numpy(values, axis=-1):
+        shifted = values - values.max(axis=axis, keepdims=True)
+        exponentials = np.exp(shifted)
+        return exponentials / exponentials.sum(axis=axis, keepdims=True)
+
+
+    def gelu_numpy(values):
+        return 0.5 * values * (
+            1 + np.tanh(np.sqrt(2 / np.pi) * (values + 0.044715 * values**3))
+        )
+
+
+    def numpy_causal_block(inputs, parameters):
+        W_q, W_k, W_v, W_o, W_1, b_1, W_2, b_2 = parameters
+        normalized = layer_norm_numpy(inputs)
+        queries = normalized @ W_q
+        keys = normalized @ W_k
+        values = normalized @ W_v
+        scores = queries @ keys.T / np.sqrt(queries.shape[-1])
+        future = np.triu(np.ones(scores.shape, dtype=bool), k=1)
+        weights = softmax_numpy(np.where(future, -np.inf, scores), axis=-1)
+        after_attention = inputs + (weights @ values) @ W_o
+        normalized_again = layer_norm_numpy(after_attention)
+        feed_forward = gelu_numpy(normalized_again @ W_1 + b_1) @ W_2 + b_2
+        return after_attention + feed_forward, weights
+
+
+    length, model_width, feed_forward_width = 4, 6, 18
+    rng = np.random.default_rng(9)
+    scale = 0.1
+    numpy_parameters = (
+        rng.normal(0, scale, (model_width, model_width)),
+        rng.normal(0, scale, (model_width, model_width)),
+        rng.normal(0, scale, (model_width, model_width)),
+        rng.normal(0, scale, (model_width, model_width)),
+        rng.normal(0, scale, (model_width, feed_forward_width)),
+        np.zeros(feed_forward_width),
+        rng.normal(0, scale, (feed_forward_width, model_width)),
+        np.zeros(model_width),
+    )
+    numpy_inputs = rng.normal(size=(length, model_width))
+    numpy_outputs, numpy_attention = numpy_causal_block(numpy_inputs, numpy_parameters)
+
+    print("input / output shapes:", numpy_inputs.shape, numpy_outputs.shape)
+    print("attention shape:", numpy_attention.shape)
+    print("largest future attention weight:", numpy_attention[np.triu_indices(length, 1)].max())
+    assert numpy_outputs.shape == numpy_inputs.shape
+    assert np.all(numpy_attention[np.triu_indices(length, 1)] == 0.0)
+    """),
+
+    md(r"""
+    ## 5 · Tokenization and shifted targets
+
+    A language model predicts the next token at every position:
+
+    ```text
+    text:     m  o  d  e  l
+    input:    m  o  d  e
+    target:   o  d  e  l
+    ```
+
+    For logits $Z\in\mathbb{R}^{B\times T\times V}$ and target IDs
+    $Y\in\{0,\ldots,V-1\}^{B\times T}$:
+
+    $$
+    L=-\frac{1}{BT}\sum_{b=1}^{B}\sum_{t=1}^{T}
+    \log p(Y_{b,t}\mid X_{b,1:t})
+    $$
+
+    The causal mask prevents a position from reading later **inputs**. Target shifting
+    tells the loss which later token to predict. They solve different problems.
+
+    We use a character tokenizer so every rule is visible. Production tokenizers use
+    subword units and require their own training, normalization, special-token, and
+    versioning contracts.
+    """),
+
+    code(r"""
+    corpus = (
+        "a model learns patterns from examples. "
+        "attention mixes earlier context. "
+        "a transformer predicts the next token. "
+        "validation chooses the checkpoint. "
+    ) * 35
+
+    vocabulary = sorted(set(corpus))
+    token_to_id = {character: index for index, character in enumerate(vocabulary)}
+    id_to_token = {index: character for character, index in token_to_id.items()}
+
+
+    def encode(text):
+        return [token_to_id[character] for character in text]
+
+
+    def decode(token_ids):
+        return "".join(id_to_token[int(token_id)] for token_id in token_ids)
+
+
+    all_ids = torch.tensor(encode(corpus), dtype=torch.long)
+    split_index = int(0.85 * len(all_ids))
+    train_ids = all_ids[:split_index]
+    validation_ids = all_ids[split_index:]
+
+
+    def make_windows(token_stream, block_size):
+        inputs, targets = [], []
+        for start in range(0, len(token_stream) - block_size - 1, block_size):
+            window = token_stream[start:start + block_size + 1]
+            inputs.append(window[:-1])
+            targets.append(window[1:])
+        return torch.stack(inputs), torch.stack(targets)
+
+
+    block_size = 32
+    train_X, train_y = make_windows(train_ids, block_size)
+    validation_X, validation_y = make_windows(validation_ids, block_size)
+    print("vocabulary size:", len(vocabulary))
+    print("training windows:", train_X.shape, train_y.shape)
+    print("first input: ", repr(decode(train_X[0].tolist())))
+    print("first target:", repr(decode(train_y[0].tolist())))
+    assert torch.equal(train_X[0, 1:], train_y[0, :-1])
+    """),
+
+    md(r"""
+    ## 6 · Build a tiny GPT directly
+
+    Shape contract for $B=16$, $T=32$, $d_{model}=48$, $H=4$, and vocabulary $V$:
+
+    ```text
+    token IDs             (16, 32)
+    token + position      (16, 32, 48)
+    Q/K/V per head        (16, 4, 32, 12)
+    block output          (16, 32, 48)
+    vocabulary logits     (16, 32, V)
+    ```
+
+    Learned absolute positions keep this first trainable model compact. They cannot
+    index beyond `block_size`; sinusoidal, relative-bias, RoPE, and ALiBi make different
+    tradeoffs, but none guarantees length extrapolation.
+    """),
+
+    code(r"""
+    class CausalSelfAttention(nn.Module):
+        def __init__(self, model_width, number_of_heads):
+            super().__init__()
+            if model_width % number_of_heads != 0:
+                raise ValueError("model width must divide evenly across heads")
+            self.number_of_heads = number_of_heads
+            self.head_width = model_width // number_of_heads
+            self.qkv = nn.Linear(model_width, 3 * model_width)
+            self.output = nn.Linear(model_width, model_width)
+
+        def forward(self, hidden, cache=None):
+            batch, query_length, model_width = hidden.shape
+            q, k_new, v_new = self.qkv(hidden).chunk(3, dim=-1)
+
+            def as_heads(tensor):
+                return tensor.view(batch, query_length, self.number_of_heads, self.head_width).transpose(1, 2)
+
+            q, k_new, v_new = as_heads(q), as_heads(k_new), as_heads(v_new)
+            if cache is None:
+                k, v = k_new, v_new
+                past_length = 0
+            else:
+                past_k, past_v = cache
+                past_length = past_k.shape[-2]
+                k = torch.cat([past_k, k_new], dim=-2)
+                v = torch.cat([past_v, v_new], dim=-2)
+
+            scores = q @ k.transpose(-2, -1) / math.sqrt(self.head_width)
+            query_positions = past_length + torch.arange(query_length, device=hidden.device)
+            key_positions = torch.arange(k.shape[-2], device=hidden.device)
+            allowed = key_positions[None, :] <= query_positions[:, None]
+            scores = scores.masked_fill(~allowed[None, None, :, :], float("-inf"))
+            weights = torch.softmax(scores, dim=-1)
+            mixed = weights @ v
+            mixed = mixed.transpose(1, 2).contiguous().view(batch, query_length, model_width)
+            return self.output(mixed), (k, v), weights
+
+
+    class TransformerBlock(nn.Module):
+        def __init__(self, model_width, number_of_heads, feed_forward_width):
+            super().__init__()
+            self.norm_attention = nn.LayerNorm(model_width)
+            self.attention = CausalSelfAttention(model_width, number_of_heads)
+            self.norm_ffn = nn.LayerNorm(model_width)
+            self.ffn = nn.Sequential(
+                nn.Linear(model_width, feed_forward_width),
+                nn.GELU(),
+                nn.Linear(feed_forward_width, model_width),
+            )
+
+        def forward(self, hidden, cache=None):
+            attention_output, new_cache, weights = self.attention(
+                self.norm_attention(hidden), cache
+            )
+            hidden = hidden + attention_output
+            hidden = hidden + self.ffn(self.norm_ffn(hidden))
+            return hidden, new_cache, weights
+
+
+    class TinyGPT(nn.Module):
+        def __init__(self, vocabulary_size, block_size, model_width=48, heads=4, layers=2):
+            super().__init__()
+            self.block_size = block_size
+            self.token_embedding = nn.Embedding(vocabulary_size, model_width)
+            self.position_embedding = nn.Embedding(block_size, model_width)
+            self.blocks = nn.ModuleList(
+                [TransformerBlock(model_width, heads, 4 * model_width) for _ in range(layers)]
+            )
+            self.final_norm = nn.LayerNorm(model_width)
+            self.lm_head = nn.Linear(model_width, vocabulary_size, bias=False)
+            self.apply(self._initialize_weights)
+            self.lm_head.weight = self.token_embedding.weight
+
+        @staticmethod
+        def _initialize_weights(module):
+            # Small initial logits keep the first loss near the uniform reference
+            # log(vocabulary_size), which makes optimization easier to diagnose.
+            if isinstance(module, (nn.Linear, nn.Embedding)):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if isinstance(module, nn.Linear) and module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        def forward(self, token_ids, targets=None, cache=None):
+            past_length = 0 if cache is None else cache[0][0].shape[-2]
+            positions = torch.arange(
+                past_length, past_length + token_ids.shape[1], device=token_ids.device
+            )
+            if positions[-1] >= self.block_size:
+                raise ValueError("sequence exceeds learned position table")
+            hidden = self.token_embedding(token_ids) + self.position_embedding(positions)[None, :, :]
+            new_cache, attention_maps = [], []
+            layer_caches = [None] * len(self.blocks) if cache is None else cache
+            for block, layer_cache in zip(self.blocks, layer_caches):
+                hidden, created_cache, weights = block(hidden, layer_cache)
+                new_cache.append(created_cache)
+                attention_maps.append(weights)
+            logits = self.lm_head(self.final_norm(hidden))
+            loss = None
+            if targets is not None:
+                loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
+            return logits, loss, new_cache, attention_maps
+    """),
+
+    code(r"""
+    set_reproducible(31)
+    shape_model = TinyGPT(len(vocabulary), block_size)
+    shape_logits, shape_loss, _, shape_maps = shape_model(train_X[:3], train_y[:3])
+    print("tokens:", train_X[:3].shape)
+    print("logits:", shape_logits.shape)
+    print("loss:", shape_loss.item())
+    print("first attention map:", shape_maps[0].shape, "= (B,H,T,T)")
+
+    future_indices = torch.triu_indices(block_size, block_size, offset=1)
+    maximum_future_weight = shape_maps[0][:, :, future_indices[0], future_indices[1]].max().item()
+    print("maximum future attention weight:", maximum_future_weight)
+    assert maximum_future_weight == 0.0
+    """),
+
+    md(r"""
+    ## 7 · Diagnose before long training: overfit one batch
+
+    If a model cannot memorize one small batch, do not tune regularization or collect
+    more data. Inspect, in order: target shift, causal direction, output shape, finite
+    loss, nonzero gradients, optimizer step, and parameter change.
+    """),
+
+    code(r"""
+    set_reproducible(4)
+    diagnostic_model = TinyGPT(len(vocabulary), block_size, model_width=32, heads=4, layers=1)
+    diagnostic_optimizer = torch.optim.AdamW(diagnostic_model.parameters(), lr=0.01)
+    diagnostic_X, diagnostic_y = train_X[:4], train_y[:4]
+    diagnostic_losses = []
+
+    for step in range(80):
+        diagnostic_optimizer.zero_grad(set_to_none=True)
+        _, loss, _, _ = diagnostic_model(diagnostic_X, diagnostic_y)
+        loss.backward()
+        nn.utils.clip_grad_norm_(diagnostic_model.parameters(), 1.0)
+        diagnostic_optimizer.step()
+        diagnostic_losses.append(loss.item())
+
+    print("first diagnostic loss:", diagnostic_losses[0])
+    print("final diagnostic loss:", diagnostic_losses[-1])
+    assert diagnostic_losses[-1] < 0.15 * diagnostic_losses[0]
+    """),
+
+    md(r"""
+    ## 8 · Development training and checkpoint selection
+
+    Training rows update parameters. Validation loss selects the epoch. This lesson
+    does not claim a final generalization estimate; the tiny-LM checkpoint adds the
+    stronger multi-seed and held-out evaluation contract.
+    """),
+
+    code(r"""
+    def evaluate_loss(model, features, targets, batch_size=32):
+        model.eval()
+        losses = []
+        with torch.no_grad():
+            for start in range(0, len(features), batch_size):
+                _, loss, _, _ = model(
+                    features[start:start + batch_size], targets[start:start + batch_size]
+                )
+                losses.append(loss.item())
+        return float(np.mean(losses))
+
+
+    set_reproducible(8)
+    model = TinyGPT(len(vocabulary), block_size, model_width=48, heads=4, layers=2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.003, weight_decay=0.01)
+    loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(train_X, train_y),
+        batch_size=24,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(8),
+    )
+    best_validation_loss = math.inf
+    best_state = None
+    history = []
+
+    for epoch in range(1, 13):
+        model.train()
+        training_losses = []
+        for feature_batch, target_batch in loader:
+            optimizer.zero_grad(set_to_none=True)
+            _, loss, _, _ = model(feature_batch, target_batch)
+            loss.backward()
+            gradient_norm = nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            if not torch.isfinite(gradient_norm):
+                raise RuntimeError("non-finite Transformer gradient")
+            optimizer.step()
+            training_losses.append(loss.item())
+        validation_loss = evaluate_loss(model, validation_X, validation_y)
+        row = {"epoch": epoch, "train_loss": float(np.mean(training_losses)), "validation_loss": validation_loss}
+        history.append(row)
+        if validation_loss < best_validation_loss:
+            best_validation_loss = validation_loss
+            best_state = copy.deepcopy(model.state_dict())
+
+    model.load_state_dict(best_state)
+    display(pd.DataFrame(history))
+    print("best validation loss:", best_validation_loss)
+    assert best_validation_loss < history[0]["validation_loss"]
+    """),
+
+    code(r"""
+    history_table = pd.DataFrame(history)
+    fig, axis = plt.subplots(figsize=(8, 4))
+    axis.plot(history_table["epoch"], history_table["train_loss"], marker="o", label="training")
+    axis.plot(history_table["epoch"], history_table["validation_loss"], marker="s", label="validation")
+    axis.set_xlabel("epoch")
+    axis.set_ylabel("cross-entropy")
+    axis.set_title("Tiny GPT learning curves")
+    axis.legend()
+    axis.grid(alpha=0.3)
+    plt.show()
+    """),
+
+    md(r"""
+    ## 9 · Generation is a loop over logits
+
+    At each step, use the last position's logits. Greedy decoding chooses the largest.
+    Temperature divides logits before softmax: below 1 sharpens; above 1 flattens.
+    Top-k keeps only the $k$ largest candidates. These change sampling behavior, not
+    factual knowledge.
+    """),
+
+    code(r"""
+    def choose_next_token(logits, temperature=0.0, top_k=None, random_generator=None):
+        if temperature == 0:
+            return torch.argmax(logits, dim=-1, keepdim=True)
+        scaled = logits / temperature
+        if top_k is not None:
+            threshold = torch.topk(scaled, min(top_k, scaled.shape[-1]), dim=-1).values[:, -1:]
+            scaled = scaled.masked_fill(scaled < threshold, float("-inf"))
+        probabilities = torch.softmax(scaled, dim=-1)
+        return torch.multinomial(probabilities, 1, generator=random_generator)
+
+
+    def generate(model, prompt_ids, new_tokens, temperature=0.0, top_k=None, seed=0):
+        generated = prompt_ids.clone()
+        random_generator = torch.Generator().manual_seed(seed)
+        for _ in range(new_tokens):
+            context = generated[:, -model.block_size:]
+            logits, _, _, _ = model(context)
+            next_token = choose_next_token(
+                logits[:, -1, :], temperature, top_k, random_generator
+            )
+            generated = torch.cat([generated, next_token], dim=1)
+        return generated
+
+
+    prompt = torch.tensor([encode("attention ")], dtype=torch.long)
+    greedy = generate(model, prompt, 45)
+    sampled = generate(model, prompt, 45, temperature=0.8, top_k=6, seed=22)
+    print("greedy:", repr(decode(greedy[0].tolist())))
+    print("top-k: ", repr(decode(sampled[0].tolist())))
+    print("These are mechanics demonstrations from a tiny repetitive corpus, not useful prose generation.")
+    """),
+
+    md(r"""
+    ## 10 · KV caching: reuse past projections
+
+    Teacher-forced training knows the full target sequence and evaluates positions in
+    parallel behind a causal mask. Generation cannot know the next token before it is
+    chosen, so it remains sequential across new tokens.
+
+    During generation, past keys and values do not change. Cache them per layer. For
+    layers $L$, batch $B$, heads $H$, cached length $T$, head width $D$, and bytes $s$:
+
+    $$
+    M_{KV}=2LBHTDs
+    $$
+
+    Caching removes repeated K/V projection work. Each new query still attends over a
+    growing history, and cache memory grows linearly with cached length.
+    """),
+
+    code(r"""
+    # Full causal logits and token-by-token cached logits must agree in evaluation mode.
+    model.eval()
+    comparison = train_X[:2, :20]
+    with torch.no_grad():
+        full_logits, _, _, _ = model(comparison)
+        cache = None
+        incremental_logits = []
+        for position in range(comparison.shape[1]):
+            step_logits, _, cache, _ = model(
+                comparison[:, position:position + 1], cache=cache
+            )
+            incremental_logits.append(step_logits)
+        incremental_logits = torch.cat(incremental_logits, dim=1)
+
+    maximum_cache_difference = (full_logits - incremental_logits).abs().max().item()
+    first_layer_keys, first_layer_values = cache[0]
+    print("cached K/V shapes:", first_layer_keys.shape, first_layer_values.shape)
+    print("maximum full-versus-cached logit difference:", maximum_cache_difference)
+    assert torch.allclose(full_logits, incremental_logits, atol=1e-5, rtol=1e-5)
+    """),
+
+    md(r"""
+    ## 11 · Transformer families
+
+    | Family | Information flow | Typical objective | Strong fit |
     |---|---|---|---|
-    | Full fine-tuning | High | Catastrophic forgetting | Enough data, enough budget |
-    | **LoRA/PEFT** | Lower trainable state | Still needs regression testing | Resource-constrained adaptation |
-    | Prompt engineering | Zero | None | Quick experiments (NLP-04) |
-    | RAG | Low (no gradient) | Freshness | Factual/knowledge-heavy tasks (Section 06) |
+    | encoder-only | bidirectional self-attention | masked/replaced-token representation learning | classification, extraction, embeddings |
+    | decoder-only | causal self-attention | next-token prediction | generation and continuation |
+    | encoder–decoder | bidirectional source; causal target; cross-attention | source-to-target prediction | translation, summarization, structured transformation |
 
-    **Senior lesson:** the Transformer's power comes from parallel, direct-access
-    attention and smooth scaling — but its $O(T^2)$ attention cost and the alignment
-    gap between next-token prediction and helpful behaviour are the two enduring
-    production challenges.
+    These are patterns, not guarantees. Later NLP lessons compare trained objectives
+    behaviorally. “BERT understands” and “GPT generates” are shortcuts that hide model,
+    data, objective, and evaluation differences.
+
+    ### Position choices
+
+    | Method | Core idea | Important limitation |
+    |---|---|---|
+    | sinusoidal | fixed multi-frequency vector added to tokens | extrapolation still unproven |
+    | learned absolute | train one vector per position | fixed learned table |
+    | relative bias | add learned distance bias to scores | chosen distance scheme matters |
+    | RoPE | rotate Q/K features by position | long-context behavior needs training/evaluation |
+    | ALiBi | add distance-dependent linear score bias | task and scale dependent |
     """),
 
     md(r"""
-    ## 12 · Senior-Level Interview Preparation
+    ## 12 · When not to use a Transformer
 
-    **Common questions**
-    - *Walk me through a Transformer block.* → MHA sub-layer + residual + layer norm →
-      FFN sub-layer + residual + layer norm; pre-norm modern standard (§4.2).
-    - *Why layer norm and residual connections?* → Residual: each block learns a
-      correction, not a full transformation (Lesson DL-03); layer norm: stabilises scale
-      (Fig 4, FND-04 and MLE-03).
+    | Alternative | Prefer it when |
+    |---|---|
+    | linear/logistic model | sparse or structured baseline already meets the target |
+    | boosted trees | tabular data and modest sample size dominate |
+    | CNN | local spatial or temporal structure is central |
+    | GRU/LSTM | compact streaming state and low per-step memory matter |
+    | retrieval without generation | users need exact documents, not synthesized prose |
 
-    **Deep-dive questions**
-    - *GPT vs BERT — when each?* → GPT: generation/ICL; BERT: classification/embedding
-      (§4.4, §11).
-    - *What are scaling laws?* → Power-law relationship between loss and (params, data,
-      compute); Chinchilla says ~20 tokens per param is compute-optimal (§4.5).
-    - *Flash Attention?* → IO-aware tiling of the $T^2$ attention computation to SRAM;
-      exact, $O(T)$ memory, ~2–4× faster (Lesson DL-07 §10).
-
-    **Whiteboard questions**
-    - "Write positional encoding formulas and explain why we need them." (§4.1, §5.1.)
-    - "Describe the full GPT forward pass from token IDs to logits." (§5.5.)
-
-    **Strong vs weak answers**
-    - *"Should we pre-train or fine-tune for our domain?"*
-      - **Weak:** "Pre-train from scratch for best results."
-      - **Strong:** "First compare prompting, retrieval, and adaptation against a
-        measured baseline. If weight updates are justified, evaluate LoRA against full
-        tuning under the same data and holdout; lower trainable state does not guarantee
-        equal quality or prevent every regression."
-    - *"Our Transformer loses coherence on sequences >4K tokens."*
-      - **Weak:** "Use a larger model."
-      - **Strong:** "The model's PE and attention patterns may not extrapolate beyond
-        its training length. Switch to RoPE or ALiBi for better length generalisation,
-        and/or use sliding-window/sparse attention; if factual grounding is the goal,
-        RAG (Section 06) is cleaner than extending context blindly."
-
-    **Follow-ups:** "LoRA — what does it do?" (low-rank adapter matrices on attention
-    projections). "How does KV caching work?" (cache past K/V, only compute new token's
-    Q). "What is temperature sampling?" (divide logits by T before softmax).
-
-    **Common mistakes:** not knowing pre-norm vs post-norm; thinking attention is
-    causal by default (it's not — mask is explicit); confusing scaling law dimensions;
-    forgetting positional encoding; dismissing fine-tuning for pre-training.
+    Dense attention adds quadratic pair work. A Transformer also needs enough data,
+    regularization, evaluation, and serving budget. Architecture popularity is not a
+    substitute for a measured baseline.
     """),
 
     md(r"""
-    ## 13 · Teach-Back — Answer Without Notes
+    ## 13 · Failure modes
 
-    1. **What is it?** Describe the Transformer block: attention, FFN, residual, norm.
-    2. **Why was it invented?** What RNN/LSTM limits does it fix (Lesson DL-06)?
-    3. **How does it work?** Walk the GPT forward pass: tokens → embeddings → PE →
-       blocks → LM head → next-token probabilities.
-    4. **Why does it work?** Why do residual connections and layer norm matter?
-    5. **When to use it?** GPT vs BERT vs encoder-decoder — one-sentence each.
-    6. **When NOT to use it?** When would you pick a simpler model?
-    7. **Tradeoffs?** LoRA vs full fine-tuning; sinusoidal vs RoPE PE; scaling law
-       implications.
-    8. **How would you productionize it?** Flash Attention, KV cache, LoRA, alignment,
-       context management, monitoring.
+    | Symptom | Likely cause | First check | Response |
+    |---|---|---|---|
+    | loss stays near $\log V$ | shift/mask/optimizer bug | one-batch overfit | trace contract in order |
+    | validation suspiciously low | overlapping windows or corpus leakage | source boundaries | split before windows |
+    | future changes alter earlier logits | causal mask wrong | perturb-future test | fix and assert behavior |
+    | cached logits differ | wrong position offset or cache order | layerwise max difference | trace `(B,H,T,D)` and offsets |
+    | generation repeats | tiny/biased data, greedy loop, overconfidence | probabilities and corpus | improve data/model; evaluate decoding |
+    | learned positions crash | context exceeds table | requested position index | crop, reject, or retrain design |
+    | long context exhausts memory | dense attention and KV cache | $BHT^2$, KV formula | reduce length/batch; efficient kernels/design |
+    | plausible false answer | next-token objective is not truth verification | grounded evaluation | retrieval, citations, abstention, guardrails |
+
+    LayerNorm and residuals support optimization; they do not guarantee stable training.
+    Learning rate, initialization, precision, data, depth, and optimizer still matter.
     """),
 
     md(r"""
-    ## 14 · Exercises
+    ## 14 · Production bridge without hiding the foundation
 
-    **Beginner (conceptual)**
-    1. Why does a Transformer need positional encoding even though an LSTM doesn't?
-    2. What does the language-model training objective (next-token prediction) actually
-       optimise, and how does that differ from "understanding"?
+    Production systems normally load a versioned pretrained model and its exact
+    tokenizer rather than train from scratch. That workflow adds concerns not shown by
+    a three-line download:
 
-    **Beginner → Intermediate (coding)**
-    3. Run the project one-batch overfit diagnostic. If loss does not fall sharply,
-       inspect target shifting, the causal mask, gradients, and optimizer step in order.
-    4. Compare greedy, temperature, top-k, and top-p under one fixed prompt and seed.
-       Describe diversity without treating one sample as a quality evaluation.
-    5. Run `make tiny-lm-kv-cache`. Explain why the measured speedup changes with prompt
-       length and why a tiny model may not represent production GPU behavior.
+    - license and permitted use;
+    - tokenizer/model revision compatibility;
+    - context and chat-template contracts;
+    - quantization quality regression;
+    - batching, cache allocation, and latency;
+    - prompt-injection and unsafe-output controls;
+    - evaluation before and after adaptation;
+    - monitoring and rollback.
 
-    **Intermediate (analysis)**
-    6. Replace sinusoidal PE with **random absolute PE** (learned during training) in
-       the mini-GPT and compare the attention patterns in Figure 3.
-    7. Implement a simple **LoRA adapter** on top of $W_q$: add two low-rank matrices
-       $AB$ ($r=4$) instead of updating $W_q$ directly and show the parameter count
-       reduction.
-
-    **Senior (interview + production design)**
-    8. *Whiteboard:* derive the full forward pass of the GPT block from first principles,
-       counting FLOPs for the attention and FFN components.
-    9. *Design:* the fine-tuning pipeline for the customer support LLM of §9 — model
-       selection, LoRA vs full fine-tuning, data curation, evaluation (Lesson EVAL-02),
-       alignment (Lesson NLP-05), and drift monitoring (Lesson PROD-05).
-    10. *Scaling:* you have a compute budget of $10^{23}$ FLOP. Using Chinchilla scaling
-       laws, estimate the optimal model size and token count; compute the expected
-       validation loss reduction vs a 1B-parameter over-trained baseline.
+    This lesson deliberately avoids an internet-dependent checkpoint. The local
+    `projects/tiny_language_model` checkpoint is the next gate: it expands the
+    experiment with artifact saving, behavioral tests, tokenizer comparisons,
+    generation evaluation, and measured KV-cache timing.
     """),
 
     md(r"""
-    ---
-    ### Summary
-    The Transformer stacks **multi-head self-attention + position-wise FFN** sub-layers,
-    each wrapped in a **residual connection and layer normalisation** (Fig 4), with a
-    **positional encoding** to give attention its missing sense of order (Fig 1). This
-    fully-parallel architecture scales smoothly with data and compute (**scaling laws**,
-    Fig 2) and is the foundation of many modern LLM families. We exposed the arithmetic
-    in NumPy, then trained a real multi-head decoder with PyTorch (§5), verified that
-    validation loss falls, and generated from learned weights. We traced each component
-    to its motivation: residuals from Lesson DL-03, attention from Lesson DL-07, LN from
-    Lesson FND-04, loss from Lesson FND-02.
+    ## 15 · Check your understanding
 
-    **Section 04 (Deep Learning) is now complete.** You can build the full deep-learning
-    stack from first principles: MLP → backprop → CNN → RNN/LSTM → attention →
-    Transformer. Complete `projects/tiny_language_model/MASTERY_CHECKPOINT.md` before
-    moving into sentence embeddings, alignment, prompting, or RAG.
+    1. Why do attention and the FFN perform different jobs?
+    2. What statistics does LayerNorm calculate, and over which axis here?
+    3. Why must residual input and sublayer output have the same width?
+    4. What is the difference between a causal mask and shifted targets?
+    5. Trace `(B,T)` token IDs to `(B,T,V)` logits.
+    6. Why can training process target positions in parallel while generation cannot?
+    7. What does a one-batch overfit test isolate?
+    8. Why restore the best validation checkpoint rather than the last epoch?
+    9. Which tensors enter a KV cache, and why not cache old queries?
+    10. Why does a lower LM loss not establish truthfulness or usefulness?
+    """),
 
-    **Related lesson:** `Section 05 — NLP and LLMs` begins with `NLP-01 · TF-IDF and Word Embeddings` —
-    how language was represented before Transformers and how those ideas live on inside
-    them (word2vec/GloVe as the precursors to contextual embeddings).
+    md(r"""
+    ## 16 · Practice and mini-project
+
+    **Beginner**
+
+    1. Calculate the sinusoidal vector for position 2 at width 4.
+    2. Shift the string `model` into input and target rows by hand.
+
+    **Intermediate**
+
+    3. Add dropout to attention weights, projection output, and FFN. Explain why it
+       must be disabled for cache-equivalence testing.
+    4. Add a perturb-future behavioral test at the final-logit level.
+    5. Implement top-p sampling and verify that retained probability mass reaches the threshold.
+
+    **Challenge**
+
+    6. Compare one- and two-layer models across three seeds under the same development
+       split. Report loss, variation, parameter count, training time, and generation
+       diagnostics. Choose no configuration using final test data.
+
+    **Mini-project · Tiny domain language model**
+
+    Use `projects/tiny_language_model`. Complete its tokenizer, data-window, baseline,
+    one-batch overfit, multi-seed training, artifact, cache, and generation checks.
+    Your report must explain why this tiny model is an architectural microscope—not a
+    useful general LLM—and name one falsifiable next experiment.
+    """),
+
+    md(r"""
+    ## 17 · Summary and memory aid
+
+    A Transformer block alternates content mixing and position-wise transformation:
+
+    $$
+    x\rightarrow x+\operatorname{Attention}(\operatorname{LN}(x))
+    \rightarrow r+\operatorname{FFN}(\operatorname{LN}(r))
+    $$
+
+    Token and position representations enter repeated blocks; a final head produces
+    vocabulary logits. Causal masking limits information, shifted targets define the
+    prediction, cross-entropy trains probabilities, and validation selects a frozen
+    checkpoint. Training is parallel across known sequence positions, while generation
+    is an autoregressive loop. KV caching reuses past projections without removing the
+    growing attention or memory cost.
+
+    **Memory aid:** *Position the tokens, mix across time, transform each position,
+    preserve the residual stream, then predict the next ID.*
+
+    Section 04 is complete only after the tiny-language-model mastery checkpoint passes.
     """),
 ]
+
 
 build("04_deep_learning/08_transformers.ipynb", cells)
