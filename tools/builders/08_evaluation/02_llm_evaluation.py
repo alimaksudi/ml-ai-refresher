@@ -21,7 +21,11 @@ cells = [
     regression gate. No hosted API or model download is required.
 
     **Prerequisites:** DL-08, NLP-03, NLP-07, NLP-08, train/validation/test separation,
-    cross-entropy, probability, and cosine similarity. **Core time:** 5–8 hours.
+    cross-entropy, probability, and cosine similarity.
+
+    **Estimated mastery time:** 8–11 hours, including the checkpoint
+
+    **Next canonical lesson:** NLP-04 · Controlled Prompt Engineering
     """),
     md(r"""
     ## 1 · Learning Objectives
@@ -35,6 +39,8 @@ cells = [
     - distinguish lexical overlap, sentence-embedding similarity, and real BERTScore;
     - compare the real base, continued-pretraining, SFT/LoRA, and DPO evidence;
     - inspect paired examples, slices, and confidence intervals instead of trusting one mean;
+    - separate sampling uncertainty, coverage limits, and practical significance;
+    - evaluate stochastic generation with repeated, versioned decoding;
     - build a deterministic regression gate with an explicit acceptance policy.
     """),
     md(r"""
@@ -81,6 +87,25 @@ cells = [
     and EVAL-05 for carefully validated model-based judging.
     """),
     md(r"""
+    ### Keep unlike questions in separate metric lanes
+
+    Before calculating anything, decide which question each measurement answers.
+
+    | Lane | Question | Examples | It does not prove |
+    |---|---|---|---|
+    | model fit | Does the model predict held-out tokens? | loss, perplexity | task correctness |
+    | task outcome | Did the answer solve the defined task? | exact validator, F1, execution tests | broad safety |
+    | behavior or policy | Did it follow the desired behavioral rule? | format validity, refusal recall | factuality |
+    | preference | Which output wins under a rubric? | pairwise win rate, margin | objective truth |
+    | system quality | Did the whole application work? | groundedness, citation support, retrieval success | model-only quality |
+    | operations | Can we serve it reliably? | latency, cost, failures, memory | answer quality |
+
+    Do not average these lanes into one magic score. Name one primary outcome for the
+    release decision and keep non-negotiable requirements as guardrails. Compare against
+    a meaningful baseline: the current production model, an unchanged prompt, a simple
+    heuristic, or another predeclared reference point.
+    """),
+    md(r"""
     ## 4 · Mathematical Foundations
 
     ### 4.1 Held-out loss and perplexity
@@ -125,6 +150,19 @@ cells = [
     $\bar d$, and take the 2.5th and 97.5th percentiles for a 95% bootstrap interval.
     Pairing keeps each prompt matched across models. The interval measures sampling
     uncertainty in this dataset; it cannot repair biased, leaked, or tiny coverage.
+
+    | Symbol | Plain-language meaning |
+    |---|---|
+    | $N$ | number of paired evaluation examples |
+    | $i$ | one example index |
+    | $s_{A,i}$ | score from model A on example $i$ |
+    | $s_{B,i}$ | score from model B on that same example |
+    | $d_i$ | candidate-minus-baseline change for that pair |
+    | $\bar d$ | average paired change |
+
+    A confidence interval addresses sampling uncertainty under its assumptions. A
+    release decision also needs a **minimum useful change**. With enough rows, a tiny
+    improvement can be statistically clear but too small to justify cost or risk.
     """),
     md(r"""
     ## 5 · Manual Implementation from Scratch
@@ -139,6 +177,7 @@ cells = [
 
     import matplotlib.pyplot as plt
     import numpy as np
+    import pandas as pd
 
 
     def normalize_answer(text):
@@ -188,6 +227,7 @@ cells = [
     """),
     code(r"""
     def lcs_length(left_tokens, right_tokens):
+        # Each cell stores the best subsequence length for two token prefixes.
         table = [[0] * (len(right_tokens) + 1) for _ in range(len(left_tokens) + 1)]
         for left_index, left_token in enumerate(left_tokens, start=1):
             for right_index, right_token in enumerate(right_tokens, start=1):
@@ -221,11 +261,57 @@ cells = [
     assert lcs == 3 and math.isclose(rouge_l_f1(candidate, reference), 0.75)
     """),
     md(r"""
-    **Code walkthrough.** The table stores the best subsequence length for every pair
-    of prefixes. Equal tokens extend the diagonal result; unequal tokens keep the best
+    The table stores the best subsequence length for every pair of prefixes. Equal
+    tokens extend the diagonal result; unequal tokens keep the best
     result from skipping one side. The final cell must print LCS `3` and ROUGE-L `0.75`.
     This is quadratic in both sequence lengths, so production libraries use optimized
     implementations and batching where appropriate.
+    """),
+    md(r"""
+    ### References, validators, and stochastic outputs
+
+    A reference-based score is suitable only when the reference set represents the valid
+    answer space. Short factual questions may accept several normalized strings. A JSON
+    task should use schema and field validators. Code should be executed in an isolated
+    test environment. Open-ended advice may require a human rubric because lexical
+    similarity cannot establish correctness.
+
+    Generation adds another source of variation. Greedy decoding is usually
+    deterministic for a fixed implementation. Sampling can produce different answers
+    from the same prompt, so one generation is one draw—not the model’s entire behavior.
+    Freeze decoding parameters and software, then generate multiple samples or repeat
+    the full evaluation under several seeds. Report the distribution and failure rate.
+    A seed improves reproducibility but does not guarantee identical results across all
+    hardware, kernels, and library versions.
+    """),
+    code(r"""
+    candidate_responses = np.array(["correct", "incomplete", "incorrect"])
+    candidate_probabilities = np.array([0.65, 0.25, 0.10])
+
+    def sampled_accuracy(seed, draws=20):
+        # This mimics repeated generation from one fixed categorical distribution.
+        random_generator = np.random.default_rng(seed)
+        samples = random_generator.choice(
+            candidate_responses,
+            size=draws,
+            p=candidate_probabilities,
+        )
+        return samples, float(np.mean(samples == "correct"))
+
+
+    for seed in [3, 17, 91]:
+        samples, accuracy = sampled_accuracy(seed)
+        print(
+            f"seed={seed:>2}: correct={np.sum(samples == 'correct'):>2}/20, "
+            f"sample accuracy={accuracy:.2f}"
+        )
+
+    print("Expected long-run accuracy:", candidate_probabilities[0])
+    """),
+    md(r"""
+    The three measured accuracies can differ even though the underlying candidate did
+    not change. More samples reduce Monte Carlo noise, but they do not add missing prompt
+    categories. Repeat outputs and broader evaluation coverage solve different problems.
     """),
     md(r"""
     ### Real local model evidence
@@ -277,6 +363,7 @@ cells = [
         after = np.asarray(after_scores, dtype=float)
         if before.shape != after.shape or before.ndim != 1 or len(before) == 0:
             raise ValueError("before and after must be non-empty paired one-dimensional arrays")
+        # Resample row indices once and apply them to both systems to preserve pairing.
         random_generator = np.random.default_rng(seed)
         sampled_indices = random_generator.integers(0, len(before), size=(draws, len(before)))
         sampled_deltas = (after[sampled_indices] - before[sampled_indices]).mean(axis=1)
@@ -342,8 +429,32 @@ cells = [
     dashboard. A global mean can improve while one language, prompt type, response
     length, or risk category regresses.
     """),
+    code(r"""
+    # Ninety-nine routine cases improve slightly, while one critical case fails.
+    slice_evidence = pd.DataFrame(
+        [
+            {"slice": "routine", "count": 99, "before": 0.70, "after": 0.75},
+            {"slice": "critical", "count": 1, "before": 1.00, "after": 0.00},
+        ]
+    )
+    slice_evidence["delta"] = slice_evidence["after"] - slice_evidence["before"]
+    weighted_before = np.average(slice_evidence["before"], weights=slice_evidence["count"])
+    weighted_after = np.average(slice_evidence["after"], weights=slice_evidence["count"])
+
+    display(slice_evidence)
+    print("global score:", round(weighted_before, 3), "->", round(weighted_after, 3))
+    print("critical slice passes:", bool(slice_evidence.loc[1, "after"] == 1.0))
+    assert weighted_after > weighted_before
+    assert slice_evidence.loc[1, "delta"] < 0
+    """),
     md(r"""
-    ## 7 · Failure Modes, Beginner Mistakes, and Debugging
+    The global score improves because routine rows dominate the average, yet the only
+    critical example regresses. The right response is not to hide the critical result
+    inside a weighted mean. Declare critical slices before testing, require enough rows
+    to evaluate them, and make their thresholds release guardrails.
+    """),
+    md(r"""
+    ## 7 · Failure patterns worth recognizing
 
     | Symptom | Likely cause | Inspect | Scoped repair |
     |---|---|---|---|
@@ -368,6 +479,14 @@ cells = [
     token matching with a pretrained encoder; it is not random hash cosine and may
     require a model download. This offline core therefore explains it but does not
     pretend to execute it.
+
+    Conceptually, BERTScore encodes candidate and reference tokens in context, computes
+    cosine similarity between token vectors, matches every candidate token to its most
+    similar reference token for precision, and reverses the direction for recall. Their
+    harmonic mean gives an F1-like score; optional inverse-document-frequency weights
+    give rarer tokens more influence. Encoder checkpoint, layer, language, baseline
+    rescaling, and library version are part of the metric contract. Semantic similarity
+    still does not prove that a claim is factually correct.
 
     NLP-02 provides a real locally trained sentence bi-encoder and held-out retrieval
     evaluation. Its cosine score is useful for its validated retrieval task, but it is
@@ -401,8 +520,19 @@ cells = [
     it does not prove universal model quality.
     """),
     code(r"""
-    def regression_decision(primary_delta, primary_ci_low, guardrail_deltas, limits):
-        primary_passes = primary_delta > 0 and primary_ci_low >= 0
+    def regression_decision(
+        primary_delta,
+        primary_ci_low,
+        minimum_useful_delta,
+        guardrail_deltas,
+        limits,
+    ):
+        # Require both statistical direction and enough improvement to matter.
+        primary_passes = (
+            primary_ci_low >= 0
+            and primary_delta >= minimum_useful_delta
+        )
+        # In this contract, every guardrail delta is defined so positive means worse.
         failed_guardrails = {
             name: change
             for name, change in guardrail_deltas.items()
@@ -420,6 +550,7 @@ cells = [
     decision = regression_decision(
         interval["observed_delta"],
         interval["ci_low"],
+        0.10,
         {"sft_retention_loss": retention_change},
         {"sft_retention_loss": 0.25},
     )
@@ -430,7 +561,8 @@ cells = [
     md(r"""
     **Expected result:** the narrow preference metric improves, but the declared retention
     budget fails, so the system prints `review_or_reject`. A gate is not “model B has a
-    higher average.” It is an explicit policy for resolving multiple measured outcomes.
+    higher average.” It is an explicit policy for resolving practical improvement,
+    sampling uncertainty, and multiple measured outcomes.
     """),
     md(r"""
     ## 10 · Learning and Production Considerations
@@ -476,8 +608,9 @@ cells = [
     5. produce paired results with a coverage warning;
     6. apply a predeclared regression gate and defend its guardrails.
 
-    Running every cell is insufficient. Score at least 8/10 on the core mastery gate and
-    complete the independent exercise with a fresh held-out set.
+    Running every cell is insufficient. Score at least `17/20` on
+    `projects/language_model_adaptation/EVALUATION_CHECKPOINT.md`, earn non-zero points
+    in every category, and complete the independent exercise with a fresh held-out set.
     """),
     md(r"""
     ## 13 · Teach-Back — Answer Without Notes
@@ -490,6 +623,8 @@ cells = [
     6. Why must a model comparison be paired by prompt?
     7. What can a bootstrap interval establish, and what can it never repair?
     8. Why did the example gate reject the DPO policy despite improved preference accuracy?
+    9. Why should sampled generation be repeated under fixed decoding settings?
+    10. How can a statistically clear improvement still fail a release gate?
     """),
     md(r"""
     ## 14 · Exercises, Self-Check, and Solutions
